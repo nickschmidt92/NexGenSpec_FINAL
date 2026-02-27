@@ -1,0 +1,25 @@
+// NexGenSpec.storekit
+
+{
+  "version": "1.0",
+  "products": [
+    {
+      "id": "pro_monthly",
+      "type": "auto-renewable subscription",
+      "subscriptionGroupIdentifier": "pro_group",
+      "displayName": "NexGenSpec Pro (Monthly)",
+      "subscriptionDuration": "P1M"
+    },
+    {
+      "id": "annotation_pack",
+      "type": "non-consumable",
+      "displayName": "Photo Annotation Pack"
+    }
+  ],
+  "subscriptionGroups": [
+    {
+      "id": "pro_group",
+      "name": "Pro"
+    }
+  ]
+}
