@@ -114,18 +114,26 @@ struct LiDARCaptureView: View {
     }
 
     private var unsupportedContent: some View {
+        // Show this message only on platforms where iPhone LiDAR availability matters.
+        // Update this comment and conditions if new iPhone models gain LiDAR support.
         VStack(spacing: 24) {
             Image(systemName: "square.viewfinder")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
-            Text("LiDAR not available")
+            Text("LiDAR room capture is not available on iPhone. This feature is only supported on iPad Pro and iPhone Pro models with LiDAR sensors.")
                 .font(.title2)
-            Text("Room capture requires a device with LiDAR (e.g. iPhone 12 Pro, iPad Pro).")
-                .font(.body)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .foregroundColor(.primary)
+            Text("You can still enter measurements and attach photos manually.")
+                .font(.footnote)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 }
+

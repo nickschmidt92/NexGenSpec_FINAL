@@ -28,8 +28,28 @@
 		T1B2C3D4E5F6000000000004 /* NexGenSpecTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		28DA665C2F511C1E009B8642 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				NexGenSpecTests.swift,
+				NexGenSpecUITests.swift,
+			);
+			target = A1B2C3D4E5F6000000000006 /* NexGenSpec */;
+		};
+		28DA665E2F5126A4009B8642 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				NexGenSpecTests.swift,
+				NexGenSpecUITests.swift,
+			);
+			target = T1B2C3D4E5F6000000000006 /* NexGenSpecTests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A1B2C3D4E5F6000000000002 /* NexGenSpec */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = NexGenSpec; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000000000002 /* NexGenSpec */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (28DA665C2F511C1E009B8642 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 28DA665E2F5126A4009B8642 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = NexGenSpec; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,6 +58,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				2839C1E52F46795E0012726E /* RoomPlan.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		T1B2C3D4E5F6000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -153,24 +180,6 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXTargetDependency section */
-		T1B2C3D4E5F600000000000A /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A1B2C3D4E5F6000000000006 /* NexGenSpec */;
-			targetProxy = T1B2C3D4E5F6000000000003 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		T1B2C3D4E5F6000000000009 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
-
 /* Begin PBXResourcesBuildPhase section */
 		A1B2C3D4E5F6000000000009 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
@@ -198,6 +207,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		T1B2C3D4E5F600000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3D4E5F6000000000006 /* NexGenSpec */;
+			targetProxy = T1B2C3D4E5F6000000000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1B2C3D4E5F6000000000012 /* Debug */ = {

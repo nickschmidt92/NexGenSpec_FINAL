@@ -141,6 +141,12 @@ struct FeaturesScreen: View {
             }
             .listStyle(.plain)
             
+            // Footnote about LiDAR device support - update this message if device support changes
+            Text("Note: LiDAR-based room capture is only available on iPad Pro and select iPhone Pro models. On other devices, you can add measurements and photos manually.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            
             Spacer()
             
             Button("Next") {
@@ -158,11 +164,77 @@ struct FeaturesScreen: View {
     }
 }
 
+// MARK: - Legal Detail Views
+
+struct TermsAndConditionsView: View {
+    enum SectionType {
+        case privacyPolicy, termsOfService
+    }
+    
+    let section: SectionType
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if section == .privacyPolicy {
+                    Text("Privacy Policy")
+                        .font(.largeTitle.bold())
+                        .padding(.bottom)
+                    Text("""
+                    This is the Privacy Policy content...
+                    (Insert full privacy policy text here.)
+                    """)
+                } else {
+                    Text("Terms of Service")
+                        .font(.largeTitle.bold())
+                        .padding(.bottom)
+                    Text("""
+                    This is the Terms of Service content...
+                    (Insert full terms of service text here.)
+                    """)
+                }
+            }
+            .padding()
+        }
+        .navigationTitle(section == .privacyPolicy ? "Privacy Policy" : "Terms of Service")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct DataSafetyView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Data Safety Summary")
+                    .font(.largeTitle.bold())
+                    .padding(.bottom)
+                Text("""
+                This is the Data Safety Summary content...
+                (Insert full data safety summary or embed PDF content here.)
+                """)
+            }
+            .padding()
+        }
+        .navigationTitle("Data Safety Summary")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct LegalScreen: View {
     let brandingColor: Color
     let onAccept: () -> Void
     
     @State private var accepted = false
+    
+    // Track if legal views have been visited
+    @State private var viewedPrivacyPolicy = false
+    @State private var viewedTermsOfService = false
+    @State private var viewedDataSafetySummary = false
+    
+    // Determine if accept button should be enabled
+    private var canAccept: Bool {
+        accepted && viewedPrivacyPolicy && viewedTermsOfService && viewedDataSafetySummary
+    }
     
     var body: some View {
         VStack(spacing: 24) {
@@ -175,35 +247,63 @@ struct LegalScreen: View {
                     Text("Please review and accept our Terms of Service and Privacy Policy to continue using NexGenSpec.")
                         .font(.body)
                     
-                    Link("Terms of Service", destination: URL(string: "https://www.nexgenspec.com/terms")!)
-                        .foregroundColor(brandingColor)
+                    NavigationLink("Read Privacy Policy") {
+                        TermsAndConditionsView(section: .privacyPolicy)
+                            .onDisappear {
+                                viewedPrivacyPolicy = true
+                            }
+                    }
+                    .foregroundColor(brandingColor)
                     
-                    Link("Privacy Policy", destination: URL(string: "https://www.nexgenspec.com/privacy")!)
-                        .foregroundColor(brandingColor)
+                    NavigationLink("Read Terms of Service") {
+                        TermsAndConditionsView(section: .termsOfService)
+                            .onDisappear {
+                                viewedTermsOfService = true
+                            }
+                    }
+                    .foregroundColor(brandingColor)
+                    
+                    NavigationLink("Data Safety Summary") {
+                        DataSafetyView()
+                            .onDisappear {
+                                viewedDataSafetySummary = true
+                            }
+                    }
+                    .foregroundColor(brandingColor)
                 }
                 .padding(.horizontal)
             }
+            
+            // Footnote about LiDAR device support - update this message if device support changes
+            Text("Note: LiDAR-based room capture is only available on iPad Pro and select iPhone Pro models. On other devices, you can add measurements and photos manually.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
             
             Toggle(isOn: $accepted) {
                 Text("I accept the Terms of Service and Privacy Policy")
                     .font(.headline)
             }
+            // Disable toggle until all three legal views have been visited
+            .disabled(!(viewedPrivacyPolicy && viewedTermsOfService && viewedDataSafetySummary))
             .padding(.horizontal)
             
             Button("Accept") {
                 onAccept()
             }
-            .disabled(!accepted)
+            .disabled(!canAccept)
             .font(.title2.bold())
             .frame(maxWidth: .infinity)
             .padding()
-            .background(accepted ? brandingColor : Color.gray.opacity(0.5))
+            .background(canAccept ? brandingColor : Color.gray.opacity(0.5))
             .foregroundColor(.white)
             .cornerRadius(12)
             .padding(.horizontal)
             .padding(.bottom)
         }
         .navigationBarBackButtonHidden(false)
+        .navigationTitle("Terms & Privacy")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -226,3 +326,4 @@ struct OnboardingView_Previews: PreviewProvider {
             .environment(\.colorScheme, .dark)
     }
 }
+

@@ -1,14 +1,16 @@
 import SwiftUI
 import UIKit
+import PDFKit
 
 /// Displays the Terms and Conditions / Inspection Agreement in a readable format.
-/// 
+///
 /// This view supports both modal usage with an acknowledgment callback (e.g. "Accept Terms & Continue")
 /// and readonly usage where no acknowledgment is needed (e.g. sidebar or reference panel).
 public struct TermsAndConditionsView: View {
     @State private var showShareSheet = false
     @State private var showAuditLogSheet = false
     @State private var searchText: String = ""
+    @State private var showDataSafetyPDF = false
     
     /// Optional callback invoked when user acknowledges terms.
     /// If `nil`, no accept button is shown and view is readonly.
@@ -41,18 +43,37 @@ public struct TermsAndConditionsView: View {
                     .padding(.horizontal)
             }
             
-            // Effective Date
-            Text("Effective: February 7, 2026")
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .accessibilityLabel("Effective Date: February 7, 2026")
-                .padding(.bottom, 8)
+            // Effective Dates for Policies
+            VStack(spacing: 2) {
+                Text("Effective Date: February 7, 2026 (Terms of Service)")
+                Text("Effective Date: February 7, 2026 (Privacy Policy)")
+            }
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .accessibilityElement(children: .combine)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            
+            // Links to hosted Privacy and Terms URLs
+            HStack(spacing: 8) {
+                Link("View Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
+                    .font(.subheadline)
+                    .foregroundColor(.accentColor)
+                    .accessibilityLabel("View Privacy Policy")
+                Spacer()
+                Link("View Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
+                    .font(.subheadline)
+                    .foregroundColor(.accentColor)
+                    .accessibilityLabel("View Terms of Service")
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
             
             // Search Field
             TextField("Search Terms", text: $searchText)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .padding(.horizontal)
-                .padding(.top, 8)
+                .padding(.bottom, 4)
                 .accessibilityLabel("Search Terms")
             
             ScrollViewReader { proxy in
@@ -185,6 +206,27 @@ public struct TermsAndConditionsView: View {
                             highlightedText("All inspection photos and records are preserved in an immutable, access-controlled system with full audit trails for at least 5 years, per our written retention policy. Originals are never deleted or altered before that time, and all exports or edits are versioned and logged. This ensures we can demonstrate the authenticity and integrity of any documentation if required.", font: .body)
                         }
                         .id("section5")
+                        
+                        // Data Safety Summary Section
+                        Group {
+                            Divider()
+                            highlightedText("DATA SAFETY SUMMARY", id: "datasafety", font: .title3.bold(), isHeader: true)
+                            highlightedText("We take data safety seriously. All personal and inspection data is encrypted at rest and in transit. Access controls and audit logs protect against unauthorized access. Our app does not share your data with third parties except as required by law or with your explicit consent.", font: .body)
+                            
+                            Button(action: {
+                                showDataSafetyPDF = true
+                            }) {
+                                Text("View Full Data Safety Summary (PDF)")
+                                    .font(.body.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.accentColor.opacity(0.15))
+                                    .foregroundColor(.accentColor)
+                                    .cornerRadius(8)
+                                    .padding(.vertical, 8)
+                            }
+                            .accessibilityLabel("View Full Data Safety Summary PDF")
+                        }
                     }
                     .padding()
                     .onChange(of: searchText) { _, _ in
@@ -195,6 +237,14 @@ public struct TermsAndConditionsView: View {
                     }
                 }
             }
+            
+            // Acceptance Microcopy
+            Text("By using NexGenSpec, you agree to the Terms of Service and acknowledge the Privacy Policy.")
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+                .padding(.top, 8)
             
             if onAcknowledge != nil {
                 // Clear visible and accessible message above the button
@@ -250,6 +300,21 @@ public struct TermsAndConditionsView: View {
         // Prevent simultaneous sheet triggers by explicit logic above
         .sheet(isPresented: $showAuditLogSheet) {
             ActivityView(activityItems: [AuditLog.read()])
+        }
+        // Present PDF viewer for Data Safety Summary
+        .sheet(isPresented: $showDataSafetyPDF) {
+            if let url = Bundle.main.url(forResource: "DataSafetySummary", withExtension: "pdf") {
+                PDFViewer(url: url)
+            } else {
+                VStack {
+                    Text("Data Safety Summary PDF not found.")
+                        .padding()
+                    Button("Dismiss") {
+                        showDataSafetyPDF = false
+                    }
+                    .padding()
+                }
+            }
         }
     }
     
@@ -359,6 +424,9 @@ public struct TermsAndConditionsView: View {
 
         For Insurance or Legal Inquiries
         All inspection photos and records are preserved in an immutable, access-controlled system with full audit trails for at least 5 years, per our written retention policy. Originals are never deleted or altered before that time, and all exports or edits are versioned and logged. This ensures we can demonstrate the authenticity and integrity of any documentation if required.
+
+        DATA SAFETY SUMMARY
+        We take data safety seriously. All personal and inspection data is encrypted at rest and in transit. Access controls and audit logs protect against unauthorized access. Our app does not share your data with third parties except as required by law or with your explicit consent.
         """
     }
     
@@ -423,7 +491,7 @@ public struct TermsAndConditionsView: View {
             return
         }
         // Search in order of sections and title.
-        let searchOrder = ["title", "section1", "section2", "section3", "section4", "section5"]
+        let searchOrder = ["title", "section1", "section2", "section3", "section4", "section5", "datasafety"]
         
         for id in searchOrder {
             if containsSearchMatch(in: id) == true {
@@ -526,6 +594,12 @@ public struct TermsAndConditionsView: View {
             For Insurance or Legal Inquiries
             All inspection photos and records are preserved in an immutable, access-controlled system with full audit trails for at least 5 years, per our written retention policy. Originals are never deleted or altered before that time, and all exports or edits are versioned and logged. This ensures we can demonstrate the authenticity and integrity of any documentation if required.
             """
+        case "datasafety":
+            contentForId =
+            """
+            DATA SAFETY SUMMARY
+            We take data safety seriously. All personal and inspection data is encrypted at rest and in transit. Access controls and audit logs protect against unauthorized access. Our app does not share your data with third parties except as required by law or with your explicit consent.
+            """
         default:
             contentForId = ""
         }
@@ -545,6 +619,26 @@ struct ActivityView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+/// PDF Viewer for displaying PDF documents from URL
+struct PDFViewer: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let pdfView = PDFView()
+        pdfView.document = PDFDocument(url: url)
+        pdfView.autoScales = true
+
+        let viewController = UIViewController()
+        viewController.view = pdfView
+        viewController.navigationItem.title = "Data Safety Summary"
+        
+        let nav = UINavigationController(rootViewController: viewController)
+        return nav
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
 struct TermsAndConditionsView_Previews: PreviewProvider {
