@@ -13,46 +13,72 @@ struct AppSettingsView: View {
     @State private var showPurgeResult = false
 
     var body: some View {
-        Form {
-            Section("Account") {
-                LabeledContent("User", value: authManager.currentUsername ?? "Unknown")
-                LabeledContent("Role", value: roleLabel)
-                Button("Log Out", role: .destructive) {
-                    authManager.logout()
-                    dismiss()
+        AppScreenBackground {
+            Form {
+                Section {
+                    SettingsHeroCard(
+                        username: authManager.currentUsername ?? "Unknown",
+                        roleLabel: roleLabel
+                    )
                 }
-            }
+                .listRowInsets(EdgeInsets(top: Spacing.md, leading: Spacing.md, bottom: Spacing.sm, trailing: Spacing.md))
+                .listRowBackground(Color.clear)
 
-            Section("Legal & Data Safety") {
-                NavigationLink("Privacy Policy") { PrivacyPolicyView() }
-                NavigationLink("Terms of Service") { TermsOfServiceView() }
-                NavigationLink("Data Safety Summary") { DataSafetySummaryView() }
-                NavigationLink("View Feedback Log") { LegalHistoryView() }
-            }
+                Section("Account") {
+                    LabeledContent("User", value: authManager.currentUsername ?? "Unknown")
+                    LabeledContent("Role", value: roleLabel)
 
-            if authManager.isAdmin {
-                Section("Admin Backup") {
-                    SecureField("Backup passphrase", text: $backupPassphrase)
-                    Button("Create Encrypted Backup") {
-                        createEncryptedBackup()
-                    }
-                    .disabled(backupPassphrase.count < 8)
-
-                    SecureField("Restore passphrase", text: $restorePassphrase)
-                    Button("Restore Latest Backup") {
-                        restoreLatestBackup()
-                    }
-                    .disabled(restorePassphrase.count < 8)
-                }
-
-                Section("Admin Retention") {
-                    Button("Purge Expired Records (5+ years)", role: .destructive) {
-                        runRetentionPurge()
+                    Button("Log Out", role: .destructive) {
+                        authManager.logout()
+                        dismiss()
                     }
                 }
+
+                Section {
+                    NavigationLink("Privacy Policy") { PrivacyPolicyView() }
+                    NavigationLink("Terms of Service") { TermsOfServiceView() }
+                    NavigationLink("Data Safety Summary") { DataSafetySummaryView() }
+                    NavigationLink("View Feedback Log") { LegalHistoryView() }
+                } header: {
+                    Text("Legal & Data Safety")
+                } footer: {
+                    Text("Use these screens to review the current legal text, audit history, and the in-app data safety summary shown to customers.")
+                }
+
+                if authManager.isAdmin {
+                    Section {
+                        SecureField("Backup passphrase", text: $backupPassphrase)
+                        Button("Create Encrypted Backup") {
+                            createEncryptedBackup()
+                        }
+                        .disabled(backupPassphrase.count < 8)
+
+                        SecureField("Restore passphrase", text: $restorePassphrase)
+                        Button("Restore Latest Backup") {
+                            restoreLatestBackup()
+                        }
+                        .disabled(restorePassphrase.count < 8)
+                    } header: {
+                        Text("Admin Backup")
+                    } footer: {
+                        Text("Encrypted backups are stored in the protected app backup directory.")
+                    }
+
+                    Section {
+                        Button("Purge Expired Records (5+ years)", role: .destructive) {
+                            runRetentionPurge()
+                        }
+                    } header: {
+                        Text("Admin Retention")
+                    } footer: {
+                        Text("Retention purge is restricted to admin accounts and permanently removes records outside the policy window.")
+                    }
+                }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .navigationTitle("Settings")
         }
-        .navigationTitle("Settings")
         .alert("Status", isPresented: $showStatus) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -136,6 +162,41 @@ struct AppSettingsView: View {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd-HHmmss"
         return f.string(from: Date())
+    }
+}
+
+private struct SettingsHeroCard: View {
+    let username: String
+    let roleLabel: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            BrandLockup(
+                subtitle: "Account controls, legal text, encrypted backups, and retention policy tools.",
+                markSize: 60
+            )
+
+            HStack(spacing: Spacing.sm) {
+                SettingsBadge(title: username, systemImage: "person.crop.circle.fill")
+                SettingsBadge(title: roleLabel, systemImage: "person.badge.shield.checkmark")
+            }
+        }
+        .inspectionCard()
+    }
+}
+
+private struct SettingsBadge: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(AppFont.caption)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xs)
+            .background(AppColor.elevatedSurface.opacity(0.92))
+            .foregroundStyle(AppColor.accentDeep)
+            .clipShape(Capsule())
     }
 }
 

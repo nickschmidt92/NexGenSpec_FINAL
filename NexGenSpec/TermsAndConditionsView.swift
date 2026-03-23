@@ -23,62 +23,67 @@ public struct TermsAndConditionsView: View {
     }
     
     public var body: some View {
-        VStack(spacing: 0) {
-            // App disclaimer: NexGenSpec is reporting software only; legally separate from any inspection company.
-            Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from D.I.A. Inspections.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-            
-            // Logo (optional; use NexGenSpec or company branding)
-            if UIImage(named: "LogoLockup") != nil {
-                Image("LogoLockup")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 48)
-                    .accessibilityLabel("App Logo")
-                    .padding(.top, 8)
+        AppScreenBackground {
+            VStack(spacing: 0) {
+                VStack(spacing: Spacing.sm) {
+                    BrandLockup(
+                        subtitle: "Terms, privacy, and data-safety commitments for NexGenSpec users.",
+                        markSize: 60
+                    )
+                    .padding(.top, Spacing.md)
                     .padding(.horizontal)
-            }
-            
-            // Effective Dates for Policies
-            VStack(spacing: 2) {
-                Text("Effective Date: February 7, 2026 (Terms of Service)")
-                Text("Effective Date: February 7, 2026 (Privacy Policy)")
-            }
-            .font(.footnote)
-            .foregroundColor(.secondary)
-            .accessibilityElement(children: .combine)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-            
-            // Links to hosted Privacy and Terms URLs
-            HStack(spacing: 8) {
-                Link("View Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
-                    .font(.subheadline)
-                    .foregroundColor(.accentColor)
-                    .accessibilityLabel("View Privacy Policy")
-                Spacer()
-                Link("View Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
-                    .font(.subheadline)
-                    .foregroundColor(.accentColor)
-                    .accessibilityLabel("View Terms of Service")
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            
-            // Search Field
-            TextField("Search Terms", text: $searchText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .padding(.horizontal)
-                .padding(.bottom, 4)
-                .accessibilityLabel("Search Terms")
-            
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
+
+                    Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from D.I.A. Inspections.")
+                        .font(AppFont.footnote)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(AppColor.elevatedSurface.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .padding(.horizontal, 16)
+
+                    VStack(spacing: 2) {
+                        Text("Effective Date: February 7, 2026 (Terms of Service)")
+                        Text("Effective Date: February 7, 2026 (Privacy Policy)")
+                    }
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .accessibilityElement(children: .combine)
+                    .padding(.top, 4)
+
+                    HStack(spacing: 8) {
+                        Link("View Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
+                            .font(.subheadline)
+                            .foregroundColor(.accentColor)
+                            .accessibilityLabel("View Privacy Policy")
+                        Spacer()
+                        Link("View Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
+                            .font(.subheadline)
+                            .foregroundColor(.accentColor)
+                            .accessibilityLabel("View Terms of Service")
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+
+                    TextField("Search Terms", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 16)
+                        .frame(height: 48)
+                        .background(AppColor.elevatedSurface.opacity(0.92))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(AppColor.border, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.horizontal)
+                        .padding(.bottom, 4)
+                        .accessibilityLabel("Search Terms")
+                }
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 28) {
                         Group {
                             highlightedText("Terms & Conditions", id: "title", font: .title.bold(), isHeader: true)
                             
@@ -217,58 +222,47 @@ public struct TermsAndConditionsView: View {
                                 showDataSafetyPDF = true
                             }) {
                                 Text("View Full Data Safety Summary (PDF)")
-                                    .font(.body.bold())
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.accentColor.opacity(0.15))
-                                    .foregroundColor(.accentColor)
-                                    .cornerRadius(8)
-                                    .padding(.vertical, 8)
                             }
+                            .buttonStyle(AppSecondaryButtonStyle())
+                            .padding(.vertical, 8)
                             .accessibilityLabel("View Full Data Safety Summary PDF")
                         }
                     }
-                    .padding()
-                    .onChange(of: searchText) { _, _ in
-                        scrollToFirstMatch(proxy: proxy)
-                    }
-                    .onAppear {
-                        scrollToFirstMatch(proxy: proxy)
-                    }
-                }
-            }
-            
-            // Acceptance Microcopy
-            Text("By using NexGenSpec, you agree to the Terms of Service and acknowledge the Privacy Policy.")
-                .font(.footnote)
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-                .padding(.top, 8)
-            
-            if onAcknowledge != nil {
-                // Clear visible and accessible message above the button
-                Text("You must accept these terms to continue.")
-                    .font(.headline)
-                    .foregroundColor(.red)
-                    .padding(.horizontal)
-                    .accessibilityAddTraits(.isStaticText)
-                    .accessibilityLabel("You must accept these terms to continue")
-                
-                Button {
-                    AuditLog.log(event: "Terms and Conditions accepted")
-                    onAcknowledge?()
-                } label: {
-                    Text("Accept Terms & Continue")
-                        .bold()
-                        .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                        .padding([.horizontal, .bottom])
+                        .onChange(of: searchText) { _, _ in
+                            scrollToFirstMatch(proxy: proxy)
+                        }
+                        .onAppear {
+                            scrollToFirstMatch(proxy: proxy)
+                        }
+                    }
                 }
-                .accessibilityLabel("Accept Terms and Continue")
+                
+                Text("By using NexGenSpec, you agree to the Terms of Service and acknowledge the Privacy Policy.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                
+                if onAcknowledge != nil {
+                    Text("You must accept these terms to continue.")
+                        .font(.headline)
+                        .foregroundColor(AppColor.critical)
+                        .padding(.horizontal)
+                        .accessibilityAddTraits(.isStaticText)
+                        .accessibilityLabel("You must accept these terms to continue")
+                    
+                    Button {
+                        AuditLog.log(event: "Terms and Conditions accepted")
+                        onAcknowledge?()
+                    } label: {
+                        Text("Accept Terms & Continue")
+                    }
+                    .buttonStyle(AppPrimaryButtonStyle())
+                    .padding([.horizontal, .bottom])
+                    .accessibilityLabel("Accept Terms and Continue")
+                }
             }
         }
         .navigationTitle("Terms & Conditions")

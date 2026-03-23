@@ -27,6 +27,7 @@ struct NexGenSpecApp: App {
             RootView()
                 .environmentObject(store)
                 .environmentObject(authManager)
+                .tint(AppColor.accent)
         }
     }
 }

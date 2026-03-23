@@ -28,136 +28,159 @@ struct DashboardView: View {
     // MARK: - View
     var body: some View {
         NavigationStack {
-            List {
-                Section("Inspections") {
-                    if store.metadataList.isEmpty {
-                        Group {
-                            if #available(iOS 17.0, *) {
-                                ContentUnavailableView(
-                                    "No inspections yet",
-                                    systemImage: "doc.text.magnifyingglass",
-                                    description: Text("Create your first inspection to get started.")
-                                )
-                            } else {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "doc.text.magnifyingglass")
-                                        .font(.largeTitle)
-                                        .foregroundStyle(.secondary)
-                                    Text("No inspections yet")
-                                        .font(.headline)
-                                    Text("Create your first inspection to get started.")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .multilineTextAlignment(.center)
+            AppScreenBackground {
+                List {
+                    Section {
+                        DashboardHero(
+                            username: authManager.currentUsername,
+                            totalCount: store.metadataList.count,
+                            draftCount: draftCount,
+                            finalCount: finalCount
+                        )
+                    }
+                    .listRowInsets(EdgeInsets(top: Spacing.md, leading: Spacing.md, bottom: Spacing.sm, trailing: Spacing.md))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+
+                    Section {
+                        if store.metadataList.isEmpty {
+                            EmptyDashboardState {
+                                prepareForNewInspection()
+                            }
+                            .listRowInsets(EdgeInsets(top: 0, leading: Spacing.md, bottom: Spacing.md, trailing: Spacing.md))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        }
+
+                        ForEach(store.metadataList) { meta in
+                            NavigationLink {
+                                InspectionRootView(versionID: meta.id)
+                                    .environmentObject(store)
+                            } label: {
+                                VersionRow(metadata: meta)
+                            }
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.md, bottom: Spacing.xs, trailing: Spacing.md))
+                            .listRowBackground(Color.clear)
+                            .contextMenu {
+                                if meta.isEditable {
+                                    Button("Delete inspection", role: .destructive) {
+                                        versionToDeleteID = meta.id
+                                    }
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding()
                             }
                         }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                        .onDelete { indexSet in
+                            let idsToDelete = indexSet
+                                .filter { store.metadataList[$0].isEditable }
+                                .map { store.metadataList[$0].id }
+                            for id in idsToDelete { _ = store.deleteVersion(id: id) }
+                        }
+                    } header: {
+                        HStack {
+                            Text("Inspections")
+                            Spacer()
+                            Text("\(store.metadataList.count) total")
+                                .font(AppFont.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    ForEach(store.metadataList) { meta in
-                        NavigationLink {
-                            InspectionRootView(versionID: meta.id)
-                                .environmentObject(store)
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .refreshable {
+                    store.reloadFromDisk()
+                }
+                .navigationTitle("Workspace")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Settings") {
+                            showSettings = true
+                        }
+                        .accessibilityLabel("Settings")
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            prepareForNewInspection()
                         } label: {
-                            VersionRow(metadata: meta)
+                            Label("New Inspection", systemImage: "plus")
                         }
-                        .contextMenu {
-                            if meta.isEditable {
-                                Button("Delete inspection", role: .destructive) {
-                                    versionToDeleteID = meta.id
-                                }
-                            }
+                        .keyboardShortcut("n", modifiers: .command)
+                        .accessibilityLabel("New Inspection")
+                        .accessibilityHint("Opens a form to create a new inspection")
+                    }
+                }
+                .sheet(isPresented: $showNewInspectionSheet) { newInspectionSheet }
+                .sheet(isPresented: $showSettings) {
+                    NavigationStack {
+                        AppSettingsView()
+                            .environmentObject(store)
+                            .environmentObject(authManager)
+                    }
+                }
+                .alert("Save failed", isPresented: Binding(
+                    get: { store.saveError != nil },
+                    set: { if !$0 { store.clearSaveError() } }
+                )) {
+                    Button("Retry") { store.clearSaveError(); store.saveNow() }
+                    Button("OK") { store.clearSaveError() }
+                } message: {
+                    if let err = store.saveError {
+                        Text(err)
+                    }
+                }
+                .alert("Load failed", isPresented: Binding(
+                    get: { store.loadError != nil },
+                    set: { if !$0 { store.clearLoadError() } }
+                )) {
+                    Button("Retry") { store.clearLoadError(); store.reloadFromDisk() }
+                    Button("OK") { store.clearLoadError() }
+                } message: {
+                    if let err = store.loadError {
+                        Text(err)
+                    }
+                }
+                .confirmationDialog("Delete inspection?", isPresented: Binding(
+                    get: { versionToDeleteID != nil },
+                    set: { if !$0 { versionToDeleteID = nil } }
+                ), titleVisibility: .visible) {
+                    Button("Delete", role: .destructive) {
+                        if let id = versionToDeleteID {
+                            _ = store.deleteVersion(id: id)
+                            versionToDeleteID = nil
                         }
                     }
-                    .onDelete { indexSet in
-                        let idsToDelete = indexSet
-                            .filter { store.metadataList[$0].isEditable }
-                            .map { store.metadataList[$0].id }
-                        for id in idsToDelete { _ = store.deleteVersion(id: id) }
+                    Button("Cancel", role: .cancel) { versionToDeleteID = nil }
+                } message: {
+                    if let id = versionToDeleteID, let meta = store.metadataList.first(where: { $0.id == id }) {
+                        Text("“\(meta.clientName)” will be permanently removed. This cannot be undone.")
                     }
                 }
-            }
-            .navigationTitle("NexGenSpec")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Settings") {
-                        showSettings = true
-                    }
-                    .accessibilityLabel("Settings")
+                .alert("Cannot create inspection", isPresented: $showTemplateError) {
+                    Button("OK") { showTemplateError = false }
+                } message: {
+                    Text("The inspection template could not be loaded. Please restart the app or reinstall.")
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        newClientName      = ""
-                        newClientEmail     = ""
-                        newClientPhone     = ""
-                        newPropertyAddress = ""
-                        newInspectorName   = ""
-                        inspectorConfirmed = false
-                        showNewInspectionSheet = true
-                    } label: {
-                        Label("New Inspection", systemImage: "plus")
-                    }
-                    .keyboardShortcut("n", modifiers: .command)
-                    .accessibilityLabel("New Inspection")
-                    .accessibilityHint("Opens a form to create a new inspection")
-                }
-            }
-            .sheet(isPresented: $showNewInspectionSheet) { newInspectionSheet }
-            .sheet(isPresented: $showSettings) {
-                NavigationStack {
-                    AppSettingsView()
-                        .environmentObject(store)
-                        .environmentObject(authManager)
-                }
-            }
-            .listStyle(.insetGrouped)
-            .alert("Save failed", isPresented: Binding(
-                get: { store.saveError != nil },
-                set: { if !$0 { store.clearSaveError() } }
-            )) {
-                Button("Retry") { store.clearSaveError(); store.saveNow() }
-                Button("OK") { store.clearSaveError() }
-            } message: {
-                if let err = store.saveError {
-                    Text(err)
-                }
-            }
-            .alert("Load failed", isPresented: Binding(
-                get: { store.loadError != nil },
-                set: { if !$0 { store.clearLoadError() } }
-            )) {
-                Button("Retry") { store.clearLoadError(); store.reloadFromDisk() }
-                Button("OK") { store.clearLoadError() }
-            } message: {
-                if let err = store.loadError {
-                    Text(err)
-                }
-            }
-            .confirmationDialog("Delete inspection?", isPresented: Binding(
-                get: { versionToDeleteID != nil },
-                set: { if !$0 { versionToDeleteID = nil } }
-            ), titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    if let id = versionToDeleteID {
-                        _ = store.deleteVersion(id: id)
-                        versionToDeleteID = nil
-                    }
-                }
-                Button("Cancel", role: .cancel) { versionToDeleteID = nil }
-            } message: {
-                if let id = versionToDeleteID, let meta = store.metadataList.first(where: { $0.id == id }) {
-                    Text("“\(meta.clientName)” will be permanently removed. This cannot be undone.")
-                }
-            }
-            .alert("Cannot create inspection", isPresented: $showTemplateError) {
-                Button("OK") { showTemplateError = false }
-            } message: {
-                Text("The inspection template could not be loaded. Please restart the app or reinstall.")
             }
         }
+    }
+
+    private var draftCount: Int {
+        store.metadataList.filter { $0.status == .draft }.count
+    }
+
+    private var finalCount: Int {
+        store.metadataList.filter { $0.status == .final }.count
+    }
+
+    private func prepareForNewInspection() {
+        newClientName = ""
+        newClientEmail = ""
+        newClientPhone = ""
+        newPropertyAddress = ""
+        newInspectorName = ""
+        inspectorConfirmed = false
+        showNewInspectionSheet = true
     }
 
     // MARK: - Sheet
@@ -226,28 +249,135 @@ private struct VersionRow: View {
     let metadata: VersionMetadata
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Text(metadata.clientName)
-                .font(.headline)
-            Text(metadata.propertyAddress)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            HStack {
-                Text(dateFormatter.string(from: metadata.inspectionDate))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text(metadata.status.rawValue)
-                    .font(.caption)
-                    .padding(4)
-                    .background(metadata.status.badgeColor.opacity(0.2))
-                    .foregroundColor(metadata.status.badgeColor)
-                    .clipShape(Capsule())
+        HStack(alignment: .top, spacing: Spacing.md) {
+            ZStack {
+                Circle()
+                    .fill(metadata.status.badgeColor.opacity(0.14))
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: metadata.status == .draft ? "square.and.pencil" : "checkmark.seal.fill")
+                    .foregroundStyle(metadata.status.badgeColor)
+            }
+
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text(metadata.clientName)
+                    .font(AppFont.headline)
+                    .foregroundStyle(.primary)
+
+                Text(metadata.propertyAddress)
+                    .font(AppFont.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                HStack(spacing: Spacing.sm) {
+                    Label(dateFormatter.string(from: metadata.inspectionDate), systemImage: "calendar")
+                        .font(AppFont.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text(metadata.status.rawValue)
+                        .font(AppFont.caption.weight(.semibold))
+                        .padding(.horizontal, Spacing.sm)
+                        .padding(.vertical, Spacing.xxs)
+                        .background(metadata.status.badgeColor.opacity(0.14))
+                        .foregroundStyle(metadata.status.badgeColor)
+                        .clipShape(Capsule())
+                }
             }
         }
+        .padding(Spacing.md)
+        .background(AppColor.softPanelGradient)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AppColor.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(metadata.clientName), \(metadata.propertyAddress), \(metadata.status.rawValue)")
         .accessibilityHint("Opens this inspection")
+    }
+}
+
+private struct DashboardHero: View {
+    let username: String?
+    let totalCount: Int
+    let draftCount: Int
+    let finalCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            BrandLockup(
+                subtitle: "Track active inspections, secure your media, and keep reports moving.",
+                markSize: 68
+            )
+
+            Text("Signed in as \(username ?? "Inspector")")
+                .font(AppFont.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: Spacing.sm) {
+                DashboardMetric(title: "Total", value: "\(totalCount)", systemImage: "tray.full.fill")
+                DashboardMetric(title: "Drafts", value: "\(draftCount)", systemImage: "square.and.pencil")
+                DashboardMetric(title: "Final", value: "\(finalCount)", systemImage: "checkmark.seal.fill")
+            }
+        }
+        .inspectionCard()
+    }
+}
+
+private struct DashboardMetric: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Label(title, systemImage: systemImage)
+                .font(AppFont.caption)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(AppFont.title2)
+                .foregroundStyle(AppColor.accentDeep)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.md)
+        .background(AppColor.elevatedSurface.opacity(0.90))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct EmptyDashboardState: View {
+    let createAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack(spacing: Spacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(AppColor.accentSoft.opacity(0.50))
+                        .frame(width: 52, height: 52)
+
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(AppColor.accentDeep)
+                }
+
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text("No inspections yet")
+                        .font(AppFont.title3)
+                    Text("Create your first inspection to start capturing photos, notes, and finalized reports.")
+                        .font(AppFont.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button("Create First Inspection", action: createAction)
+                .buttonStyle(AppPrimaryButtonStyle())
+        }
+        .inspectionCard()
     }
 }
 

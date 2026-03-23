@@ -16,7 +16,7 @@ struct OnboardingView: View {
     @State private var path = NavigationPath()
     @State private var acceptedTerms = false
     
-    private let brandingColor = Color("BrandingAccent") // Placeholder for branding color from logo
+    private let brandingColor = AppColor.accent
     
     private let features: [Feature] = [
         Feature(title: "Inspections",
@@ -71,43 +71,35 @@ struct WelcomeScreen: View {
     let onStart: () -> Void
     
     var body: some View {
-        VStack(spacing: 40) {
-            Spacer()
-            
-            if let uiImage = UIImage(named: "LogoLockup") {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 250)
-                    .accessibilityLabel("NexGenSpec Logo")
-            } else {
-                Text("NexGenSpec")
-                    .font(.largeTitle)
-                    .bold()
-                    .foregroundColor(brandingColor)
-            }
-            
-            Text("Welcome to NexGenSpec! The future of inspections is here. Let's get started.")
-                .font(.title3)
-                .multilineTextAlignment(.center)
+        AppScreenBackground {
+            VStack(spacing: 40) {
+                Spacer()
+                
+                BrandLockup(
+                    subtitle: "Field-ready inspection workflows with cleaner reports and secure records.",
+                    markSize: 88,
+                    alignment: .center
+                )
+                .frame(maxWidth: 420)
+                .accessibilityLabel("NexGenSpec Logo")
+                
+                Text("Welcome to NexGenSpec! The future of inspections is here. Let's get started.")
+                    .font(.title3)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                
+                Spacer()
+                
+                Button("Start") {
+                    onStart()
+                }
+                .buttonStyle(AppPrimaryButtonStyle())
                 .padding(.horizontal)
-            
-            Spacer()
-            
-            Button("Start") {
-                onStart()
+                
+                Spacer()
             }
-            .font(.title2.bold())
-            .frame(maxWidth: .infinity)
             .padding()
-            .background(brandingColor)
-            .foregroundColor(.white)
-            .cornerRadius(12)
-            .padding(.horizontal)
-            
-            Spacer()
         }
-        .padding()
         .navigationBarBackButtonHidden(true)
     }
 }

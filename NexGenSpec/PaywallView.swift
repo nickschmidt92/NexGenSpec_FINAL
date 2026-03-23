@@ -10,43 +10,44 @@ struct PaywallView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    LogoLockup()
-                        .accessibilityHidden(true)
-                        .padding(.top, 40)
+            AppScreenBackground {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        LogoLockup()
+                            .accessibilityHidden(true)
+                            .padding(.top, 40)
 
-                    Text("Upgrade to Pro")
-                        .font(.largeTitle.weight(.bold))
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
+                        Text("Upgrade to Pro")
+                            .font(AppFont.title)
+                            .multilineTextAlignment(.center)
+                            .accessibilityAddTraits(.isHeader)
 
-                    Text("Get the most out of the app by unlocking premium features. Enjoy unlimited inspections, advanced tools like LiDAR scanning, PDF export, voice input, and the annotation pack. Upgrade anytime to remove limits and support development.")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                        .accessibilityLabel("Description of free vs pro tiers and premium features.")
+                        Text("Get the most out of the app by unlocking premium features. Enjoy unlimited inspections, advanced tools like LiDAR scanning, PDF export, voice input, and the annotation pack. Upgrade anytime to remove limits and support development.")
+                            .font(.body)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .accessibilityLabel("Description of free vs pro tiers and premium features.")
 
-                    premiumFeaturesList
+                        premiumFeaturesList
 
-                    if !store.subscriptionProducts.isEmpty || !store.addOnProducts.isEmpty {
-                        subscriptionOptions
-                    } else {
-                        ProgressView("Loading purchase options...")
-                            .padding()
+                        if !store.subscriptionProducts.isEmpty || !store.addOnProducts.isEmpty {
+                            subscriptionOptions
+                        } else {
+                            ProgressView("Loading purchase options...")
+                                .padding()
+                        }
+
+                        legalText
+
+                        Spacer(minLength: 20)
+
+                        buttons
+                            .padding(.horizontal)
+                            .padding(.bottom, 20)
                     }
-
-                    legalText
-
-                    Spacer(minLength: 20)
-
-                    buttons
-                        .padding(.horizontal)
-                        .padding(.bottom, 20)
+                    .foregroundColor(.primary)
+                    .padding(.horizontal)
                 }
-                .foregroundColor(.primary)
-                .accentColor(.accentColor)
-                .padding(.horizontal)
             }
             .navigationTitle("Premium Upgrade")
             .navigationBarTitleDisplayMode(.inline)
@@ -70,7 +71,6 @@ struct PaywallView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .environment(\.colorScheme, .light)
         }
         .onAppear {
             store.fetchProducts()
@@ -86,6 +86,7 @@ struct PaywallView: View {
             featureRow(title: "Annotation Pack", requiresUpgrade: true)
             featureRow(title: "Basic Inspection Reports", requiresUpgrade: false)
         }
+        .inspectionCard()
         .padding(.horizontal)
         .accessibilityElement(children: .contain)
     }
@@ -134,14 +135,8 @@ struct PaywallView: View {
 
             Button(action: restorePurchases) {
                 Text("Restore Purchases")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor.opacity(0.1))
-                    .foregroundColor(.accentColor)
-                    .cornerRadius(12)
-                    .contentShape(Rectangle())
             }
+            .buttonStyle(AppSecondaryButtonStyle())
             .accessibilityHint("Restore previous purchases")
             .padding(.top, 20)
         }
@@ -167,8 +162,8 @@ struct PaywallView: View {
                     .font(.headline)
             }
             .padding()
-            .background(Color.accentColor.opacity(0.15))
-            .cornerRadius(12)
+            .background(AppColor.accentSoft.opacity(0.40))
+            .cornerRadius(16)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(product.displayName), \(product.displayPrice), tap to purchase")
         }
@@ -190,13 +185,13 @@ struct PaywallView: View {
                 .padding(.horizontal)
 
             HStack(spacing: 24) {
-                Link("Terms of Service", destination: URL(string: "https://example.com/terms")!)
+                Link("Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
                     .font(.footnote)
                     .foregroundColor(.accentColor)
                     .underline()
                     .accessibilityLabel("Terms of Service")
 
-                Link("Privacy Policy", destination: URL(string: "https://example.com/privacy")!)
+                Link("Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
                     .font(.footnote)
                     .foregroundColor(.accentColor)
                     .underline()
@@ -212,26 +207,14 @@ struct PaywallView: View {
                 dismiss()
             }) {
                 Text("Maybe Later")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.gray.opacity(0.2))
-                    .foregroundColor(.primary)
-                    .cornerRadius(12)
-                    .contentShape(Rectangle())
             }
+            .buttonStyle(AppSecondaryButtonStyle())
             .accessibilityHint("Dismiss paywall without upgrading")
 
             Button(action: upgradeToPro) {
                 Text("Upgrade to Pro")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                    .contentShape(Rectangle())
             }
+            .buttonStyle(AppPrimaryButtonStyle())
             .accessibilityHint("Start purchase process to upgrade to Pro")
             .disabled(purchaseInProgress)
         }
@@ -346,18 +329,11 @@ final class Store: ObservableObject {
 
 struct LogoLockup: View {
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "lock.shield.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 72, height: 72)
-                .foregroundColor(.accentColor)
-                .accessibilityHidden(true)
-            Text("NexGenSpec")
-                .font(.title2.bold())
-                .foregroundColor(.accentColor)
-                .accessibilityHidden(true)
-        }
+        BrandLockup(
+            subtitle: "Unlock the full inspection toolkit.",
+            markSize: 72
+        )
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding()
     }
 }

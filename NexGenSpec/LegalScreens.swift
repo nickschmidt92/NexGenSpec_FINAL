@@ -10,8 +10,7 @@ struct LegacyAuditLogHelper {
 
 // MARK: - Branding Constants
 struct Branding {
-    static let accentColor = Color.blue
-    static let logoName = "AppLogo" // Ensure an image named "AppLogo" exists in assets
+    static let accentColor = AppColor.accent
 }
 
 // MARK: - URLs and Effective Dates (Replace with your actual URLs and dates)
@@ -31,60 +30,61 @@ struct PrivacyPolicyView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 16) {
-                    Text(LegalConstants.privacyPolicyEffectiveDate)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .padding(.top)
+            AppScreenBackground {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Text(LegalConstants.privacyPolicyEffectiveDate)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .padding(.top)
 
-                    // Logo
-                    Image(Branding.logoName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 120, height: 120)
+                        BrandLockup(
+                            subtitle: "Privacy expectations and data handling for NexGenSpec customers.",
+                            markSize: 60
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.bottom, 8)
 
-                    Text("Privacy Policy")
-                        .font(.largeTitle)
-                        .bold()
-                        .foregroundColor(Branding.accentColor)
-                        .padding(.bottom, 10)
+                        Text("Privacy Policy")
+                            .font(.largeTitle)
+                            .bold()
+                            .foregroundColor(Branding.accentColor)
+                            .padding(.bottom, 10)
 
-                    Group {
-                        Text("""
-                        Your privacy is important to us. This policy explains how we collect, use, and protect your information when you use our app.
+                        Group {
+                            Text("""
+                            Your privacy is important to us. This policy explains how we collect, use, and protect your information when you use our app.
 
-                        We collect minimal personal information and never share it with third parties without your consent.
+                            We collect minimal personal information and never share it with third parties without your consent.
 
-                        We collect device information, usage data, and analytics to improve your experience.
+                            We collect device information, usage data, and analytics to improve your experience.
 
-                        We implement reasonable security measures to safeguard your data.
+                            We implement reasonable security measures to safeguard your data.
 
-                        You have rights to access, update, or delete your personal information.
+                            You have rights to access, update, or delete your personal information.
 
-                        For more details, please review the full Privacy Policy hosted on our website.
-                        """)
-                        .font(.body)
-                        .multilineTextAlignment(.leading)
+                            For more details, please review the full Privacy Policy hosted on our website.
+                            """)
+                            .font(.body)
+                            .multilineTextAlignment(.leading)
+                        }
+                        .padding(.horizontal)
+
+                        Button(action: {
+                            externalLink = LegalConstants.privacyPolicyURL
+                            showExternalLinkAlert = true
+                        }) {
+                            Text("View Full Privacy Policy Online")
+                                .foregroundColor(Branding.accentColor)
+                                .font(.headline)
+                                .underline()
+                        }
+                        .padding(.vertical)
+
+                        Spacer(minLength: 30)
                     }
                     .padding(.horizontal)
-
-                    // External link tappable text at bottom
-                    Button(action: {
-                        externalLink = LegalConstants.privacyPolicyURL
-                        showExternalLinkAlert = true
-                    }) {
-                        Text("View Full Privacy Policy Online")
-                            .foregroundColor(Branding.accentColor)
-                            .font(.headline)
-                            .underline()
-                    }
-                    .padding(.vertical)
-
-                    Spacer(minLength: 30)
                 }
-                .padding(.horizontal)
             }
             .navigationTitle("Privacy Policy")
             .navigationBarTitleDisplayMode(.inline)
@@ -101,7 +101,7 @@ struct PrivacyPolicyView: View {
                 )
             }
         }
-        .accentColor(Branding.accentColor)
+        .tint(Branding.accentColor)
     }
 }
 
@@ -112,58 +112,61 @@ struct TermsOfServiceView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 16) {
-                    Text(LegalConstants.termsOfServiceEffectiveDate)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .padding(.top)
+            AppScreenBackground {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Text(LegalConstants.termsOfServiceEffectiveDate)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .padding(.top)
 
-                    Image(Branding.logoName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 120, height: 120)
+                        BrandLockup(
+                            subtitle: "Service terms, responsibilities, and operating boundaries for the app.",
+                            markSize: 60
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.bottom, 8)
 
-                    Text("Terms of Service")
-                        .font(.largeTitle)
-                        .bold()
-                        .foregroundColor(Branding.accentColor)
-                        .padding(.bottom, 10)
+                        Text("Terms of Service")
+                            .font(.largeTitle)
+                            .bold()
+                            .foregroundColor(Branding.accentColor)
+                            .padding(.bottom, 10)
 
-                    Group {
-                        Text("""
-                        Welcome to our app. By using our services, you agree to the following terms and conditions.
+                        Group {
+                            Text("""
+                            Welcome to our app. By using our services, you agree to the following terms and conditions.
 
-                        Use of the app is subject to compliance with all applicable laws and these terms.
+                            Use of the app is subject to compliance with all applicable laws and these terms.
 
-                        We reserve the right to update these terms at any time; continued use signifies acceptance of changes.
+                            We reserve the right to update these terms at any time; continued use signifies acceptance of changes.
 
-                        You are responsible for maintaining the confidentiality of your account and password.
+                            You are responsible for maintaining the confidentiality of your account and password.
 
-                        We provide the app 'as is' without warranties or guarantees.
+                            We provide the app 'as is' without warranties or guarantees.
 
-                        For the full Terms of Service, please visit our website.
-                        """)
-                        .font(.body)
-                        .multilineTextAlignment(.leading)
+                            For the full Terms of Service, please visit our website.
+                            """)
+                            .font(.body)
+                            .multilineTextAlignment(.leading)
+                        }
+                        .padding(.horizontal)
+
+                        Button(action: {
+                            externalLink = LegalConstants.termsOfServiceURL
+                            showExternalLinkAlert = true
+                        }) {
+                            Text("View Full Terms of Service Online")
+                                .foregroundColor(Branding.accentColor)
+                                .font(.headline)
+                                .underline()
+                        }
+                        .padding(.vertical)
+
+                        Spacer(minLength: 30)
                     }
                     .padding(.horizontal)
-
-                    Button(action: {
-                        externalLink = LegalConstants.termsOfServiceURL
-                        showExternalLinkAlert = true
-                    }) {
-                        Text("View Full Terms of Service Online")
-                            .foregroundColor(Branding.accentColor)
-                            .font(.headline)
-                            .underline()
-                    }
-                    .padding(.vertical)
-
-                    Spacer(minLength: 30)
                 }
-                .padding(.horizontal)
             }
             .navigationTitle("Terms of Service")
             .navigationBarTitleDisplayMode(.inline)
@@ -180,7 +183,7 @@ struct TermsOfServiceView: View {
                 )
             }
         }
-        .accentColor(Branding.accentColor)
+        .tint(Branding.accentColor)
     }
 }
 
@@ -213,42 +216,49 @@ struct DataSafetySummaryView: View {
 
 private struct DataSafetySummaryFallbackView: View {
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Data Safety Summary")
-                    .font(.title2.bold())
+        AppScreenBackground {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    BrandLockup(
+                        subtitle: "A plain-language summary of what data is stored, protected, and shared.",
+                        markSize: 56
+                    )
 
-                Text("This build does not include a bundled PDF copy of the data safety summary. The current summary is provided below.")
+                    Text("Data Safety Summary")
+                        .font(.title2.bold())
+
+                    Text("This build does not include a bundled PDF copy of the data safety summary. The current summary is provided below.")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+
+                    Group {
+                        Text("What We Collect")
+                            .font(.headline)
+                        Text("NexGenSpec stores inspection details, photos, signatures, LiDAR scans, videos, and audit events so reports can be created, finalized, and retained for business records.")
+
+                        Text("How Data Is Protected")
+                            .font(.headline)
+                        Text("Inspection data written by the app is saved with file protection enabled. Backups can be encrypted, and finalized reports keep an audit trail and verification hash.")
+
+                        Text("How Data Is Used")
+                            .font(.headline)
+                        Text("Inspection records are used to build reports, support customer communication, and preserve documentation for retention and dispute resolution workflows.")
+
+                        Text("Sharing")
+                            .font(.headline)
+                        Text("Inspection data is not shared publicly. Exports and disclosures are limited to the inspector’s reporting workflow, the client, or cases required by law or explicit consent.")
+                    }
                     .font(.body)
-                    .foregroundColor(.secondary)
 
-                Group {
-                    Text("What We Collect")
-                        .font(.headline)
-                    Text("NexGenSpec stores inspection details, photos, signatures, LiDAR scans, videos, and audit events so reports can be created, finalized, and retained for business records.")
+                    Divider()
 
-                    Text("How Data Is Protected")
+                    Link("View Full Privacy Policy", destination: LegalConstants.privacyPolicyURL)
                         .font(.headline)
-                    Text("Inspection data written by the app is saved with file protection enabled. Backups can be encrypted, and finalized reports keep an audit trail and verification hash.")
-
-                    Text("How Data Is Used")
+                    Link("View Terms of Service", destination: LegalConstants.termsOfServiceURL)
                         .font(.headline)
-                    Text("Inspection records are used to build reports, support customer communication, and preserve documentation for retention and dispute resolution workflows.")
-
-                    Text("Sharing")
-                        .font(.headline)
-                    Text("Inspection data is not shared publicly. Exports and disclosures are limited to the inspector’s reporting workflow, the client, or cases required by law or explicit consent.")
                 }
-                .font(.body)
-
-                Divider()
-
-                Link("View Full Privacy Policy", destination: LegalConstants.privacyPolicyURL)
-                    .font(.headline)
-                Link("View Terms of Service", destination: LegalConstants.termsOfServiceURL)
-                    .font(.headline)
+                .padding()
             }
-            .padding()
         }
     }
 }
@@ -345,7 +355,7 @@ struct TermsAndConditionsViewWithAcceptance: View {
             .navigationTitle("Terms & Conditions")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .accentColor(Branding.accentColor)
+        .tint(Branding.accentColor)
     }
 }
 
