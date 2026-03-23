@@ -332,6 +332,7 @@
 				DEVELOPMENT_TEAM = CPTLCQYSJJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NexGenSpec needs access to your photo library to attach photos to inspection items.";
@@ -365,6 +366,7 @@
 				DEVELOPMENT_TEAM = CPTLCQYSJJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NexGenSpec needs access to your photo library to attach photos to inspection items.";
