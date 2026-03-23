@@ -124,7 +124,17 @@ struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(Spacing.md)
-            .background(AppColor.softPanelGradient)
+            .background(
+                ZStack {
+                    AppColor.softPanelGradient
+
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.28), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    )
+                }
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(AppColor.border, lineWidth: 1)
@@ -193,6 +203,17 @@ struct AppScreenBackground<Content: View>: View {
 
             LinearGradient(
                 colors: [
+                    AppColor.brandNavy.opacity(0.08),
+                    AppColor.background,
+                    AppColor.background
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            LinearGradient(
+                colors: [
                     AppColor.accentSoft.opacity(0.30),
                     AppColor.background,
                     AppColor.background
@@ -205,8 +226,8 @@ struct AppScreenBackground<Content: View>: View {
             Circle()
                 .fill(AppColor.accent.opacity(0.10))
                 .frame(width: 260, height: 260)
-                .blur(radius: 20)
-                .offset(x: 140, y: -280)
+                .blur(radius: 30)
+                .offset(x: 160, y: -290)
                 .ignoresSafeArea()
 
             Circle()
@@ -214,6 +235,20 @@ struct AppScreenBackground<Content: View>: View {
                 .frame(width: 220, height: 220)
                 .blur(radius: 14)
                 .offset(x: -150, y: 320)
+                .ignoresSafeArea()
+
+            HexagonShape()
+                .stroke(AppColor.accent.opacity(0.08), lineWidth: 1)
+                .frame(width: 320, height: 320)
+                .rotationEffect(.degrees(8))
+                .offset(x: 170, y: -250)
+                .ignoresSafeArea()
+
+            HexagonShape()
+                .fill(AppColor.heroGradient.opacity(0.14))
+                .frame(width: 220, height: 220)
+                .blur(radius: 50)
+                .offset(x: 120, y: -220)
                 .ignoresSafeArea()
 
             content

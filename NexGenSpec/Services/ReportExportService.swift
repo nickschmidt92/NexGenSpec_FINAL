@@ -38,7 +38,7 @@ public final class ReportExportService: ObservableObject {
         let versionCopy = version
         let task = Task {
             // Heavy work (HTML + write) off main thread; then PDF on main (WKWebView needs main).
-            let htmlResult: (htmlURL: URL?, reportDir: URL, tempHTML: URL)? = await Task.detached(priority: .userInitiated) {
+            let htmlResult: (htmlURL: URL?, reportDir: URL, tempHTML: URL, pdfHTML: String)? = await Task.detached(priority: .userInitiated) {
                 await Task.yield()
                 if Task.isCancelled { return nil }
                 var htmlURL: URL?
@@ -54,12 +54,14 @@ public final class ReportExportService: ObservableObject {
                     try FileSecurity.ensureProtectedDirectory(videosDir)
                     if Task.isCancelled { return nil }
                     let html = HTMLReportRenderer.renderHTML(for: versionCopy, imageFolderURL: imagesDir, videosFolderURL: videosDir)
+                    // Keep the PDF path self-contained so the formatter never has to resolve on-disk assets.
+                    let pdfHTML = HTMLReportRenderer.renderHTML(for: versionCopy)
                     let tempHTML = reportDir.appendingPathComponent("index.html")
                     if let htmlData = html.data(using: .utf8) {
                         try FileSecurity.writeProtected(htmlData, to: tempHTML)
                     }
                     htmlURL = tempHTML
-                    return (htmlURL, reportDir, tempHTML)
+                    return (htmlURL, reportDir, tempHTML, pdfHTML)
                 } catch {
                     Diagnostics.logError(context: "Report export HTML generation failed", error: error)
                     return nil
@@ -72,12 +74,21 @@ public final class ReportExportService: ObservableObject {
             progress = 0.7
             var finalResult: ReportExportResult
             if let htmlResult {
-                let pdfURL = await PDFReportRenderer.generatePDF(fromHTMLFile: htmlResult.tempHTML, baseURL: htmlResult.reportDir)
+                let primaryPDF = PDFReportRenderer.generatePDF(for: versionCopy)
                 guard !Task.isCancelled else {
                     finishExport(cancelled: true)
                     return
                 }
-                let resolvedPDF = pdfURL ?? PDFReportRenderer.generatePDF(for: versionCopy)
+                let resolvedPDF: URL?
+                if let primaryPDF {
+                    resolvedPDF = primaryPDF
+                } else {
+                    let secondaryPDF = await PDFReportRenderer.generatePDF(
+                        fromHTMLFile: htmlResult.tempHTML,
+                        baseURL: htmlResult.reportDir
+                    )
+                    resolvedPDF = secondaryPDF ?? PDFReportRenderer.generatePDF(fromHTML: htmlResult.pdfHTML)
+                }
                 progress = 1
                 if let resolvedPDF {
                     finalResult = .success(htmlURL: htmlResult.htmlURL, pdfURL: resolvedPDF)

@@ -26,48 +26,62 @@ public struct TermsAndConditionsView: View {
         AppScreenBackground {
             VStack(spacing: 0) {
                 VStack(spacing: Spacing.sm) {
-                    BrandLockup(
-                        subtitle: "Terms, privacy, and data-safety commitments for NexGenSpec users.",
-                        markSize: 60
-                    )
-                    .padding(.top, Spacing.md)
-                    .padding(.horizontal)
+                    VStack(spacing: Spacing.sm) {
+                        BrandLockup(
+                            subtitle: "Terms, privacy, and data-safety commitments for NexGenSpec users.",
+                            markSize: 60
+                        )
 
-                    Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from D.I.A. Inspections.")
-                        .font(AppFont.footnote)
+                        Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from D.I.A. Inspections.")
+                            .font(AppFont.footnote)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(AppColor.elevatedSurface.opacity(0.9))
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                        VStack(spacing: 2) {
+                            Text("Effective Date: February 7, 2026 (Terms of Service)")
+                            Text("Effective Date: February 7, 2026 (Privacy Policy)")
+                        }
+                        .font(.footnote)
                         .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(AppColor.elevatedSurface.opacity(0.9))
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .padding(.horizontal, 16)
+                        .accessibilityElement(children: .combine)
+                        .padding(.top, 4)
 
-                    VStack(spacing: 2) {
-                        Text("Effective Date: February 7, 2026 (Terms of Service)")
-                        Text("Effective Date: February 7, 2026 (Privacy Policy)")
-                    }
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .accessibilityElement(children: .combine)
-                    .padding(.top, 4)
-
-                    HStack(spacing: 8) {
-                        Link("View Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
-                            .font(.subheadline)
-                            .foregroundColor(.accentColor)
+                        HStack(spacing: Spacing.sm) {
+                            Link(destination: URL(string: "https://www.dia-inspections.com/privacy")!) {
+                                TermsQuickLink(title: "Privacy Policy", systemImage: "hand.raised.fill")
+                            }
+                            .buttonStyle(.plain)
                             .accessibilityLabel("View Privacy Policy")
-                        Spacer()
-                        Link("View Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
-                            .font(.subheadline)
-                            .foregroundColor(.accentColor)
-                            .accessibilityLabel("View Terms of Service")
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
 
-                    TextField("Search Terms", text: $searchText)
-                        .textFieldStyle(.plain)
+                            Link(destination: URL(string: "https://www.dia-inspections.com/terms")!) {
+                                TermsQuickLink(title: "Terms of Service", systemImage: "doc.text.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("View Terms of Service")
+                        }
+
+                        HStack(spacing: Spacing.sm) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+
+                            TextField("Search Terms", text: $searchText)
+                                .textFieldStyle(.plain)
+                                .accessibilityLabel("Search Terms")
+
+                            if !searchText.isEmpty {
+                                Button {
+                                    searchText = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                         .padding(.horizontal, 16)
                         .frame(height: 48)
                         .background(AppColor.elevatedSurface.opacity(0.92))
@@ -76,9 +90,10 @@ public struct TermsAndConditionsView: View {
                                 .stroke(AppColor.border, lineWidth: 1)
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .padding(.horizontal)
-                        .padding(.bottom, 4)
-                        .accessibilityLabel("Search Terms")
+                    }
+                    .frame(maxWidth: 920)
+                    .padding(.top, Spacing.md)
+                    .padding(.horizontal)
                 }
 
                 ScrollViewReader { proxy in
@@ -236,6 +251,8 @@ public struct TermsAndConditionsView: View {
                             scrollToFirstMatch(proxy: proxy)
                         }
                     }
+                    .frame(maxWidth: 920)
+                    .padding(.horizontal)
                 }
                 
                 Text("By using NexGenSpec, you agree to the Terms of Service and acknowledge the Privacy Policy.")
@@ -595,6 +612,27 @@ public struct TermsAndConditionsView: View {
             contentForId = ""
         }
         return contentForId.lowercased().contains(searchText.lowercased())
+    }
+}
+
+private struct TermsQuickLink: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+
+            Text(title)
+                .font(AppFont.subheadline.weight(.semibold))
+        }
+        .foregroundStyle(AppColor.accentDeep)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .background(AppColor.elevatedSurface.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 

@@ -14,70 +14,131 @@ struct AppSettingsView: View {
 
     var body: some View {
         AppScreenBackground {
-            Form {
-                Section {
+            ScrollView {
+                VStack(spacing: Spacing.lg) {
                     SettingsHeroCard(
                         username: authManager.currentUsername ?? "Unknown",
                         roleLabel: roleLabel
                     )
+
+                    SettingsSectionCard(
+                        title: "Account",
+                        subtitle: "Current session identity and access level."
+                    ) {
+                        SettingsValueRow(title: "User", value: authManager.currentUsername ?? "Unknown")
+                        SettingsValueRow(title: "Role", value: roleLabel)
+
+                        Button("Log Out", role: .destructive) {
+                            authManager.logout()
+                            dismiss()
+                        }
+                        .buttonStyle(AppSecondaryButtonStyle())
+                    }
+
+                    SettingsSectionCard(
+                        title: "Legal & Data Safety",
+                        subtitle: "Review the customer-facing legal text, retention posture, and data-safety summary."
+                    ) {
+                        NavigationLink {
+                            PrivacyPolicyView()
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Privacy Policy",
+                                subtitle: "How personal and inspection data is handled.",
+                                systemImage: "hand.raised.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        NavigationLink {
+                            TermsOfServiceView()
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Terms of Service",
+                                subtitle: "The current operating terms shown inside the app.",
+                                systemImage: "doc.text.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        NavigationLink {
+                            DataSafetySummaryView()
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Data Safety Summary",
+                                subtitle: "The in-app explanation of storage, access, and sharing rules.",
+                                systemImage: "lock.doc.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        NavigationLink {
+                            LegalHistoryView()
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "View Feedback Log",
+                                subtitle: "See the current audit and feedback history.",
+                                systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if authManager.isAdmin {
+                        SettingsSectionCard(
+                            title: "Admin Backup",
+                            subtitle: "Encrypted backups stay in the protected app backup directory."
+                        ) {
+                            SettingsSecureFieldRow(
+                                title: "Backup passphrase",
+                                text: $backupPassphrase,
+                                systemImage: "key.fill"
+                            )
+
+                            Button("Create Encrypted Backup") {
+                                createEncryptedBackup()
+                            }
+                            .buttonStyle(AppPrimaryButtonStyle())
+                            .disabled(backupPassphrase.count < 8)
+
+                            SettingsSecureFieldRow(
+                                title: "Restore passphrase",
+                                text: $restorePassphrase,
+                                systemImage: "arrow.clockwise.circle.fill"
+                            )
+
+                            Button("Restore Latest Backup") {
+                                restoreLatestBackup()
+                            }
+                            .buttonStyle(AppSecondaryButtonStyle())
+                            .disabled(restorePassphrase.count < 8)
+                        }
+
+                        SettingsSectionCard(
+                            title: "Admin Retention",
+                            subtitle: "Use this only when records are outside the policy window and should be permanently removed."
+                        ) {
+                            Button("Purge Expired Records (5+ years)", role: .destructive) {
+                                runRetentionPurge()
+                            }
+                            .buttonStyle(AppSecondaryButtonStyle())
+                        }
+                    }
                 }
-                .listRowInsets(EdgeInsets(top: Spacing.md, leading: Spacing.md, bottom: Spacing.sm, trailing: Spacing.md))
-                .listRowBackground(Color.clear)
-
-                Section("Account") {
-                    LabeledContent("User", value: authManager.currentUsername ?? "Unknown")
-                    LabeledContent("Role", value: roleLabel)
-
-                    Button("Log Out", role: .destructive) {
-                        authManager.logout()
+                .frame(maxWidth: 860)
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.md)
+                .padding(.bottom, Spacing.xl)
+            }
+            .scrollIndicators(.hidden)
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
                         dismiss()
                     }
                 }
-
-                Section {
-                    NavigationLink("Privacy Policy") { PrivacyPolicyView() }
-                    NavigationLink("Terms of Service") { TermsOfServiceView() }
-                    NavigationLink("Data Safety Summary") { DataSafetySummaryView() }
-                    NavigationLink("View Feedback Log") { LegalHistoryView() }
-                } header: {
-                    Text("Legal & Data Safety")
-                } footer: {
-                    Text("Use these screens to review the current legal text, audit history, and the in-app data safety summary shown to customers.")
-                }
-
-                if authManager.isAdmin {
-                    Section {
-                        SecureField("Backup passphrase", text: $backupPassphrase)
-                        Button("Create Encrypted Backup") {
-                            createEncryptedBackup()
-                        }
-                        .disabled(backupPassphrase.count < 8)
-
-                        SecureField("Restore passphrase", text: $restorePassphrase)
-                        Button("Restore Latest Backup") {
-                            restoreLatestBackup()
-                        }
-                        .disabled(restorePassphrase.count < 8)
-                    } header: {
-                        Text("Admin Backup")
-                    } footer: {
-                        Text("Encrypted backups are stored in the protected app backup directory.")
-                    }
-
-                    Section {
-                        Button("Purge Expired Records (5+ years)", role: .destructive) {
-                            runRetentionPurge()
-                        }
-                    } header: {
-                        Text("Admin Retention")
-                    } footer: {
-                        Text("Retention purge is restricted to admin accounts and permanently removes records outside the policy window.")
-                    }
-                }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color.clear)
-            .navigationTitle("Settings")
         }
         .alert("Status", isPresented: $showStatus) {
             Button("OK", role: .cancel) {}
@@ -182,6 +243,126 @@ private struct SettingsHeroCard: View {
             }
         }
         .inspectionCard()
+    }
+}
+
+private struct SettingsSectionCard<Content: View>: View {
+    let title: String
+    let subtitle: String
+    let content: Content
+
+    init(title: String, subtitle: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.subtitle = subtitle
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(title)
+                    .font(AppFont.title3)
+
+                Text(subtitle)
+                    .font(AppFont.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: Spacing.sm) {
+                content
+            }
+        }
+        .inspectionCard()
+    }
+}
+
+private struct SettingsValueRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(AppFont.subheadline)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .font(AppFont.headline)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .background(AppColor.elevatedSurface.opacity(0.88))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct SettingsNavigationRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: Spacing.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColor.accentSoft.opacity(0.54))
+                    .frame(width: 42, height: 42)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppColor.accentDeep)
+            }
+
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(title)
+                    .font(AppFont.headline)
+                    .foregroundStyle(.primary)
+
+                Text(subtitle)
+                    .font(AppFont.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .background(AppColor.elevatedSurface.opacity(0.88))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct SettingsSecureFieldRow: View {
+    let title: String
+    @Binding var text: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text(title)
+                .font(AppFont.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(AppColor.accent)
+                    .frame(width: 20)
+
+                SecureField(title, text: $text)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+            .padding(.horizontal, Spacing.md)
+            .frame(minHeight: 54)
+            .background(AppColor.elevatedSurface.opacity(0.88))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 }
 

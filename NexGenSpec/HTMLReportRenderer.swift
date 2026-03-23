@@ -11,7 +11,12 @@ import Foundation
 /// If imageFolderURL is set, images are written there and HTML references them (reduces memory for large reports).
 enum HTMLReportRenderer {
 
-    static func renderHTML(for version: InspectionVersion, imageFolderURL: URL? = nil, videosFolderURL: URL? = nil) -> String {
+    static func renderHTML(
+        for version: InspectionVersion,
+        imageFolderURL: URL? = nil,
+        videosFolderURL: URL? = nil,
+        absoluteAssetFileURLs: Bool = false
+    ) -> String {
         let inspection = version.inspection
         let counts = inspection.summaryCounts()
         let jobId = UUID(uuidString: inspection.inspectionId) ?? version.id
@@ -42,10 +47,13 @@ enum HTMLReportRenderer {
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light">
         <title>Inspection Report – \(escapeHTML(inspection.clientName))</title>
         <style>
-        :root { --card-shadow: 0 2px 8px rgba(0,0,0,0.08); --radius: 12px; }
+        :root { --card-shadow: 0 2px 8px rgba(0,0,0,0.08); --radius: 12px; color-scheme: light; }
+        @page { size: A4 portrait; margin: 24px; }
         * { box-sizing: border-box; }
+        html, body { background: #f4f7fb; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; }
         .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-25deg); font-size: 48px; font-weight: bold; color: rgba(0,0,0,0.08); pointer-events: none; z-index: 0; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
@@ -68,12 +76,17 @@ enum HTMLReportRenderer {
         .item-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
         .item-card .badge { display: inline-block; margin-left: 8px; }
         .item-card p { margin: 6px 0; }
-        .item-card .photo { max-width: 100%; height: auto; border-radius: 8px; margin-top: 8px; }
+        .item-card .photo { display: block; max-width: 100%; height: auto; border-radius: 8px; margin-top: 8px; page-break-inside: avoid; break-inside: avoid; }
         .signatures { margin-top: 24px; }
         .signatures img { max-width: 200px; height: auto; border: 1px solid #dee2e6; border-radius: 8px; }
         .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #dee2e6; font-size: 0.8rem; color: #666; }
         .footer .hash { font-family: ui-monospace, monospace; word-break: break-all; }
-        @media (prefers-color-scheme: dark) { body { background: #1a1a1a; color: #e0e0e0; } .card { background: #2d2d2d; } .meta, .footer { color: #aaa; } }
+        @media print {
+          html, body { background: #fff !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .card { background: #fff !important; box-shadow: none !important; break-inside: avoid-page; page-break-inside: avoid; }
+          .meta, .footer { color: #555 !important; }
+          .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
         </style>
         </head>
         <body>
@@ -111,8 +124,9 @@ enum HTMLReportRenderer {
             for video in inspection.videos {
                 let label = escapeHTML(video.caption.isEmpty ? video.fileName : video.caption)
                 if videosFolderURL != nil {
-                    let relPath = "videos/\(escapeHTML(video.fileName))"
-                    html += "<p><a href=\"\(relPath)\" target=\"_blank\">\(label)</a> \(escapeHTML(video.source ?? ""))</p>"
+                    let fileURL = videosFolderURL!.appendingPathComponent(video.fileName)
+                    let videoPath = absoluteAssetFileURLs ? fileURL.absoluteString : "videos/\(escapeHTML(video.fileName))"
+                    html += "<p><a href=\"\(videoPath)\" target=\"_blank\">\(label)</a> \(escapeHTML(video.source ?? ""))</p>"
                 } else {
                     html += "<p class=\"meta\">\(label) \(escapeHTML(video.source ?? ""))</p>"
                 }
@@ -133,9 +147,10 @@ enum HTMLReportRenderer {
                         if let folder = imageFolderURL {
                             let fileURL = folder.appendingPathComponent("\(photo.id.uuidString).png")
                             try? FileSecurity.writeProtected(reportData, to: fileURL)
-                            imagesHTML += "<img class=\"photo\" src=\"images/\(photo.id.uuidString).png\" alt=\"\" loading=\"lazy\"/>"
+                            let imagePath = absoluteAssetFileURLs ? fileURL.absoluteString : "images/\(photo.id.uuidString).png"
+                            imagesHTML += "<img class=\"photo\" src=\"\(imagePath)\" alt=\"Inspection photo\"/>"
                         } else {
-                            imagesHTML += "<img class=\"photo\" src=\"data:image/png;base64,\(reportData.base64EncodedString())\" alt=\"\" loading=\"lazy\"/>"
+                            imagesHTML += "<img class=\"photo\" src=\"data:image/png;base64,\(reportData.base64EncodedString())\" alt=\"Inspection photo\"/>"
                         }
                     }
                 }

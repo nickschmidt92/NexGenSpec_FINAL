@@ -17,77 +17,107 @@ struct LoginView: View {
     var body: some View {
         AppScreenBackground {
             ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.xl) {
-                    BrandLockup(
-                        subtitle: "Professional inspection reports, secure media, and field-ready workflows.",
-                        markSize: 76
-                    )
-                    .padding(.top, Spacing.xl)
-                    .padding(.horizontal, Spacing.lg)
-
+                VStack(spacing: Spacing.xl) {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
-                        VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text("Sign In")
-                                .font(AppFont.title2)
+                        BrandLockup(
+                            subtitle: "Professional inspection reports, secure media, and field-ready workflows.",
+                            markSize: 76
+                        )
 
-                            Text("Use an existing account to resume inspections, reports, and retention-safe records. In DEBUG builds you can still use the owner, admin, or testflight demo credentials.")
-                                .font(AppFont.subheadline)
-                                .foregroundStyle(.secondary)
+                        HStack(spacing: Spacing.sm) {
+                            LoginCapabilityChip(title: "LiDAR Ready", systemImage: "viewfinder")
+                            LoginCapabilityChip(title: "PDF Reports", systemImage: "doc.richtext")
+                            LoginCapabilityChip(title: "Audit Trail", systemImage: "lock.doc")
                         }
 
-                        VStack(spacing: Spacing.md) {
-                            AuthFieldContainer(title: "Username", systemImage: "person.crop.circle") {
-                                TextField("Username", text: $username)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                    .submitLabel(.next)
-                                    .focused($focusedField, equals: .username)
-                                    .onSubmit {
-                                        focusedField = .password
-                                    }
-                            }
-
-                            AuthFieldContainer(title: "Password", systemImage: "lock.fill") {
-                                SecureField("Password", text: $password)
-                                    .textInputAutocapitalization(.never)
-                                    .submitLabel(.go)
-                                    .focused($focusedField, equals: .password)
-                                    .onSubmit {
-                                        attemptLogin()
-                                    }
-                            }
-                        }
-
-                        Button("Log In") {
-                            attemptLogin()
-                        }
-                        .buttonStyle(AppPrimaryButtonStyle())
-                        .accessibilityLabel("Log In")
-
-                        Button("Create new account") {
-                            showingCreateAccount = true
-                        }
-                        .buttonStyle(AppSecondaryButtonStyle())
-
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Text("What this build is ready for")
-                                .font(AppFont.headline)
-
-                            HStack(spacing: Spacing.sm) {
-                                LoginCapabilityChip(title: "LiDAR Ready", systemImage: "viewfinder")
-                                LoginCapabilityChip(title: "PDF Reports", systemImage: "doc.richtext")
-                                LoginCapabilityChip(title: "Audit Trail", systemImage: "lock.doc")
-                            }
-                        }
-
-                        Text("This is still a local-account build. Network authentication can be swapped in later without changing the inspection workflow.")
-                            .font(AppFont.footnote)
+                        Text("Built for field inspectors who need evidence-grade media, defensible reports, and a cleaner handoff to the client.")
+                            .font(AppFont.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                    .inspectionCard()
+                    .frame(maxWidth: 780, alignment: .leading)
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.top, Spacing.xl)
+
+                    VStack(spacing: Spacing.lg) {
+                        VStack(alignment: .leading, spacing: Spacing.lg) {
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                Text("Sign In")
+                                    .font(AppFont.title2)
+
+                                Text("Resume inspections, reports, and retention-safe records with your existing workspace account.")
+                                    .font(AppFont.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            VStack(spacing: Spacing.md) {
+                                AuthFieldContainer(title: "Username", systemImage: "person.crop.circle") {
+                                    TextField("Username", text: $username)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .submitLabel(.next)
+                                        .focused($focusedField, equals: .username)
+                                        .onSubmit {
+                                            focusedField = .password
+                                        }
+                                }
+
+                                AuthFieldContainer(title: "Password", systemImage: "lock.fill") {
+                                    SecureField("Password", text: $password)
+                                        .textInputAutocapitalization(.never)
+                                        .submitLabel(.go)
+                                        .focused($focusedField, equals: .password)
+                                        .onSubmit {
+                                            attemptLogin()
+                                        }
+                                }
+                            }
+
+                            Button("Log In") {
+                                attemptLogin()
+                            }
+                            .buttonStyle(AppPrimaryButtonStyle())
+                            .accessibilityLabel("Log In")
+
+                            Button("Create new account") {
+                                showingCreateAccount = true
+                            }
+                            .buttonStyle(AppSecondaryButtonStyle())
+                        }
+                        .inspectionCard()
+
+                        VStack(alignment: .leading, spacing: Spacing.md) {
+                            Text("Why this build feels production-ready")
+                                .font(AppFont.headline)
+
+                            VStack(spacing: Spacing.sm) {
+                                LoginSignalRow(
+                                    title: "Cleaner handoff",
+                                    subtitle: "The dashboard starts focused on active work instead of demo data or scaffolding.",
+                                    systemImage: "sparkles"
+                                )
+                                LoginSignalRow(
+                                    title: "Locked-down records",
+                                    subtitle: "Media, legal screens, and audit history stay inside the inspection workflow.",
+                                    systemImage: "lock.shield"
+                                )
+                                LoginSignalRow(
+                                    title: "Branded experience",
+                                    subtitle: "The app now uses your real NexGenSpec identity across entry, dashboard, and settings.",
+                                    systemImage: "swatchpalette"
+                                )
+                            }
+
+                            Text("Accounts are still local to the device, so you can test the workflow without backend risk before TestFlight.")
+                                .font(AppFont.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .inspectionCard()
+                    }
+                    .frame(maxWidth: 780)
                     .padding(.horizontal, Spacing.lg)
                     .padding(.bottom, Spacing.xl)
                 }
+                .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
         }
@@ -115,6 +145,41 @@ struct LoginView: View {
         } else {
             showingError = true
         }
+    }
+}
+
+private struct LoginSignalRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppColor.accentSoft.opacity(0.54))
+                    .frame(width: 42, height: 42)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppColor.accentDeep)
+            }
+
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(title)
+                    .font(AppFont.headline)
+
+                Text(subtitle)
+                    .font(AppFont.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.sm)
+        .background(AppColor.elevatedSurface.opacity(0.82))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -195,7 +260,7 @@ private struct CreateAccountView: View {
                 } header: {
                     Text("Choose your credentials")
                 } footer: {
-                    Text("Demo mode: your account is created locally. Use these same credentials to log in next time. This will be replaced with real sign-up when the app uses a backend.")
+                    Text("This account is stored locally on the device so you can keep testing the workflow without relying on a backend service.")
                 }
 
                 if let errorMessage {

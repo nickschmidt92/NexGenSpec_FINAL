@@ -4,6 +4,8 @@
 //
 
 import XCTest
+import PDFKit
+import UIKit
 @testable import NexGenSpec
 
 final class FilePathsTests: XCTestCase {
@@ -159,6 +161,224 @@ final class HTMLReportRendererTests: XCTestCase {
         XCTAssertFalse(html.contains("<script>alert(1)</script>"))
         XCTAssertTrue(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
         XCTAssertTrue(html.contains("A &amp; B"))
+    }
+
+    func testReportHTMLUsesPrintSafeStylesAndEagerImageLoading() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+
+        let fileName = "export-photo.png"
+        let photoURL = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
+        try FileSecurity.writeProtected(makeTestPNGData(), to: photoURL)
+
+        let photo = InspectionPhoto(fileName: fileName, caption: "Photo")
+        let item = InspectionItem(
+            templateItemId: "item",
+            title: "Outlet",
+            includeInReport: true,
+            status: .inspected,
+            defectSeverity: .major,
+            location: "Kitchen",
+            observed: "Observed issue",
+            implication: "Implication",
+            recommendation: "Recommendation",
+            contractorTag: "",
+            photos: [photo]
+        )
+        let section = InspectionSection(title: "Electrical", items: [item])
+        let inspection = Inspection(
+            id: jobId,
+            clientName: "Client",
+            clientEmail: "",
+            clientPhone: "",
+            propertyAddress: "123 Street",
+            inspectionDate: Date(),
+            inspectorName: "Inspector",
+            sections: [section]
+        )
+        let version = InspectionVersion(id: jobId, versionNumber: 1, status: .draft, finalizedAt: nil, locked: false, inspection: inspection)
+        let imageDir = FileManager.default.temporaryDirectory.appendingPathComponent("html-export-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: imageDir, withIntermediateDirectories: true)
+
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: FilePaths.inspectionFolder(jobId: jobId))
+            try? FileManager.default.removeItem(at: imageDir)
+        }
+
+        let html = HTMLReportRenderer.renderHTML(for: version, imageFolderURL: imageDir)
+        let printHTML = HTMLReportRenderer.renderHTML(for: version, imageFolderURL: imageDir, absoluteAssetFileURLs: true)
+
+        XCTAssertTrue(html.contains("color-scheme\" content=\"light\""))
+        XCTAssertTrue(html.contains("@media print"))
+        XCTAssertFalse(html.contains("loading=\"lazy\""))
+        XCTAssertTrue(html.contains("src=\"images/\(photo.id.uuidString).png\""))
+        XCTAssertTrue(printHTML.contains("src=\"file://"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: imageDir.appendingPathComponent("\(photo.id.uuidString).png").path))
+    }
+
+    func testGeneratedPDFContainsReportText() throws {
+        let inspection = Inspection(
+            clientName: "Taylor Client",
+            clientEmail: "taylor@example.com",
+            clientPhone: "",
+            propertyAddress: "45 Export Lane",
+            inspectionDate: Date(),
+            inspectorName: "Inspector",
+            sections: [
+                InspectionSection(
+                    title: "Roof",
+                    items: [
+                        InspectionItem(
+                            templateItemId: "roof-1",
+                            title: "Flashing",
+                            includeInReport: true,
+                            status: .inspected,
+                            defectSeverity: .major,
+                            location: "Roof edge",
+                            observed: "Flashing is loose.",
+                            implication: "Water intrusion is possible.",
+                            recommendation: "Repair flashing."
+                        )
+                    ]
+                )
+            ]
+        )
+        let version = InspectionVersion(versionNumber: 1, status: .draft, locked: false, inspection: inspection)
+        let pdfURL = PDFReportRenderer.generatePDF(for: version)
+        XCTAssertNotNil(pdfURL)
+
+        guard let pdfURL, let document = PDFDocument(url: pdfURL) else {
+            return XCTFail("Expected readable PDF document")
+        }
+
+        if ProcessInfo.processInfo.environment["KEEP_GENERATED_REPORT_PDF"] == "1" {
+            print("GENERATED_REPORT_PDF=\(pdfURL.path)")
+        } else {
+            addTeardownBlock {
+                try? FileManager.default.removeItem(at: pdfURL)
+            }
+        }
+
+        XCTAssertGreaterThan(document.pageCount, 0)
+        XCTAssertTrue(document.string?.contains("Inspection Report") == true)
+        XCTAssertTrue(document.string?.contains("Taylor Client") == true)
+    }
+
+    func testGeneratedPDFContainsPhoto() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+
+        let fileName = "photo-proof.png"
+        let photoURL = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
+        try FileSecurity.writeProtected(makeLargeTestPNGData(), to: photoURL)
+
+        let photo = InspectionPhoto(fileName: fileName, caption: "Blue sample")
+        let item = InspectionItem(
+            templateItemId: "item",
+            title: "Window",
+            includeInReport: true,
+            status: .inspected,
+            defectSeverity: .major,
+            location: "Living room",
+            observed: "Observed issue",
+            implication: "Implication",
+            recommendation: "Recommendation",
+            contractorTag: "",
+            photos: [photo]
+        )
+        let section = InspectionSection(title: "Exterior", items: [item])
+        let inspection = Inspection(
+            id: jobId,
+            clientName: "Photo Client",
+            clientEmail: "",
+            clientPhone: "",
+            propertyAddress: "1 Photo Way",
+            inspectionDate: Date(),
+            inspectorName: "Inspector",
+            sections: [section]
+        )
+        let version = InspectionVersion(id: jobId, versionNumber: 1, status: .draft, finalizedAt: nil, locked: false, inspection: inspection)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: FilePaths.inspectionFolder(jobId: jobId))
+        }
+
+        let pdfURL = PDFReportRenderer.generatePDF(for: version)
+        XCTAssertNotNil(pdfURL)
+
+        guard let pdfURL, let document = PDFDocument(url: pdfURL), let page = document.page(at: 0) else {
+            return XCTFail("Expected image PDF document")
+        }
+
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: pdfURL)
+        }
+
+        let thumbnail = page.thumbnail(of: CGSize(width: 800, height: 1000), for: .mediaBox)
+        XCTAssertTrue(imageContainsBlueRegion(thumbnail))
+    }
+
+    private func makeTestPNGData() throws -> Data {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 6, height: 6))
+        let image = renderer.image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 6, height: 6))
+        }
+        guard let data = image.pngData() else {
+            throw NSError(domain: "HTMLReportRendererTests", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create test PNG"])
+        }
+        return data
+    }
+
+    private func makeLargeTestPNGData() throws -> Data {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 480, height: 320))
+        let image = renderer.image { context in
+            UIColor(red: 0.08, green: 0.46, blue: 0.98, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 480, height: 320))
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 80, y: 100, width: 320, height: 120))
+        }
+        guard let data = image.pngData() else {
+            throw NSError(domain: "HTMLReportRendererTests", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to create large test PNG"])
+        }
+        return data
+    }
+
+    private func imageContainsBlueRegion(_ image: UIImage) -> Bool {
+        guard let cgImage = image.cgImage else { return false }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return false
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var bluePixelCount = 0
+        for index in stride(from: 0, to: pixels.count, by: 16) {
+            let red = Int(pixels[index])
+            let green = Int(pixels[index + 1])
+            let blue = Int(pixels[index + 2])
+
+            if blue > 170 && blue > red + 45 && blue > green + 25 {
+                bluePixelCount += 1
+                if bluePixelCount > 250 {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 }
 

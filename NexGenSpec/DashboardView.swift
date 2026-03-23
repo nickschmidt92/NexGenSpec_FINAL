@@ -43,6 +43,16 @@ struct DashboardView: View {
                     .listRowSeparator(.hidden)
 
                     Section {
+                        DashboardActionDeck(
+                            newInspectionAction: prepareForNewInspection,
+                            settingsAction: { showSettings = true }
+                        )
+                    }
+                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.md, bottom: Spacing.sm, trailing: Spacing.md))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+
+                    Section {
                         if store.metadataList.isEmpty {
                             EmptyDashboardState {
                                 prepareForNewInspection()
@@ -86,6 +96,7 @@ struct DashboardView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .listSectionSpacing(Spacing.sm)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
                 .refreshable {
@@ -251,38 +262,47 @@ private struct VersionRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.md) {
             ZStack {
-                Circle()
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(metadata.status.badgeColor.opacity(0.14))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 50, height: 50)
 
                 Image(systemName: metadata.status == .draft ? "square.and.pencil" : "checkmark.seal.fill")
                     .foregroundStyle(metadata.status.badgeColor)
             }
 
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text(metadata.clientName)
-                    .font(AppFont.headline)
-                    .foregroundStyle(.primary)
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text(metadata.clientName)
+                            .font(AppFont.headline)
+                            .foregroundStyle(.primary)
 
-                Text(metadata.propertyAddress)
-                    .font(AppFont.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                        Text(metadata.propertyAddress)
+                            .font(AppFont.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
 
                 HStack(spacing: Spacing.sm) {
-                    Label(dateFormatter.string(from: metadata.inspectionDate), systemImage: "calendar")
-                        .font(AppFont.caption)
-                        .foregroundStyle(.secondary)
+                    InspectionInfoPill(
+                        title: dateFormatter.string(from: metadata.inspectionDate),
+                        systemImage: "calendar"
+                    )
 
-                    Spacer()
-
-                    Text(metadata.status.rawValue)
-                        .font(AppFont.caption.weight(.semibold))
-                        .padding(.horizontal, Spacing.sm)
-                        .padding(.vertical, Spacing.xxs)
-                        .background(metadata.status.badgeColor.opacity(0.14))
-                        .foregroundStyle(metadata.status.badgeColor)
-                        .clipShape(Capsule())
+                    InspectionInfoPill(
+                        title: metadata.status.rawValue,
+                        systemImage: metadata.status == .draft ? "square.and.pencil" : "lock.fill",
+                        foregroundStyle: metadata.status.badgeColor,
+                        background: metadata.status.badgeColor.opacity(0.14)
+                    )
                 }
             }
         }
@@ -296,6 +316,23 @@ private struct VersionRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(metadata.clientName), \(metadata.propertyAddress), \(metadata.status.rawValue)")
         .accessibilityHint("Opens this inspection")
+    }
+}
+
+private struct InspectionInfoPill: View {
+    let title: String
+    let systemImage: String
+    var foregroundStyle: Color = .secondary
+    var background: Color = AppColor.elevatedSurface.opacity(0.72)
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(AppFont.caption.weight(.semibold))
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xxs)
+            .background(background)
+            .foregroundStyle(foregroundStyle)
+            .clipShape(Capsule())
     }
 }
 
@@ -323,6 +360,64 @@ private struct DashboardHero: View {
             }
         }
         .inspectionCard()
+    }
+}
+
+private struct DashboardActionDeck: View {
+    let newInspectionAction: () -> Void
+    let settingsAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.md) {
+            DashboardActionButton(
+                title: "Start New",
+                subtitle: "Open a fresh inspection shell",
+                systemImage: "plus.circle.fill",
+                action: newInspectionAction
+            )
+
+            DashboardActionButton(
+                title: "Open Settings",
+                subtitle: "Legal text, backup, and account controls",
+                systemImage: "slider.horizontal.3",
+                action: settingsAction
+            )
+        }
+    }
+}
+
+private struct DashboardActionButton: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(AppColor.accentDeep)
+
+                Text(title)
+                    .font(AppFont.headline)
+                    .foregroundStyle(.primary)
+
+                Text(subtitle)
+                    .font(AppFont.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
+            .padding(Spacing.md)
+            .background(AppColor.softPanelGradient)
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(AppColor.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -376,8 +471,30 @@ private struct EmptyDashboardState: View {
 
             Button("Create First Inspection", action: createAction)
                 .buttonStyle(AppPrimaryButtonStyle())
+
+            HStack(spacing: Spacing.sm) {
+                EmptyStatePromise(title: "Capture", systemImage: "camera.aperture")
+                EmptyStatePromise(title: "Annotate", systemImage: "highlighter")
+                EmptyStatePromise(title: "Export", systemImage: "square.and.arrow.up")
+            }
         }
         .inspectionCard()
+    }
+}
+
+private struct EmptyStatePromise: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(AppFont.caption.weight(.semibold))
+            .foregroundStyle(AppColor.accentDeep)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xs)
+            .background(AppColor.elevatedSurface.opacity(0.88))
+            .clipShape(Capsule())
+            .frame(maxWidth: .infinity)
     }
 }
 
