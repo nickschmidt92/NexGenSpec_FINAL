@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>NexGenSpec needs camera access to capture inspection photos and scan documents.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NexGenSpec uses the microphone for voice commands and audio notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition allows hands-free commands and note dictation during inspections.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used for importing/exporting inspection images and annotations.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Used to tag inspection locations in reports (optional; not required for basic use).</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Used for connecting to compatible inspection devices (optional; only if applicable).</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Used for secure authentication if enabled (optional).</string>
+	<key>PrivacyPolicyURL</key>
+	<string>https://www.dia-inspections.com/privacy</string>
+	<key>TermsAndConditionsURL</key>
+	<string>https://www.dia-inspections.com/terms</string>
+</dict>
+</plist>
