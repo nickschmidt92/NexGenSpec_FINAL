@@ -335,7 +335,9 @@
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NexGenSpec uses the microphone for hands-free voice commands and inspection note dictation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NexGenSpec needs access to your photo library to attach photos to inspection items.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NexGenSpec uses speech recognition for hands-free voice commands and inspection note dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -369,7 +371,9 @@
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NexGenSpec uses the microphone for hands-free voice commands and inspection note dictation.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NexGenSpec needs access to your photo library to attach photos to inspection items.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NexGenSpec uses speech recognition for hands-free voice commands and inspection note dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
