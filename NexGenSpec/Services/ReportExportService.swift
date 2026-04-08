@@ -38,10 +38,10 @@ public final class ReportExportService: ObservableObject {
         let versionCopy = version
         let task = Task {
             // Heavy work (HTML + write) off main thread; then PDF on main (WKWebView needs main).
-            let htmlResult: (htmlURL: URL?, reportDir: URL, tempHTML: URL, pdfHTML: String)? = await Task.detached(priority: .userInitiated) {
+            // Step 1: render HTML + assets off main. HTML is the source of truth and must always succeed.
+            let htmlResult: (htmlURL: URL, reportDir: URL)? = await Task.detached(priority: .userInitiated) {
                 await Task.yield()
                 if Task.isCancelled { return nil }
-                var htmlURL: URL?
                 do {
                     let reportDir = FileManager.default.temporaryDirectory.appendingPathComponent("report-\(versionCopy.id.uuidString)", isDirectory: true)
                     let imagesDir = reportDir.appendingPathComponent("images", isDirectory: true)
@@ -53,53 +53,55 @@ public final class ReportExportService: ObservableObject {
                     try FileSecurity.ensureProtectedDirectory(imagesDir)
                     try FileSecurity.ensureProtectedDirectory(videosDir)
                     if Task.isCancelled { return nil }
-                    let html = HTMLReportRenderer.renderHTML(for: versionCopy, imageFolderURL: imagesDir, videosFolderURL: videosDir)
-                    // Keep the PDF path self-contained so the formatter never has to resolve on-disk assets.
-                    let pdfHTML = HTMLReportRenderer.renderHTML(for: versionCopy)
+                    let html = HTMLReportRenderer.renderHTML(
+                        for: versionCopy,
+                        imageFolderURL: imagesDir,
+                        videosFolderURL: videosDir
+                    )
                     let tempHTML = reportDir.appendingPathComponent("index.html")
-                    if let htmlData = html.data(using: .utf8) {
-                        try FileSecurity.writeProtected(htmlData, to: tempHTML)
-                    }
-                    htmlURL = tempHTML
-                    return (htmlURL, reportDir, tempHTML, pdfHTML)
+                    try FileSecurity.writeProtected(Data(html.utf8), to: tempHTML)
+                    return (tempHTML, reportDir)
                 } catch {
                     Diagnostics.logError(context: "Report export HTML generation failed", error: error)
                     return nil
                 }
             }.value
+
             guard !Task.isCancelled else {
                 finishExport(cancelled: true)
                 return
             }
-            progress = 0.7
-            var finalResult: ReportExportResult
-            if let htmlResult {
-                let primaryPDF = PDFReportRenderer.generatePDF(for: versionCopy)
-                guard !Task.isCancelled else {
-                    finishExport(cancelled: true)
-                    return
-                }
-                let resolvedPDF: URL?
-                if let primaryPDF {
-                    resolvedPDF = primaryPDF
-                } else {
-                    let secondaryPDF = await PDFReportRenderer.generatePDF(
-                        fromHTMLFile: htmlResult.tempHTML,
-                        baseURL: htmlResult.reportDir
-                    )
-                    resolvedPDF = secondaryPDF ?? PDFReportRenderer.generatePDF(fromHTML: htmlResult.pdfHTML)
-                }
-                progress = 1
-                if let resolvedPDF {
-                    finalResult = .success(htmlURL: htmlResult.htmlURL, pdfURL: resolvedPDF)
-                } else {
-                    finalResult = .failure(NSError(domain: "ReportExport", code: -1, userInfo: [NSLocalizedDescriptionKey: "PDF could not be generated. The report may be too large."]))
-                }
-            } else {
-                progress = 1
-                finalResult = .failure(NSError(domain: "ReportExport", code: -2, userInfo: [NSLocalizedDescriptionKey: "Report export failed."]))
+
+            guard let htmlResult else {
+                finishExport(result: .failure(NSError(
+                    domain: "ReportExport",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Report HTML could not be generated."]
+                )))
+                return
             }
-            finishExport(result: finalResult)
+
+            progress = 0.7
+
+            // Step 2: derive PDF from HTML. Single code path. If it throws, HTML still ships.
+            var pdfURL: URL?
+            do {
+                pdfURL = try await PDFReportRenderer.generatePDF(
+                    fromHTMLFile: htmlResult.htmlURL,
+                    baseURL: htmlResult.reportDir
+                )
+            } catch {
+                Diagnostics.logError(context: "PDF generation failed; returning HTML-only export", error: error)
+                pdfURL = nil
+            }
+
+            guard !Task.isCancelled else {
+                finishExport(cancelled: true)
+                return
+            }
+
+            progress = 1
+            finishExport(result: .success(htmlURL: htmlResult.htmlURL, pdfURL: pdfURL))
         }
         exportTask = task
         await task.value

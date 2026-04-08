@@ -20,6 +20,7 @@ struct NexGenSpecApp: App {
 
     init() {
         _ = _suppressKeyboardConstraintLog
+        FirebaseBootstrap.configureIfNeeded()
     }
 
     var body: some Scene {

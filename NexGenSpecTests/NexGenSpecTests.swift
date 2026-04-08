@@ -216,7 +216,8 @@ final class HTMLReportRendererTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: imageDir.appendingPathComponent("\(photo.id.uuidString).png").path))
     }
 
-    func testGeneratedPDFContainsReportText() throws {
+    @MainActor
+    func testGeneratedPDFContainsReportText() async throws {
         let inspection = Inspection(
             clientName: "Taylor Client",
             clientEmail: "taylor@example.com",
@@ -244,10 +245,9 @@ final class HTMLReportRendererTests: XCTestCase {
             ]
         )
         let version = InspectionVersion(versionNumber: 1, status: .draft, locked: false, inspection: inspection)
-        let pdfURL = PDFReportRenderer.generatePDF(for: version)
-        XCTAssertNotNil(pdfURL)
+        let pdfURL = try await PDFReportRenderer.generatePDF(for: version)
 
-        guard let pdfURL, let document = PDFDocument(url: pdfURL) else {
+        guard let document = PDFDocument(url: pdfURL) else {
             return XCTFail("Expected readable PDF document")
         }
 
@@ -264,7 +264,8 @@ final class HTMLReportRendererTests: XCTestCase {
         XCTAssertTrue(document.string?.contains("Taylor Client") == true)
     }
 
-    func testGeneratedPDFContainsPhoto() throws {
+    @MainActor
+    func testGeneratedPDFContainsPhoto() async throws {
         let jobId = UUID()
         try FilePaths.ensureAppStructure(jobId: jobId)
 
@@ -302,10 +303,9 @@ final class HTMLReportRendererTests: XCTestCase {
             try? FileManager.default.removeItem(at: FilePaths.inspectionFolder(jobId: jobId))
         }
 
-        let pdfURL = PDFReportRenderer.generatePDF(for: version)
-        XCTAssertNotNil(pdfURL)
+        let pdfURL = try await PDFReportRenderer.generatePDF(for: version)
 
-        guard let pdfURL, let document = PDFDocument(url: pdfURL), let page = document.page(at: 0) else {
+        guard let document = PDFDocument(url: pdfURL), let page = document.page(at: 0) else {
             return XCTFail("Expected image PDF document")
         }
 
