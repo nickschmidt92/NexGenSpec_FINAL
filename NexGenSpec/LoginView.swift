@@ -244,10 +244,13 @@ private struct CreateAccountView: View {
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
                         .autocorrectionDisabled()
+                        .textContentType(.username)
                     SecureField("Password", text: $password)
                         .textFieldStyle(.roundedBorder)
+                        .textContentType(.newPassword)
                     SecureField("Confirm password", text: $confirmPassword)
                         .textFieldStyle(.roundedBorder)
+                        .textContentType(.newPassword)
                 } header: {
                     Text("Create your NexGenSpec account")
                 } footer: {
