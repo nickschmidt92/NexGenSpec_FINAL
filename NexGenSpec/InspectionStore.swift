@@ -140,6 +140,27 @@ public final class InspectionStore: ObservableObject {
     public func clearSaveError() { saveError = nil }
     public func clearLoadError() { loadError = nil }
 
+    /// Wipes ALL local inspection data from disk and clears in-memory state.
+    /// Called as part of Delete Account to satisfy App Store Guideline 5.1.1(v).
+    /// After this runs, the next launch starts with a clean slate.
+    public func clearAllLocalData() {
+        // Cancel any pending save so it doesn't race the delete.
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+
+        ioQueue.sync {
+            let root = FilePaths.appRoot
+            if FileManager.default.fileExists(atPath: root.path) {
+                try? FileManager.default.removeItem(at: root)
+            }
+        }
+
+        metadataList = []
+        saveError = nil
+        loadError = nil
+        lastSavedAt = nil
+    }
+
     /// Flushes any pending debounced save and writes to disk immediately. Use for ⌘S.
     public func saveNow() {
         saveWorkItem?.cancel()

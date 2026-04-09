@@ -217,14 +217,106 @@ public final class AuthManager: ObservableObject {
         }
     }
 
-    // MARK: - Delete account (full UI lands in Step 4)
+    // MARK: - Delete account
 
-    /// Deletes the current Firebase user. Caller must handle local data wipe separately.
-    /// Throws `AuthErrorCode.requiresRecentLogin` if the user must re-authenticate first.
+    public enum DeleteAccountError: Error, LocalizedError {
+        case notSignedIn
+        case needsPasswordReauth
+        case needsAppleReauth
+        case other(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .notSignedIn:          return "You are not signed in."
+            case .needsPasswordReauth:  return "Please re-enter your password to confirm account deletion."
+            case .needsAppleReauth:     return "Please re-authenticate with Apple to confirm account deletion."
+            case .other(let msg):       return msg
+            }
+        }
+    }
+
+    /// The Firebase provider ID of the *primary* sign-in method for the current user.
+    /// Returns nil if signed out. Used by Delete Account UI to pick the right reauth flow.
+    public var currentProviderID: String? {
+        guard let user = Auth.auth().currentUser else { return nil }
+        // Prefer non-firebase providers (apple.com, password, google.com). Firebase always
+        // includes itself in providerData, so we look at the first non-firebase entry.
+        for info in user.providerData {
+            return info.providerID
+        }
+        return nil
+    }
+
+    /// Deletes the current Firebase user. Caller is responsible for wiping local data
+    /// (InspectionStore.clearAllLocalData) after this succeeds.
+    ///
+    /// If Firebase requires a fresh login, this throws `.needsPasswordReauth` or
+    /// `.needsAppleReauth` so the UI can prompt accordingly and then call
+    /// `reauthenticateWithPassword(_:)` / `reauthenticateWithApple()` before retrying.
     public func deleteAccount() async throws {
-        guard let user = Auth.auth().currentUser else { return }
-        try await user.delete()
-        applyUser(nil)
+        guard let user = Auth.auth().currentUser else { throw DeleteAccountError.notSignedIn }
+        do {
+            try await user.delete()
+            applyUser(nil)
+        } catch {
+            let ns = error as NSError
+            if ns.domain == AuthErrorDomain,
+               let code = AuthErrorCode(rawValue: ns.code),
+               code == .requiresRecentLogin {
+                switch currentProviderID {
+                case "apple.com":
+                    throw DeleteAccountError.needsAppleReauth
+                case "password":
+                    throw DeleteAccountError.needsPasswordReauth
+                default:
+                    throw DeleteAccountError.other(Self.friendlyMessage(for: error))
+                }
+            }
+            throw DeleteAccountError.other(Self.friendlyMessage(for: error))
+        }
+    }
+
+    /// Re-authenticates the current email/password user so a sensitive operation
+    /// (like account deletion) can proceed. Call `deleteAccount()` again on success.
+    public func reauthenticateWithPassword(_ password: String) async throws {
+        guard let user = Auth.auth().currentUser, let email = user.email else {
+            throw DeleteAccountError.notSignedIn
+        }
+        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+        do {
+            try await user.reauthenticate(with: credential)
+        } catch {
+            throw DeleteAccountError.other(Self.friendlyMessage(for: error))
+        }
+    }
+
+    /// Re-authenticates the current Apple-signed-in user by running a fresh Apple
+    /// authorization and reauthenticating with the new credential.
+    public func reauthenticateWithApple() async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw DeleteAccountError.notSignedIn
+        }
+        let coordinator = SignInWithAppleCoordinator()
+        do {
+            let appleCredential = try await coordinator.start()
+            guard let tokenData = appleCredential.identityToken,
+                  let idTokenString = String(data: tokenData, encoding: .utf8) else {
+                throw DeleteAccountError.other("Apple did not return an identity token.")
+            }
+            let firebaseCredential = OAuthProvider.appleCredential(
+                withIDToken: idTokenString,
+                rawNonce: coordinator.rawNonce,
+                fullName: appleCredential.fullName
+            )
+            try await user.reauthenticate(with: firebaseCredential)
+        } catch let error as DeleteAccountError {
+            throw error
+        } catch {
+            if let asError = error as? ASAuthorizationError, asError.code == .canceled {
+                throw DeleteAccountError.other("Apple re-authentication was cancelled.")
+            }
+            throw DeleteAccountError.other(Self.friendlyMessage(for: error))
+        }
     }
 
     // MARK: - Validation

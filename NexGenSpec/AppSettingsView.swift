@@ -12,6 +12,14 @@ struct AppSettingsView: View {
     @State private var purgeSummary = ""
     @State private var showPurgeResult = false
 
+    // Delete Account flow
+    @State private var showDeleteConfirm = false
+    @State private var showDeletePasswordSheet = false
+    @State private var deletePasswordInput = ""
+    @State private var deleteErrorMessage: String?
+    @State private var showDeleteError = false
+    @State private var isDeletingAccount = false
+
     var body: some View {
         AppScreenBackground {
             ScrollView {
@@ -33,6 +41,16 @@ struct AppSettingsView: View {
                             dismiss()
                         }
                         .buttonStyle(AppSecondaryButtonStyle())
+
+                        Button("Delete Account", role: .destructive) {
+                            showDeleteConfirm = true
+                        }
+                        .buttonStyle(AppSecondaryButtonStyle())
+                        .disabled(isDeletingAccount)
+
+                        Text("Deleting your account permanently removes your login and erases all inspections, photos, and reports stored on this device. This cannot be undone.")
+                            .font(AppFont.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     SettingsSectionCard(
@@ -150,6 +168,100 @@ struct AppSettingsView: View {
         } message: {
             Text(purgeSummary)
         }
+        .alert("Delete your account?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete Account", role: .destructive) {
+                Task { await performDelete() }
+            }
+        } message: {
+            Text("This permanently deletes your login and erases all inspections, photos, and reports stored on this device. This cannot be undone.")
+        }
+        .sheet(isPresented: $showDeletePasswordSheet) {
+            NavigationStack {
+                Form {
+                    Section {
+                        SecureField("Password", text: $deletePasswordInput)
+                            .textContentType(.password)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                    } header: {
+                        Text("Confirm your password")
+                    } footer: {
+                        Text("For security, please re-enter your password to finish deleting your account.")
+                    }
+                }
+                .navigationTitle("Confirm Delete")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            deletePasswordInput = ""
+                            showDeletePasswordSheet = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Delete") {
+                            Task { await confirmPasswordAndDelete() }
+                        }
+                        .disabled(deletePasswordInput.isEmpty || isDeletingAccount)
+                    }
+                }
+            }
+        }
+        .alert("Delete Account", isPresented: $showDeleteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "Could not delete account.")
+        }
+    }
+
+    @MainActor
+    private func performDelete() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await authManager.deleteAccount()
+            finishLocalWipeAndDismiss()
+        } catch AuthManager.DeleteAccountError.needsPasswordReauth {
+            showDeletePasswordSheet = true
+        } catch AuthManager.DeleteAccountError.needsAppleReauth {
+            do {
+                try await authManager.reauthenticateWithApple()
+                try await authManager.deleteAccount()
+                finishLocalWipeAndDismiss()
+            } catch {
+                deleteErrorMessage = error.localizedDescription
+                showDeleteError = true
+            }
+        } catch {
+            deleteErrorMessage = error.localizedDescription
+            showDeleteError = true
+        }
+    }
+
+    @MainActor
+    private func confirmPasswordAndDelete() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await authManager.reauthenticateWithPassword(deletePasswordInput)
+            deletePasswordInput = ""
+            showDeletePasswordSheet = false
+            try await authManager.deleteAccount()
+            finishLocalWipeAndDismiss()
+        } catch {
+            deletePasswordInput = ""
+            showDeletePasswordSheet = false
+            deleteErrorMessage = error.localizedDescription
+            showDeleteError = true
+        }
+    }
+
+    @MainActor
+    private func finishLocalWipeAndDismiss() {
+        store.clearAllLocalData()
+        authManager.logout()
+        dismiss()
     }
 
     private var roleLabel: String {
