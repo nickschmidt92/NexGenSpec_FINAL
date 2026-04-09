@@ -10,6 +10,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import AuthenticationServices
 
 @MainActor
 public final class AuthManager: ObservableObject {
@@ -115,6 +116,44 @@ public final class AuthManager: ObservableObject {
             applyUser(result.user)
             return true
         } catch {
+            authErrorMessage = Self.friendlyMessage(for: error)
+            return false
+        }
+    }
+
+    // MARK: - Sign in with Apple
+
+    /// Runs the Sign in with Apple flow and exchanges the resulting Apple ID
+    /// token for a Firebase credential. Returns true on success.
+    @discardableResult
+    public func signInWithApple() async -> Bool {
+        authErrorMessage = nil
+        isBusy = true
+        defer { isBusy = false }
+
+        let coordinator = SignInWithAppleCoordinator()
+        do {
+            let appleCredential = try await coordinator.start()
+            guard let tokenData = appleCredential.identityToken,
+                  let idTokenString = String(data: tokenData, encoding: .utf8) else {
+                authErrorMessage = "Apple sign-in did not return an identity token."
+                return false
+            }
+
+            let firebaseCredential = OAuthProvider.appleCredential(
+                withIDToken: idTokenString,
+                rawNonce: coordinator.rawNonce,
+                fullName: appleCredential.fullName
+            )
+
+            let result = try await Auth.auth().signIn(with: firebaseCredential)
+            applyUser(result.user)
+            return true
+        } catch {
+            // Treat user-cancellation as a silent dismiss, not an error banner.
+            if let asError = error as? ASAuthorizationError, asError.code == .canceled {
+                return false
+            }
             authErrorMessage = Self.friendlyMessage(for: error)
             return false
         }

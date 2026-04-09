@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 /// Email/password login with Firebase-backed AuthManager.
 /// Adds Forgot Password flow and live password complexity hints.
@@ -90,6 +91,28 @@ struct LoginView: View {
                             .disabled(authManager.isBusy)
                             .accessibilityLabel("Log In")
 
+                            HStack(spacing: Spacing.sm) {
+                                Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+                                Text("or").font(AppFont.footnote).foregroundStyle(.secondary)
+                                Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+                            }
+
+                            Button {
+                                attemptAppleSignIn()
+                            } label: {
+                                HStack(spacing: Spacing.sm) {
+                                    Image(systemName: "applelogo")
+                                    Text("Sign in with Apple")
+                                        .fontWeight(.semibold)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .foregroundStyle(.white)
+                                .background(Color.black)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            .disabled(authManager.isBusy)
+                            .accessibilityLabel("Sign in with Apple")
+
                             HStack {
                                 Button("Forgot password?") {
                                     forgotPasswordEmail = email
@@ -148,6 +171,15 @@ struct LoginView: View {
                 email = trimmed
                 password = ""
             } else {
+                showingError = true
+            }
+        }
+    }
+
+    private func attemptAppleSignIn() {
+        Task { @MainActor in
+            let ok = await authManager.signInWithApple()
+            if !ok && authManager.authErrorMessage != nil {
                 showingError = true
             }
         }
