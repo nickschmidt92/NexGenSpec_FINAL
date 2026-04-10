@@ -17,6 +17,7 @@ private let _suppressKeyboardConstraintLog: Void = {
 struct NexGenSpecApp: App {
     @StateObject private var store = InspectionStore()
     @StateObject private var authManager = AuthManager()
+    @StateObject private var subscriptions = SubscriptionManager()
 
     init() {
         _ = _suppressKeyboardConstraintLog
@@ -28,6 +29,7 @@ struct NexGenSpecApp: App {
             RootView()
                 .environmentObject(store)
                 .environmentObject(authManager)
+                .environmentObject(subscriptions)
                 .tint(AppColor.accent)
         }
     }

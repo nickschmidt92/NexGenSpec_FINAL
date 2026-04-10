@@ -1,0 +1,179 @@
+//
+//  SubscriptionManager.swift
+//  NexGenSpec
+//
+//  StoreKit 2 entitlement manager. Owns the 4 App Store product IDs, loads
+//  them, listens for transaction updates, and publishes `isPro` so the rest
+//  of the app can gate features (export, unlimited inspections, etc.).
+//
+//  Product IDs configured in App Store Connect (NexGenSpec Pro group):
+//    - com.nexgenspec.annual       ($289.99 / year)
+//    - com.nexgenspec.monthly1     ($28.99  / month)
+//    - com.nexgenspec.annualpro1   ($789.99 / year)
+//    - com.nexgenspec.monthlypro1  ($78.99  / month)
+//
+
+import Foundation
+import StoreKit
+
+@MainActor
+public final class SubscriptionManager: ObservableObject {
+
+    // MARK: - Product IDs
+
+    public enum ProductID {
+        public static let monthly    = "com.nexgenspec.monthly1"
+        public static let annual     = "com.nexgenspec.annual"
+        public static let monthlyPro = "com.nexgenspec.monthlypro1"
+        public static let annualPro  = "com.nexgenspec.annualpro1"
+
+        public static let all: [String] = [annualPro, monthlyPro, annual, monthly]
+    }
+
+    // MARK: - Published state
+
+    /// All loaded subscription products, ordered highest tier → lowest.
+    @Published public private(set) var products: [Product] = []
+
+    /// True if the current Apple ID has any active NexGenSpec subscription.
+    @Published public private(set) var isPro: Bool = false
+
+    /// Product ID of the active entitlement, if any. Useful for UI badges.
+    @Published public private(set) var activeProductID: String?
+
+    /// Last error string from a load / purchase / restore attempt.
+    @Published public private(set) var lastError: String?
+
+    /// True while a purchase or restore is in flight.
+    @Published public private(set) var isBusy: Bool = false
+
+    // MARK: - Init
+
+    private var updatesTask: Task<Void, Never>?
+
+    public init() {
+        // Start listening for transaction updates immediately so renewals
+        // and out-of-app purchases update entitlement state in real time.
+        updatesTask = Task.detached(priority: .background) { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { return }
+                await self.handle(transactionResult: result)
+            }
+        }
+
+        Task { await refresh() }
+    }
+
+    deinit {
+        updatesTask?.cancel()
+    }
+
+    // MARK: - Public API
+
+    /// Fetches product metadata from the App Store and refreshes entitlements.
+    public func refresh() async {
+        await loadProducts()
+        await updateEntitlements()
+    }
+
+    /// Buys the given product. Returns true on verified success.
+    @discardableResult
+    public func purchase(_ product: Product) async -> Bool {
+        lastError = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let result = try await product.purchase()
+            switch result {
+            case .success(let verification):
+                let transaction = try Self.verify(verification)
+                await transaction.finish()
+                await updateEntitlements()
+                return isPro
+            case .userCancelled:
+                return false
+            case .pending:
+                lastError = "Purchase is pending approval."
+                return false
+            @unknown default:
+                return false
+            }
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Asks StoreKit to sync with the App Store and re-checks entitlements.
+    /// Required by App Review guideline 3.1.1.
+    public func restore() async {
+        lastError = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            try await AppStore.sync()
+            await updateEntitlements()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Internals
+
+    private func loadProducts() async {
+        do {
+            let fetched = try await Product.products(for: ProductID.all)
+            // Preserve our preferred display order (highest tier first).
+            let order = ProductID.all
+            self.products = fetched.sorted {
+                (order.firstIndex(of: $0.id) ?? .max)
+                < (order.firstIndex(of: $1.id) ?? .max)
+            }
+        } catch {
+            self.products = []
+            self.lastError = error.localizedDescription
+        }
+    }
+
+    /// Walks `Transaction.currentEntitlements` and sets `isPro`.
+    private func updateEntitlements() async {
+        var foundID: String?
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else { continue }
+            guard ProductID.all.contains(transaction.productID) else { continue }
+            // Ignore if revoked or expired.
+            if let revoked = transaction.revocationDate, revoked <= Date() { continue }
+            if let exp = transaction.expirationDate, exp <= Date() { continue }
+            foundID = transaction.productID
+            break
+        }
+        self.activeProductID = foundID
+        self.isPro = (foundID != nil)
+    }
+
+    private func handle(transactionResult: VerificationResult<Transaction>) async {
+        do {
+            let transaction = try Self.verify(transactionResult)
+            await transaction.finish()
+            await updateEntitlements()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private static func verify<T>(_ result: VerificationResult<T>) throws -> T {
+        switch result {
+        case .unverified:      throw StoreError.failedVerification
+        case .verified(let s): return s
+        }
+    }
+
+    public enum StoreError: LocalizedError {
+        case failedVerification
+        public var errorDescription: String? {
+            switch self {
+            case .failedVerification: return "App Store transaction failed verification."
+            }
+        }
+    }
+}

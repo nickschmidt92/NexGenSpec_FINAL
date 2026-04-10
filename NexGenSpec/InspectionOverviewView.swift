@@ -14,13 +14,17 @@ import UniformTypeIdentifiers
 @available(iOS 16.0, *)
 struct InspectionOverviewView: View {
     @Binding var version: InspectionVersion
+    @State private var shareContent: ShareContent?
+    // Legacy — kept so other code paths still compile; drive presentation via shareContent.
     @State private var showShareSheet = false
     @State private var shareItems: [Any] = []
     @State private var showLiDARCapture = false
     @State private var selectedVideoItems: [PhotosPickerItem] = []
     @State private var showExportError = false
     @State private var showTextExportError = false
+    @State private var showPaywall = false
     @StateObject private var exportService = ReportExportService()
+    @EnvironmentObject private var subscriptions: SubscriptionManager
 
     private var isEditable: Bool { version.state.isEditable }
     private var jobId: UUID { UUID(uuidString: version.inspection.inspectionId) ?? version.id }
@@ -84,28 +88,34 @@ struct InspectionOverviewView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        if isEditable {
+                            Text("Finalize and sign the inspection before exporting.")
+                        }
                         Button {
                             if let url = ReportExporter.exportPlainText(for: version) {
-                                shareItems = [url]
-                                showShareSheet = true
+                                shareContent = ShareContent(items: [url])
                             } else {
                                 showTextExportError = true
                             }
                         } label: { Label("Quick summary (text)", systemImage: "doc.text") }
                             .accessibilityLabel("Quick summary text")
                             .accessibilityHint("Share plain text summary")
+                            .disabled(isEditable)
                         Button {
+                            guard subscriptions.isPro else {
+                                showPaywall = true
+                                return
+                            }
                             Task {
                                 await exportService.export(version: version)
                                 if case .success(_, let pdf) = exportService.result, let url = pdf {
-                                    shareItems = [url]
-                                    showShareSheet = true
+                                    shareContent = ShareContent(items: [url])
                                 } else if case .failure = exportService.result {
                                     showExportError = true
                                 }
                             }
-                        } label: { Label("Full report (PDF)", systemImage: "doc.richtext") }
-                            .disabled(exportService.isExporting)
+                        } label: { Label(subscriptions.isPro ? "Full report (PDF)" : "Full report (PDF) – Pro", systemImage: "doc.richtext") }
+                            .disabled(exportService.isExporting || isEditable)
                             .accessibilityLabel("Full report PDF")
                             .accessibilityHint("Generate and share full PDF report")
                     } label: { Label("Export", systemImage: "square.and.arrow.up") }
@@ -113,10 +123,12 @@ struct InspectionOverviewView: View {
                         .accessibilityHint("Share as text summary or full PDF report")
                 }
             }
-            .sheet(isPresented: $showShareSheet) {
-                if !shareItems.isEmpty {
-                    ShareSheet(activityItems: shareItems)
-                }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+                    .environmentObject(subscriptions)
+            }
+            .sheet(item: $shareContent) { content in
+                ShareSheet(activityItems: content.items)
             }
             .alert("Text export failed", isPresented: $showTextExportError) {
                 Button("OK") { showTextExportError = false }
@@ -341,6 +353,11 @@ struct ShareSheet: UIViewControllerRepresentable {
 }
 
 /// Helper struct to export a plain text summary of an inspection for sharing.
+struct ShareContent: Identifiable {
+    let id = UUID()
+    let items: [Any]
+}
+
 enum ReportExporter {
     static func exportPlainText(for version: InspectionVersion) -> URL? {
         let inspection = version.inspection

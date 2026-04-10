@@ -3,3 +3,4 @@ _project_tmp/
 *.xcuserstate
 xcuserdata/
 *.xcworkspace/xcuserdata/
+_backups/

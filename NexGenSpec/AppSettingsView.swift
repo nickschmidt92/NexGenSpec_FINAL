@@ -12,6 +12,9 @@ struct AppSettingsView: View {
     @State private var purgeSummary = ""
     @State private var showPurgeResult = false
 
+    @EnvironmentObject private var subscriptions: SubscriptionManager
+    @State private var showPaywall = false
+
     // Delete Account flow
     @State private var showDeleteConfirm = false
     @State private var showDeletePasswordSheet = false
@@ -35,6 +38,12 @@ struct AppSettingsView: View {
                     ) {
                         SettingsValueRow(title: "User", value: authManager.currentUsername ?? "Unknown")
                         SettingsValueRow(title: "Role", value: roleLabel)
+                        SettingsValueRow(title: "Subscription", value: subscriptions.isPro ? "Pro" : "Free")
+
+                        Button(subscriptions.isPro ? "Manage Subscription" : "Upgrade to Pro") {
+                            showPaywall = true
+                        }
+                        .buttonStyle(AppPrimaryButtonStyle())
 
                         Button("Log Out", role: .destructive) {
                             authManager.logout()
@@ -212,6 +221,10 @@ struct AppSettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(deleteErrorMessage ?? "Could not delete account.")
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+                .environmentObject(subscriptions)
         }
     }
 

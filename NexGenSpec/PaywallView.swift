@@ -1,12 +1,21 @@
+//
+//  PaywallView.swift
+//  NexGenSpec
+//
+//  Real StoreKit 2 paywall. Loads products via SubscriptionManager, handles
+//  purchase + restore, dismisses on successful upgrade.
+//
+
 import SwiftUI
 import StoreKit
 
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var subscriptions: SubscriptionManager
 
-    @StateObject private var store = Store()
     @State private var purchaseInProgress = false
-    @State private var purchaseError: Error?
+    @State private var errorMessage: String?
+    @State private var showError = false
 
     var body: some View {
         NavigationView {
@@ -22,67 +31,76 @@ struct PaywallView: View {
                             .multilineTextAlignment(.center)
                             .accessibilityAddTraits(.isHeader)
 
-                        Text("Get the most out of the app by unlocking premium features. Enjoy unlimited inspections, advanced tools like LiDAR scanning, PDF export, voice input, and the annotation pack. Upgrade anytime to remove limits and support development.")
+                        Text("Unlock unlimited inspections, PDF export, voice input, LiDAR scanning, and the annotation pack. Cancel anytime in Settings.")
                             .font(.body)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
-                            .accessibilityLabel("Description of free vs pro tiers and premium features.")
 
                         premiumFeaturesList
 
-                        if !store.subscriptionProducts.isEmpty || !store.addOnProducts.isEmpty {
-                            subscriptionOptions
+                        if subscriptions.products.isEmpty {
+                            VStack(spacing: 8) {
+                                ProgressView("Loading purchase options…")
+                                if let err = subscriptions.lastError {
+                                    Text("Debug: \(err)")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal)
+                                }
+                                Button("Retry") {
+                                    Task { await subscriptions.refresh() }
+                                }
+                                .font(.caption)
+                            }
+                            .padding()
                         } else {
-                            ProgressView("Loading purchase options...")
-                                .padding()
+                            subscriptionOptions
                         }
 
                         legalText
 
                         Spacer(minLength: 20)
-
-                        buttons
-                            .padding(.horizontal)
-                            .padding(.bottom, 20)
                     }
                     .foregroundColor(.primary)
                     .padding(.horizontal)
+                    .padding(.bottom, 24)
                 }
             }
             .navigationTitle("Premium Upgrade")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Maybe Later") {
-                        dismiss()
-                    }
-                    .accessibilityLabel("Dismiss paywall")
-                    .font(.headline)
-                    .padding(8)
+                    Button("Maybe Later") { dismiss() }
+                        .accessibilityLabel("Dismiss paywall")
+                        .font(.headline)
+                        .padding(8)
                 }
             }
-            .alert(isPresented: Binding<Bool>(
-                get: { purchaseError != nil },
-                set: { newValue in if !newValue { purchaseError = nil } }
-            )) {
-                Alert(
-                    title: Text("Purchase Failed"),
-                    message: Text(purchaseError?.localizedDescription ?? "An unknown error occurred."),
-                    dismissButton: .default(Text("OK"))
-                )
+            .alert("Purchase Error", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Something went wrong.")
             }
         }
-        .onAppear {
-            store.fetchProducts()
+        .task {
+            if subscriptions.products.isEmpty {
+                await subscriptions.refresh()
+            }
+        }
+        .onChange(of: subscriptions.isPro) { _, newValue in
+            if newValue { dismiss() }
         }
     }
+
+    // MARK: - Sections
 
     private var premiumFeaturesList: some View {
         VStack(alignment: .leading, spacing: 16) {
             featureRow(title: "Unlimited Inspections", requiresUpgrade: true)
-            featureRow(title: "LiDAR Scanning", requiresUpgrade: true)
             featureRow(title: "PDF Export", requiresUpgrade: true)
             featureRow(title: "Voice Input", requiresUpgrade: true)
+            featureRow(title: "LiDAR Scanning", requiresUpgrade: true)
             featureRow(title: "Annotation Pack", requiresUpgrade: true)
             featureRow(title: "Basic Inspection Reports", requiresUpgrade: false)
         }
@@ -109,43 +127,30 @@ struct PaywallView: View {
 
     private var subscriptionOptions: some View {
         VStack(spacing: 12) {
-            if !store.subscriptionProducts.isEmpty {
-                Text("Subscription Options")
-                    .font(.headline)
-                    .padding(.top, 16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityAddTraits(.isHeader)
+            Text("Choose Your Plan")
+                .font(.headline)
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
 
-                ForEach(store.subscriptionProducts, id: \.id) { product in
-                    purchaseButton(for: product)
-                }
+            ForEach(subscriptions.products, id: \.id) { product in
+                purchaseButton(for: product)
             }
 
-            if !store.addOnProducts.isEmpty {
-                Text("Additional Purchases")
-                    .font(.headline)
-                    .padding(.top, 16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityAddTraits(.isHeader)
-
-                ForEach(store.addOnProducts, id: \.id) { product in
-                    purchaseButton(for: product)
-                }
-            }
-
-            Button(action: restorePurchases) {
+            Button(action: restore) {
                 Text("Restore Purchases")
             }
             .buttonStyle(AppSecondaryButtonStyle())
             .accessibilityHint("Restore previous purchases")
             .padding(.top, 20)
+            .disabled(purchaseInProgress || subscriptions.isBusy)
         }
     }
 
     private func purchaseButton(for product: Product) -> some View {
-        Button(action: {
-            purchase(product: product)
-        }) {
+        Button {
+            buy(product)
+        } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(product.displayName)
@@ -167,7 +172,7 @@ struct PaywallView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(product.displayName), \(product.displayPrice), tap to purchase")
         }
-        .disabled(purchaseInProgress)
+        .disabled(purchaseInProgress || subscriptions.isBusy)
         .contentShape(Rectangle())
     }
 
@@ -176,8 +181,8 @@ struct PaywallView: View {
             Text("""
             • Prices shown are in your local currency and include applicable taxes.
             • Subscriptions auto-renew monthly or yearly until cancelled.
-            • Cancel anytime through your App Store account settings.
-            • Manage and restore purchases easily.
+            • Cancel anytime in your App Store account settings.
+            • Payment is charged to your Apple ID at purchase confirmation.
             """)
                 .font(.footnote)
                 .foregroundColor(.secondary)
@@ -185,143 +190,42 @@ struct PaywallView: View {
                 .padding(.horizontal)
 
             HStack(spacing: 24) {
-                Link("Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
+                Link("Terms of Service", destination: URL(string: "https://www.nexgenspec.com/terms")!)
                     .font(.footnote)
                     .foregroundColor(.accentColor)
                     .underline()
-                    .accessibilityLabel("Terms of Service")
-
-                Link("Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
+                Link("Privacy Policy", destination: URL(string: "https://www.nexgenspec.com/privacy")!)
                     .font(.footnote)
                     .foregroundColor(.accentColor)
                     .underline()
-                    .accessibilityLabel("Privacy Policy")
             }
         }
         .padding(.top, 12)
     }
 
-    private var buttons: some View {
-        VStack(spacing: 12) {
-            Button(action: {
-                dismiss()
-            }) {
-                Text("Maybe Later")
-            }
-            .buttonStyle(AppSecondaryButtonStyle())
-            .accessibilityHint("Dismiss paywall without upgrading")
+    // MARK: - Actions
 
-            Button(action: upgradeToPro) {
-                Text("Upgrade to Pro")
-            }
-            .buttonStyle(AppPrimaryButtonStyle())
-            .accessibilityHint("Start purchase process to upgrade to Pro")
-            .disabled(purchaseInProgress)
-        }
-    }
-
-    private func upgradeToPro() {
-        guard let bestSub = store.subscriptionProducts.first else { return }
-        purchase(product: bestSub)
-    }
-
-    private func purchase(product: Product) {
+    private func buy(_ product: Product) {
         purchaseInProgress = true
         Task {
-            do {
-                let didPurchase = try await store.purchase(product)
-                if didPurchase {
-                    dismiss()
-                }
-            } catch {
-                purchaseError = error
-            }
+            let ok = await subscriptions.purchase(product)
             purchaseInProgress = false
+            if !ok, let msg = subscriptions.lastError {
+                errorMessage = msg
+                showError = true
+            }
+            // On success, onChange(isPro) dismisses.
         }
     }
 
-    private func restorePurchases() {
+    private func restore() {
         purchaseInProgress = true
         Task {
-            do {
-                try await store.restorePurchases()
-                dismiss()
-            } catch {
-                purchaseError = error
-            }
+            await subscriptions.restore()
             purchaseInProgress = false
-        }
-    }
-}
-
-// MARK: - StoreKit 2 support and product management
-
-@MainActor
-final class Store: ObservableObject {
-    @Published var subscriptionProducts: [Product] = []
-    @Published var addOnProducts: [Product] = []
-
-    func fetchProducts() {
-        Task {
-            // Using NexGenSpec.storekit namespace for testing as requested
-            do {
-                let products = try await Product.products(for: [
-                    "com.example.app.pro_monthly",
-                    "com.example.app.pro_yearly",
-                    "com.example.app.lidar_addon",
-                    "com.example.app.voice_addon",
-                    "com.example.app.annotation_pack"
-                ])
-
-                // Filter by type for UI grouping
-                subscriptionProducts = products.filter { $0.type == .autoRenewable }
-                addOnProducts = products.filter { $0.type == .nonConsumable || $0.type == .consumable }
-            } catch {
-                // Fail silently, empty lists
-                subscriptionProducts = []
-                addOnProducts = []
-            }
-        }
-    }
-
-    func purchase(_ product: Product) async throws -> Bool {
-        let result = try await product.purchase()
-
-        switch result {
-        case .success(let verification):
-            let transaction = try checkVerified(verification)
-            await transaction.finish()
-            return true
-        case .userCancelled, .pending:
-            return false
-        @unknown default:
-            return false
-        }
-    }
-
-    func restorePurchases() async throws {
-        for await verification in Transaction.currentEntitlements {
-            // Finish any pending transactions if needed
-            let transaction = try checkVerified(verification)
-            await transaction.finish()
-        }
-    }
-
-    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
-        switch result {
-        case .unverified:
-            throw StoreError.failedVerification
-        case .verified(let safe):
-            return safe
-        }
-    }
-
-    enum StoreError: LocalizedError {
-        case failedVerification
-        var errorDescription: String? {
-            switch self {
-            case .failedVerification:
-                return "Transaction failed verification."
+            if !subscriptions.isPro {
+                errorMessage = subscriptions.lastError ?? "No active subscriptions to restore."
+                showError = true
             }
         }
     }

@@ -11,6 +11,7 @@ import MessageUI
 struct InvoiceAndSendView: View {
     let version: InspectionVersion
     @StateObject private var exportService = ReportExportService()
+    @EnvironmentObject private var subscriptions: SubscriptionManager
 
     @State private var invoicePrice = ""
     @State private var additionalServices = ""
@@ -19,6 +20,7 @@ struct InvoiceAndSendView: View {
     @State private var exportedPDFURL: URL?
     @State private var mailUnavailableAlert = false
     @State private var showExportError = false
+    @State private var showPaywall = false
 
     private let nexGenSpecEmail = "contact@nexgenspec.com"
 
@@ -89,6 +91,10 @@ struct InvoiceAndSendView: View {
                     .padding()
             }
         }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+                .environmentObject(subscriptions)
+        }
         .alert("Export failed", isPresented: $showExportError) {
             Button("OK") { showExportError = false; exportService.reset() }
         } message: {
@@ -136,6 +142,10 @@ struct InvoiceAndSendView: View {
     }
 
     private func runExport() {
+        guard subscriptions.isPro else {
+            showPaywall = true
+            return
+        }
         exportedPDFURL = nil
         exportService.reset()
         Task {
@@ -150,13 +160,17 @@ struct InvoiceAndSendView: View {
         }
         if exportedPDFURL != nil {
             showMailCompose = true
-        } else {
-            Task { @MainActor in
-                await exportService.export(version: version)
-                if case .success(_, let pdf?) = exportService.result {
-                    exportedPDFURL = pdf
-                    showMailCompose = true
-                }
+            return
+        }
+        guard subscriptions.isPro else {
+            showPaywall = true
+            return
+        }
+        Task { @MainActor in
+            await exportService.export(version: version)
+            if case .success(_, let pdf?) = exportService.result {
+                exportedPDFURL = pdf
+                showMailCompose = true
             }
         }
     }
