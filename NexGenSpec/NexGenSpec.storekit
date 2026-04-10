@@ -1,23 +1,133 @@
 {
-  "version": "1.0",
-  "products": [
+  "identifier" : "9A3B7C1E-4D2F-48A6-B5E0-1F6C8D9E2A3B",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "com.nexgenspec.app",
+    "_developerTeamID" : "",
+    "_lastSynchronizedDate" : 0
+  },
+  "subscriptionGroups" : [
     {
-      "id": "pro_monthly",
-      "type": "auto-renewable subscription",
-      "subscriptionGroupIdentifier": "pro_group",
-      "displayName": "NexGenSpec Pro (Monthly)",
-      "subscriptionDuration": "P1M"
-    },
-    {
-      "id": "annotation_pack",
-      "type": "non-consumable",
-      "displayName": "Photo Annotation Pack"
+      "id" : "nexgenspec_pro",
+      "localizations" : [
+        {
+          "description" : "NexGenSpec Pro subscription plans",
+          "displayName" : "NexGenSpec Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "NexGenSpec Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "789.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "annualpro1",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Full-featured Pro with unlimited exports, LiDAR, voice commands, and priority support",
+              "displayName" : "Pro Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.nexgenspec.annualpro1",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Pro Annual",
+          "subscriptionGroupID" : "nexgenspec_pro",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "78.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "monthlypro1",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Full-featured Pro with unlimited exports, LiDAR, voice commands, and priority support",
+              "displayName" : "Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.nexgenspec.monthlypro1",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "nexgenspec_pro",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "289.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "annual",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "PDF exports, inspection templates, and cloud backup",
+              "displayName" : "Standard Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.nexgenspec.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Standard Annual",
+          "subscriptionGroupID" : "nexgenspec_pro",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "28.99",
+          "familyShareable" : false,
+          "groupNumber" : 4,
+          "internalID" : "monthly1",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "PDF exports, inspection templates, and cloud backup",
+              "displayName" : "Standard Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.nexgenspec.monthly1",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Standard Monthly",
+          "subscriptionGroupID" : "nexgenspec_pro",
+          "type" : "RecurringSubscription"
+        }
+      ]
     }
   ],
-  "subscriptionGroups": [
-    {
-      "id": "pro_group",
-      "name": "Pro"
-    }
-  ]
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
 }

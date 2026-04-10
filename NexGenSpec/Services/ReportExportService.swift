@@ -136,7 +136,8 @@ public final class ReportExportService: ObservableObject {
         let tmp = FileManager.default.temporaryDirectory
         guard let files = try? FileManager.default.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.contentModificationDateKey], options: .skipsHiddenFiles) else { return }
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
-        for url in files where url.lastPathComponent.hasPrefix("report-") {
+        let prefixes = ["report-", "pdf-", "InspectionReport-"]
+        for url in files where prefixes.contains(where: { url.lastPathComponent.hasPrefix($0) }) {
             let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             let modified = vals?.contentModificationDate ?? .distantPast
             if modified < cutoff {

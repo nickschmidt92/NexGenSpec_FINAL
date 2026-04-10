@@ -173,8 +173,8 @@ public struct TermsAndConditionsView: View {
                             highlightedText("SECTION 3 — INSPECTIQ PHOTO LEGAL MODEL (SYSTEM OF RECORD)", id: "section3", font: .title3.bold(), isHeader: true)
                             highlightedText("DESIGN & LIFECYCLE", font: .headline, isHeader: true)
                             Group {
-                                highlightedText("• Capture: Photos and media are captured or imported directly into InspectIQ, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.", font: .body)
-                                highlightedText("• Storage: All originals are saved in a secure, immutable archive inside InspectIQ, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).", font: .body)
+                                highlightedText("• Capture: Photos and media are captured or imported directly into NexGenSpec, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.", font: .body)
+                                highlightedText("• Storage: All originals are saved in a secure, immutable archive inside NexGenSpec, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).", font: .body)
                                 highlightedText("• Annotation: Markups or annotations create new, linked versions (never overwrite the original).", font: .body.italic())
                                 highlightedText("    - Originals = Untouched evidence\n    - Annotated = Marked-up “copies” for reports", font: .body)
                                 highlightedText("• Organization: Every photo is organized:\n    - By Inspection\n    - By Area/System\n    - By Type (original, annotated, exported)", font: .body)
@@ -391,8 +391,8 @@ public struct TermsAndConditionsView: View {
 
         SECTION 3 — INSPECTIQ PHOTO LEGAL MODEL (SYSTEM OF RECORD)
         DESIGN & LIFECYCLE
-        • Capture: Photos and media are captured or imported directly into InspectIQ, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.
-        • Storage: All originals are saved in a secure, immutable archive inside InspectIQ, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).
+        • Capture: Photos and media are captured or imported directly into NexGenSpec, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.
+        • Storage: All originals are saved in a secure, immutable archive inside NexGenSpec, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).
         • Annotation: Markups or annotations create new, linked versions (never overwrite the original).
             - Originals = Untouched evidence
             - Annotated = Marked-up “copies” for reports
@@ -554,8 +554,8 @@ public struct TermsAndConditionsView: View {
             """
             SECTION 3 — INSPECTIQ PHOTO LEGAL MODEL (SYSTEM OF RECORD)
             DESIGN & LIFECYCLE
-            • Capture: Photos and media are captured or imported directly into InspectIQ, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.
-            • Storage: All originals are saved in a secure, immutable archive inside InspectIQ, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).
+            • Capture: Photos and media are captured or imported directly into NexGenSpec, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.
+            • Storage: All originals are saved in a secure, immutable archive inside NexGenSpec, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).
             • Annotation: Markups or annotations create new, linked versions (never overwrite the original).
                 - Originals = Untouched evidence
                 - Annotated = Marked-up “copies” for reports

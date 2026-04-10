@@ -25,7 +25,7 @@ enum AnnotationBakeService {
         let scaleX = cw > 0 ? image.size.width / cw : 1
         let scaleY = ch > 0 ? image.size.height / ch : 1
         let format = UIGraphicsImageRendererFormat()
-        format.scale = image.scale
+        format.scale = 1  // Use 1x scale for report images to prevent OOM on high-res photos
         let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
         return renderer.image { context in
             image.draw(at: .zero)

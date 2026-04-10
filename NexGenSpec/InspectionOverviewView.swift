@@ -379,18 +379,23 @@ enum ReportExporter {
         let counts = inspection.summaryCounts()
         report += "Safety: \(counts.safety), Major: \(counts.major), Marginal: \(counts.marginal), Minor: \(counts.minor)\n\n"
         for section in inspection.sections {
+            let reportItems = section.items.filter { $0.isDefect && $0.includeInReport }
+            guard !reportItems.isEmpty else { continue }
             report += "Section: \(section.title)\n"
-            for item in section.items where item.isDefect {
+            for item in reportItems {
                 guard let sev = item.defectSeverity else { continue }
                 report += " - \(item.title) [\(sev.rawValue)]\n"
+                if !item.location.isEmpty { report += "   Location: \(item.location)\n" }
                 report += "   Observed: \(item.observed)\n"
                 report += "   Implication: \(item.implication)\n"
                 report += "   Recommendation: \(item.recommendation)\n"
+                if !item.inspectorComments.isEmpty { report += "   Inspector Comments: \(item.inspectorComments)\n" }
+                if !item.contractorTag.isEmpty { report += "   Contractor: \(item.contractorTag)\n" }
             }
             report += "\n"
         }
         do {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("InspectionReport.txt")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("InspectionReport-\(UUID().uuidString).txt")
             if let data = report.data(using: .utf8) {
                 try FileSecurity.writeProtected(data, to: url)
             }

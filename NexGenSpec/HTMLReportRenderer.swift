@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import UIKit
+import ImageIO
 
 /// Generates HTML for inspection report. For 300+ photos, call from background queue.
 /// If imageFolderURL is set, images are written there and HTML references them (reduces memory for large reports).
@@ -79,8 +81,9 @@ enum HTMLReportRenderer {
         .item-card .photo { display: block; max-width: 100%; height: auto; border-radius: 8px; margin-top: 8px; page-break-inside: avoid; break-inside: avoid; }
         .signatures { margin-top: 24px; }
         .signatures img { max-width: 200px; height: auto; border: 1px solid #dee2e6; border-radius: 8px; }
-        .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #dee2e6; font-size: 0.8rem; color: #666; }
-        .footer .hash { font-family: ui-monospace, monospace; word-break: break-all; }
+        .footer { margin-top: 32px; padding: 16px 20px; border-top: 2px solid #dee2e6; font-size: 0.8rem; color: #666; background: #f8f9fa; border-radius: 0 0 var(--radius) var(--radius); }
+        .footer .hash-label { font-weight: 600; color: #444; margin-bottom: 4px; }
+        .footer .hash { font-family: ui-monospace, monospace; word-break: break-all; font-size: 0.7rem; color: #888; background: #eef1f5; padding: 6px 10px; border-radius: 6px; display: block; margin-top: 4px; letter-spacing: 0.5px; }
         @media print {
           html, body { background: #fff !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .card { background: #fff !important; box-shadow: none !important; break-inside: avoid-page; page-break-inside: avoid; }
@@ -123,8 +126,8 @@ enum HTMLReportRenderer {
             html += "<div class=\"card\"><h2 class=\"section-title\">Videos (drone / footage)</h2>"
             for video in inspection.videos {
                 let label = escapeHTML(video.caption.isEmpty ? video.fileName : video.caption)
-                if videosFolderURL != nil {
-                    let fileURL = videosFolderURL!.appendingPathComponent(video.fileName)
+                if let videosFolderURL {
+                    let fileURL = videosFolderURL.appendingPathComponent(video.fileName)
                     let videoPath = absoluteAssetFileURLs ? fileURL.absoluteString : "videos/\(escapeHTML(video.fileName))"
                     html += "<p><a href=\"\(videoPath)\" target=\"_blank\">\(label)</a> \(escapeHTML(video.source ?? ""))</p>"
                 } else {
@@ -135,10 +138,10 @@ enum HTMLReportRenderer {
         }
 
         for section in inspection.sections {
-            let defectItems = section.items.filter(\.isDefect)
-            guard !defectItems.isEmpty else { continue }
+            let reportItems = section.items.filter { $0.isDefect && $0.includeInReport }
+            guard !reportItems.isEmpty else { continue }
             html += "<h2 class=\"section-title\">\(escapeHTML(section.title))</h2>"
-            for item in defectItems {
+            for item in reportItems {
                 guard let severity = item.defectSeverity else { continue }
                 var imagesHTML = ""
                 for photo in item.photos {
@@ -154,13 +157,23 @@ enum HTMLReportRenderer {
                         }
                     }
                 }
+                var extraFields = ""
+                if !item.location.isEmpty {
+                    extraFields += "<p><strong>Location:</strong> \(escapeHTML(item.location))</p>\n"
+                }
+                if !item.inspectorComments.isEmpty {
+                    extraFields += "<p><strong>Inspector Comments:</strong> \(escapeHTML(item.inspectorComments))</p>\n"
+                }
+                if !item.contractorTag.isEmpty {
+                    extraFields += "<p><strong>Contractor:</strong> \(escapeHTML(item.contractorTag))</p>\n"
+                }
                 html += """
                 <div class="card item-card \(severity.rawValue.lowercased())">
                 <h3>\(escapeHTML(item.title)) <span class="badge \(severity.rawValue.lowercased())">\(severity.rawValue)</span></h3>
                 <p><strong>Observed:</strong> \(escapeHTML(item.observed))</p>
                 <p><strong>Implication:</strong> \(escapeHTML(item.implication))</p>
                 <p><strong>Recommendation:</strong> \(escapeHTML(item.recommendation))</p>
-                \(imagesHTML)
+                \(extraFields)\(imagesHTML)
                 </div>
                 """
             }
@@ -179,7 +192,8 @@ enum HTMLReportRenderer {
 
         html += "<div class=\"footer\">"
         if let hash = reportHash {
-            html += "Report hash (SHA-256): <span class=\"hash\">\(hash)</span>"
+            html += "<div class=\"hash-label\">Report Verification</div>"
+            html += "<span class=\"hash\">SHA-256: \(hash)</span>"
         } else if isDraft {
             html += "This is a draft. Finalized reports include a verification hash."
         }
@@ -190,9 +204,24 @@ enum HTMLReportRenderer {
 
 private let htmlDateFormatter = DateFormatters.mediumDateTime
 
+/// Loads photo data downsampled to a max dimension of 2048px to prevent OOM on 48MP+ images.
 private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
     let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
-    return try? Data(contentsOf: url)
+    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+        return try? Data(contentsOf: url)
+    }
+    let maxPixelSize: CGFloat = 2048
+    let options: [CFString: Any] = [
+        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true
+    ]
+    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+        return try? Data(contentsOf: url)
+    }
+    let uiImage = UIImage(cgImage: cgImage)
+    return uiImage.pngData()
 }
 
 private func escapeHTML(_ input: String) -> String {
