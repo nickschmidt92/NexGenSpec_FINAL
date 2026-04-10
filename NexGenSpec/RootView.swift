@@ -35,15 +35,26 @@ enum TermsAcceptanceStore {
     }
 }
 
-/// Entry point: Login, then Terms (if not yet accepted), then Dashboard with inspection list.
+/// Entry point: Onboarding (first launch) → Login → Terms (if not yet accepted) → Dashboard.
 struct RootView: View {
     @EnvironmentObject private var store: InspectionStore
     @EnvironmentObject private var authManager: AuthManager
     @State private var termsAccepted = false
+    @AppStorage("nexgenspec.onboarding.completed") private var onboardingCompleted = false
 
     var body: some View {
         Group {
-            if !authManager.isAuthenticated {
+            if !onboardingCompleted {
+                OnboardingView {
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        onboardingCompleted = true
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .opacity,
+                    removal: .opacity.combined(with: .move(edge: .leading))
+                ))
+            } else if !authManager.isAuthenticated {
                 LoginView(authManager: authManager)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .move(edge: .leading)),
@@ -63,6 +74,7 @@ struct RootView: View {
                     ))
             }
         }
+        .animation(.easeInOut(duration: 0.35), value: onboardingCompleted)
         .animation(.easeInOut(duration: 0.35), value: authManager.isAuthenticated)
         .animation(.easeInOut(duration: 0.35), value: termsAccepted)
         .onAppear(perform: refreshTermsAcceptance)
