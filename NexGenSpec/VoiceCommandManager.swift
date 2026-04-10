@@ -26,13 +26,28 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     /// Cheat sheet of supported commands.
     let supportedCommands = """
     Supported voice commands:
-    - "Add note ..." (e.g., "Add note buy milk")
-    - "Next room"
+    - "Add note ..." (e.g., "Add note cracked foundation")
+    - "Next room" / "Next section"
+    - "Previous room" / "Previous section"
     - "Capture photo"
     - "Defect: ..." (e.g., "Defect: broken window")
-    - "Start recording"
-    - "Stop recording"
+    - "Go to summary"
+    - "Go to finalize"
     """
+
+    /// Recognized command actions the host view should handle.
+    enum CommandAction {
+        case addNote(String)
+        case nextSection
+        case previousSection
+        case capturePhoto
+        case defect(String)
+        case goToSummary
+        case goToFinalize
+    }
+
+    /// Callback for recognized commands. Set by the hosting view.
+    var onCommand: ((CommandAction) -> Void)?
     
     // MARK: - Private Properties
     
@@ -213,12 +228,9 @@ final class VoiceCommandManager: NSObject, ObservableObject {
         UIAccessibility.post(notification: .announcement, argument: "Voice command listening started")
     }
 
-    deinit {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-        audioEngine.inputNode.removeTap(onBus: 0)
-    }
+    // Note: cleanup happens in stopListening(). deinit is not safe for
+    // @MainActor classes since it may run off-main. The audioEngine is
+    // stopped via stopListening() before the manager is released.
     
     // MARK: - Command Parsing
     
@@ -240,41 +252,66 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     /// - Returns: A tuple with the recognized command string (or nil) and a human-readable result string.
     @discardableResult
     func parseCommand(transcript: String) -> (command: String?, result: String) {
-        let lowerTranscript = transcript.lowercased()
+        let lower = transcript.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         var command: String?
         var result: String?
-        
-        if lowerTranscript.hasPrefix("add note") {
+        var action: CommandAction?
+
+        if lower.hasPrefix("add note") {
             command = "Add note"
-            let noteContent = transcript.dropFirst("add note".count).trimmingCharacters(in: .whitespacesAndNewlines)
-            result = noteContent.isEmpty ? "Add note command recognized but note content is empty" : "Note added: \(noteContent)"
-        } else if lowerTranscript == "next room" {
-            command = "Next room"
-            result = "Navigating to next room"
-        } else if lowerTranscript == "capture photo" {
+            let content = transcript.dropFirst("add note".count).trimmingCharacters(in: .whitespacesAndNewlines)
+            if content.isEmpty {
+                result = "Add note: no content provided"
+            } else {
+                result = "Note added: \(content)"
+                action = .addNote(content)
+            }
+        } else if lower == "next room" || lower == "next section" {
+            command = "Next section"
+            result = "Navigating to next section"
+            action = .nextSection
+        } else if lower == "previous room" || lower == "previous section" {
+            command = "Previous section"
+            result = "Navigating to previous section"
+            action = .previousSection
+        } else if lower == "capture photo" || lower == "take photo" {
             command = "Capture photo"
-            result = "Photo capture command recognized"
-        } else if lowerTranscript.hasPrefix("defect:") {
+            result = "Photo capture triggered"
+            action = .capturePhoto
+        } else if lower.hasPrefix("defect") {
             command = "Defect"
-            let defectDescription = transcript.dropFirst("defect:".count).trimmingCharacters(in: .whitespacesAndNewlines)
-            result = defectDescription.isEmpty ? "Defect command recognized but description is empty" : "Defect noted: \(defectDescription)"
-        } else if lowerTranscript == "start recording" {
-            command = "Start recording"
-            result = "Start recording command recognized"
-        } else if lowerTranscript == "stop recording" {
-            command = "Stop recording"
-            result = "Stop recording command recognized"
+            let stripped = lower.hasPrefix("defect:") ? String(transcript.dropFirst("defect:".count)) : String(transcript.dropFirst("defect".count))
+            let desc = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+            if desc.isEmpty {
+                result = "Defect: no description provided"
+            } else {
+                result = "Defect noted: \(desc)"
+                action = .defect(desc)
+            }
+        } else if lower == "go to summary" || lower == "summary" {
+            command = "Go to summary"
+            result = "Navigating to summary"
+            action = .goToSummary
+        } else if lower == "go to finalize" || lower == "finalize" {
+            command = "Go to finalize"
+            result = "Navigating to finalize"
+            action = .goToFinalize
         } else {
             command = nil
             result = "Unrecognized command"
         }
-        
+
         if let cmd = command {
             UIAccessibility.post(notification: .announcement, argument: "\(cmd) command received")
         } else {
             UIAccessibility.post(notification: .announcement, argument: "Unrecognized voice command")
         }
-        
+
+        // Dispatch the action to the host view
+        if let action {
+            onCommand?(action)
+        }
+
         return (command, result ?? "")
     }
     

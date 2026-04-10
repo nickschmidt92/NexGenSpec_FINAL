@@ -44,6 +44,20 @@ enum HTMLReportRenderer {
         if !inspection.clientEmail.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Email:</strong> \(escapeHTML(inspection.clientEmail))</p>\n" }
         if !inspection.clientPhone.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Phone:</strong> \(escapeHTML(inspection.clientPhone))</p>\n" }
 
+        // Embed app icon as base64 for report header branding
+        let logoBase64: String = {
+            if let asset = UIImage(named: "AppIcon"),
+               let data = asset.pngData() {
+                return data.base64EncodedString()
+            }
+            // Fallback: load from bundle icon files
+            if let url = Bundle.main.url(forResource: "AppIcon60x60@2x", withExtension: "png"),
+               let data = try? Data(contentsOf: url) {
+                return data.base64EncodedString()
+            }
+            return ""
+        }()
+
         var html = """
         <!DOCTYPE html>
         <html lang="en">
@@ -63,7 +77,7 @@ enum HTMLReportRenderer {
         .free-banner { background: linear-gradient(135deg, #0066cc, #00aaff); color: #fff; text-align: center; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.9rem; font-weight: 600; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
         .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; }
-        .header-card { margin-bottom: 24px; }
+        .header-card { margin-bottom: 24px; border-top: 4px solid #0066cc; }
         h1 { margin: 0 0 8px; font-size: 1.75rem; }
         .meta { color: #666; font-size: 0.95rem; }
         .summary { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
@@ -101,6 +115,7 @@ enum HTMLReportRenderer {
         <div class="container">
         \(watermark ? "<div class=\"free-banner\">Generated with NexGenSpec Free — Upgrade to Pro for clean, branded reports</div>" : "")
         <div class="card header-card">
+        \(!logoBase64.isEmpty ? "<div style=\"display:flex;align-items:center;gap:12px;margin-bottom:12px;\"><img src=\"data:image/png;base64,\(logoBase64)\" style=\"width:48px;height:48px;border-radius:10px;\" alt=\"NexGenSpec\"/><span style=\"font-size:1.1rem;font-weight:700;color:#0066cc;\">NexGenSpec</span></div>" : "")
         <h1>Inspection Report</h1>
         <p class="meta"><strong>Client:</strong> \(escapeHTML(inspection.clientName))</p>
         \(emailPhoneMeta)

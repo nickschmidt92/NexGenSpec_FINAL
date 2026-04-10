@@ -28,16 +28,21 @@ struct InspectionView: View {
     @State private var draft: InspectionVersion = .empty
     @State private var selectedPane: InspectionPane = .overview
     @State private var showShortcutsHelp = false
+    @StateObject private var voiceManager = VoiceCommandManager()
 
     private var jobId: UUID {
         UUID(uuidString: draft.inspection.inspectionId) ?? version.id
     }
 
     var body: some View {
+        ZStack {
         NavigationSplitView {
             sectionSidebar
         } detail: {
             paneDetailContent
+        }
+
+        VoiceCommandOverlay(voiceManager: voiceManager)
         }
         .navigationTitle(draft.inspection.clientName.isEmpty ? "Inspection \(draft.versionNumber)" : draft.inspection.clientName)
         .toolbar {
@@ -77,8 +82,50 @@ struct InspectionView: View {
         .onAppear {
             draft = version
             if draft.inspection.sections.isEmpty { selectedPane = .overview }
+            voiceManager.onCommand = { action in
+                handleVoiceCommand(action)
+            }
         }
         .onDisappear { updated(draft) }
+    }
+
+    private func handleVoiceCommand(_ action: VoiceCommandManager.CommandAction) {
+        switch action {
+        case .nextSection:
+            selectNextSection()
+        case .previousSection:
+            selectPreviousSection()
+        case .goToSummary:
+            selectedPane = .summary
+        case .goToFinalize:
+            selectedPane = .finalize
+        case .addNote(let text):
+            // Add note to the current item's inspector comments if viewing a section
+            if case .section(let sectionID) = selectedPane,
+               let sIdx = draft.inspection.sections.firstIndex(where: { $0.id == sectionID }),
+               !draft.inspection.sections[sIdx].items.isEmpty {
+                let iIdx = draft.inspection.sections[sIdx].items.count - 1
+                let existing = draft.inspection.sections[sIdx].items[iIdx].inspectorComments
+                draft.inspection.sections[sIdx].items[iIdx].inspectorComments = existing.isEmpty ? text : "\(existing)\n\(text)"
+            }
+        case .defect(let description):
+            // Add a new defect item to the current section
+            if case .section(let sectionID) = selectedPane,
+               let sIdx = draft.inspection.sections.firstIndex(where: { $0.id == sectionID }) {
+                let newItem = InspectionItem(
+                    templateItemId: "voice-\(UUID().uuidString)",
+                    title: description,
+                    includeInReport: true,
+                    status: .inspected,
+                    defectSeverity: .minor
+                )
+                draft.inspection.sections[sIdx].items.append(newItem)
+            }
+        case .capturePhoto:
+            // Navigate to camera — for now, ensure we're in a section view
+            // The actual camera trigger happens from ItemDetailView
+            break
+        }
     }
 
     private func selectNextSection() {
