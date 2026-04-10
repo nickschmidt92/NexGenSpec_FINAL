@@ -41,13 +41,15 @@ enum AppColor {
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
     static let elevatedSurface = Color(uiColor: .systemBackground)
-    static let border = Color.primary.opacity(0.08)
+    static let border = Color.primary.opacity(0.12)
     static let cardBackground = elevatedSurface
     static let cardShadow = Color.black.opacity(0.08)
 
     static let accent = brandBlue
-    static let accentDeep = brandNavy
-    static let accentSoft = Color(red: 0.84, green: 0.93, blue: 1.00)
+    /// Deep accent for text/icons — adapts to light/dark automatically.
+    static let accentDeep = accent
+    /// Soft accent for tinted backgrounds — adapts via system tint.
+    static let accentSoft = accent.opacity(0.15)
     static let highlight = Color(red: 0.95, green: 0.73, blue: 0.29)
     static let success = Color(red: 0.19, green: 0.53, blue: 0.35)
     static let warning = Color(red: 0.86, green: 0.57, blue: 0.18)
@@ -89,7 +91,7 @@ enum AppColor {
 
     static var softPanelGradient: LinearGradient {
         LinearGradient(
-            colors: [accentSoft.opacity(0.38), elevatedSurface],
+            colors: [accent.opacity(0.08), elevatedSurface],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -124,17 +126,7 @@ struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(Spacing.md)
-            .background(
-                ZStack {
-                    AppColor.softPanelGradient
-
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.28), .clear],
-                        startPoint: .topLeading,
-                        endPoint: .center
-                    )
-                }
-            )
+            .background(AppColor.elevatedSurface)
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(AppColor.border, lineWidth: 1)
@@ -172,18 +164,15 @@ struct AppSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(AppFont.headline)
-            .foregroundStyle(AppColor.accentDeep)
+            .foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: TouchTarget.minHeight)
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColor.elevatedSurface.opacity(0.92))
+                    .fill(AppColor.heroGradient)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(AppColor.accent.opacity(0.18), lineWidth: 1)
-            )
+            .shadow(color: AppColor.accent.opacity(configuration.isPressed ? 0.12 : 0.24), radius: 12, x: 0, y: 8)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
     }
@@ -201,10 +190,10 @@ struct AppScreenBackground<Content: View>: View {
             AppColor.background
                 .ignoresSafeArea()
 
+            // Subtle blue tint top-left — adapts to both modes
             LinearGradient(
                 colors: [
-                    AppColor.brandNavy.opacity(0.08),
-                    AppColor.background,
+                    AppColor.accent.opacity(0.06),
                     AppColor.background
                 ],
                 startPoint: .topLeading,
@@ -212,43 +201,20 @@ struct AppScreenBackground<Content: View>: View {
             )
             .ignoresSafeArea()
 
-            LinearGradient(
-                colors: [
-                    AppColor.accentSoft.opacity(0.30),
-                    AppColor.background,
-                    AppColor.background
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
+            // Soft accent circle (top-right)
             Circle()
-                .fill(AppColor.accent.opacity(0.10))
+                .fill(AppColor.accent.opacity(0.06))
                 .frame(width: 260, height: 260)
                 .blur(radius: 30)
                 .offset(x: 160, y: -290)
                 .ignoresSafeArea()
 
-            Circle()
-                .fill(AppColor.highlight.opacity(0.10))
-                .frame(width: 220, height: 220)
-                .blur(radius: 14)
-                .offset(x: -150, y: 320)
-                .ignoresSafeArea()
-
+            // Decorative hexagon outline
             HexagonShape()
-                .stroke(AppColor.accent.opacity(0.08), lineWidth: 1)
+                .stroke(AppColor.accent.opacity(0.06), lineWidth: 1)
                 .frame(width: 320, height: 320)
                 .rotationEffect(.degrees(8))
                 .offset(x: 170, y: -250)
-                .ignoresSafeArea()
-
-            HexagonShape()
-                .fill(AppColor.heroGradient.opacity(0.14))
-                .frame(width: 220, height: 220)
-                .blur(radius: 50)
-                .offset(x: 120, y: -220)
                 .ignoresSafeArea()
 
             content
@@ -262,29 +228,29 @@ struct BrandMark: View {
     var body: some View {
         ZStack {
             HexagonShape()
-                .fill(AppColor.brandPanelGradient)
+                .fill(Color.white.opacity(0.15))
                 .frame(width: size, height: size)
                 .overlay(
                     HexagonShape()
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        .stroke(Color.white.opacity(0.30), lineWidth: 1)
                 )
 
             HexagonShape()
-                .stroke(AppColor.heroGradient, lineWidth: size * 0.08)
+                .stroke(Color.white.opacity(0.60), lineWidth: size * 0.08)
                 .frame(width: size * 0.94, height: size * 0.94)
 
             HexagonShape()
                 .inset(by: size * 0.17)
-                .stroke(AppColor.heroGradient, lineWidth: size * 0.08)
+                .stroke(Color.white.opacity(0.60), lineWidth: size * 0.08)
                 .frame(width: size * 0.94, height: size * 0.94)
 
             Text("S")
                 .font(.system(size: size * 0.70, weight: .black, design: .rounded))
-                .foregroundStyle(AppColor.heroGradient)
-                .shadow(color: AppColor.brandBlue.opacity(0.18), radius: 8, x: 0, y: 5)
+                .foregroundStyle(.white)
+                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 5)
         }
         .frame(width: size, height: size)
-        .shadow(color: AppColor.brandBlue.opacity(0.22), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 6)
     }
 }
 
@@ -317,7 +283,7 @@ struct BrandLockup: View {
                         if let subtitle {
                             Text(subtitle)
                                 .font(AppFont.subheadline)
-                                .foregroundStyle(Color.white.opacity(0.74))
+                                .foregroundStyle(Color.white.opacity(0.80))
                         }
                     }
                 }
@@ -326,19 +292,25 @@ struct BrandLockup: View {
             if let subtitle, UIImage(named: "NexGenSpecLogo") != nil {
                 Text(subtitle)
                     .font(AppFont.subheadline)
-                    .foregroundStyle(Color.white.opacity(0.74))
+                    .foregroundStyle(Color.white.opacity(0.80))
                     .multilineTextAlignment(alignment == .center ? .center : .leading)
             }
         }
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.md)
-        .background(AppColor.brandPanelGradient)
+        .background(
+            LinearGradient(
+                colors: [AppColor.brandBlue, AppColor.brandBlue.opacity(0.85)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(Color.white.opacity(0.15), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .shadow(color: AppColor.brandNavy.opacity(0.18), radius: 18, x: 0, y: 10)
+        .shadow(color: AppColor.brandBlue.opacity(0.25), radius: 18, x: 0, y: 10)
     }
 
     private var logoMaxWidth: CGFloat {

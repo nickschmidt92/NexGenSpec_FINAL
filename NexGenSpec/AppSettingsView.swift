@@ -418,7 +418,7 @@ private struct SettingsValueRow: View {
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
-        .background(AppColor.elevatedSurface.opacity(0.88))
+        .background(AppColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
@@ -432,12 +432,12 @@ private struct SettingsNavigationRow: View {
         HStack(spacing: Spacing.md) {
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColor.accentSoft.opacity(0.54))
+                    .fill(AppColor.accent.opacity(0.12))
                     .frame(width: 42, height: 42)
 
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppColor.accentDeep)
+                    .foregroundStyle(AppColor.accent)
             }
 
             VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -458,7 +458,7 @@ private struct SettingsNavigationRow: View {
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
-        .background(AppColor.elevatedSurface.opacity(0.88))
+        .background(AppColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
@@ -485,7 +485,7 @@ private struct SettingsSecureFieldRow: View {
             }
             .padding(.horizontal, Spacing.md)
             .frame(minHeight: 54)
-            .background(AppColor.elevatedSurface.opacity(0.88))
+            .background(AppColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
@@ -500,8 +500,8 @@ private struct SettingsBadge: View {
             .font(AppFont.caption)
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xs)
-            .background(AppColor.elevatedSurface.opacity(0.92))
-            .foregroundStyle(AppColor.accentDeep)
+            .background(AppColor.accent.opacity(0.12))
+            .foregroundStyle(AppColor.accent)
             .clipShape(Capsule())
     }
 }

@@ -323,7 +323,7 @@ private struct InspectionInfoPill: View {
     let title: String
     let systemImage: String
     var foregroundStyle: Color = .secondary
-    var background: Color = AppColor.elevatedSurface.opacity(0.72)
+    var background: Color = AppColor.surface
 
     var body: some View {
         Label(title, systemImage: systemImage)
@@ -397,7 +397,7 @@ private struct DashboardActionButton: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Image(systemName: systemImage)
                     .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(AppColor.accentDeep)
+                    .foregroundStyle(AppColor.accent)
 
                 Text(title)
                     .font(AppFont.headline)
@@ -434,12 +434,12 @@ private struct DashboardMetric: View {
 
             Text(value)
                 .font(AppFont.title2)
-                .foregroundStyle(AppColor.accentDeep)
+                .foregroundStyle(AppColor.accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.md)
-        .background(AppColor.elevatedSurface.opacity(0.90))
+        .background(AppColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
@@ -452,12 +452,12 @@ private struct EmptyDashboardState: View {
             HStack(spacing: Spacing.md) {
                 ZStack {
                     Circle()
-                        .fill(AppColor.accentSoft.opacity(0.50))
+                        .fill(AppColor.accent.opacity(0.12))
                         .frame(width: 52, height: 52)
 
                     Image(systemName: "doc.text.magnifyingglass")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(AppColor.accentDeep)
+                        .foregroundStyle(AppColor.accent)
                 }
 
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -489,10 +489,10 @@ private struct EmptyStatePromise: View {
     var body: some View {
         Label(title, systemImage: systemImage)
             .font(AppFont.caption.weight(.semibold))
-            .foregroundStyle(AppColor.accentDeep)
+            .foregroundStyle(AppColor.accent)
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xs)
-            .background(AppColor.elevatedSurface.opacity(0.88))
+            .background(AppColor.accent.opacity(0.12))
             .clipShape(Capsule())
             .frame(maxWidth: .infinity)
     }

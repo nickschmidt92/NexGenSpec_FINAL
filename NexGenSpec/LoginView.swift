@@ -24,10 +24,11 @@ struct LoginView: View {
         AppScreenBackground {
             ScrollView {
                 VStack(spacing: Spacing.xl) {
-                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                    VStack(spacing: Spacing.lg) {
                         BrandLockup(
                             subtitle: "Professional inspection reports, secure media, and field-ready workflows.",
-                            markSize: 76
+                            markSize: 100,
+                            alignment: .center
                         )
 
                         HStack(spacing: Spacing.sm) {
@@ -39,8 +40,9 @@ struct LoginView: View {
                         Text("Built for field inspectors who need evidence-grade media, defensible reports, and a cleaner handoff to the client.")
                             .font(AppFont.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: 780, alignment: .leading)
+                    .frame(maxWidth: 780)
                     .padding(.horizontal, Spacing.lg)
                     .padding(.top, Spacing.xl)
 
@@ -372,7 +374,7 @@ private struct AuthFieldContainer<Content: View>: View {
             }
             .padding(.horizontal, Spacing.md)
             .frame(minHeight: 54)
-            .background(AppColor.elevatedSurface.opacity(0.95))
+            .background(AppColor.surface)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(AppColor.border, lineWidth: 1)
@@ -391,8 +393,8 @@ private struct LoginCapabilityChip: View {
             .font(AppFont.caption)
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xs)
-            .background(AppColor.accentSoft.opacity(0.45))
-            .foregroundStyle(AppColor.accentDeep)
+            .background(AppColor.accent.opacity(0.12))
+            .foregroundStyle(AppColor.accent)
             .clipShape(Capsule())
     }
 }

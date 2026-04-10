@@ -38,7 +38,7 @@ public struct TermsAndConditionsView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                            .background(AppColor.elevatedSurface.opacity(0.9))
+                            .background(AppColor.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                         VStack(spacing: 2) {
@@ -84,7 +84,7 @@ public struct TermsAndConditionsView: View {
                         }
                         .padding(.horizontal, 16)
                         .frame(height: 48)
-                        .background(AppColor.elevatedSurface.opacity(0.92))
+                        .background(AppColor.surface)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .stroke(AppColor.border, lineWidth: 1)
@@ -627,11 +627,11 @@ private struct TermsQuickLink: View {
             Text(title)
                 .font(AppFont.subheadline.weight(.semibold))
         }
-        .foregroundStyle(AppColor.accentDeep)
+        .foregroundStyle(AppColor.accent)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
-        .background(AppColor.elevatedSurface.opacity(0.9))
+        .background(AppColor.accent.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

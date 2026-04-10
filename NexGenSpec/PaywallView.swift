@@ -167,7 +167,7 @@ struct PaywallView: View {
                     .font(.headline)
             }
             .padding()
-            .background(AppColor.accentSoft.opacity(0.40))
+            .background(AppColor.accent.opacity(0.10))
             .cornerRadius(16)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(product.displayName), \(product.displayPrice), tap to purchase")
