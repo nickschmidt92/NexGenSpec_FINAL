@@ -1,6 +1,6 @@
 //
 //  DashboardView.swift
-//  InspectIQ
+//  NexGenSpec
 //
 //  Re-written 2026-02-17
 //

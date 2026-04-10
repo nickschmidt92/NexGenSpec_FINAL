@@ -112,7 +112,7 @@ struct VoiceCommandOverlay: View {
         .sheet(isPresented: $showCommandList) {
             VoiceCommandListSheet(voiceManager: voiceManager)
         }
-        .onChange(of: voiceManager.auditLog.count) { _ in
+        .onChange(of: voiceManager.auditLog.count) { _, _ in
             if let last = voiceManager.auditLog.last {
                 showFeedback(last.result)
             }

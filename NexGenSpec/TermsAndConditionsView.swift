@@ -170,7 +170,7 @@ public struct TermsAndConditionsView: View {
                         
                         // Section 3
                         Group {
-                            highlightedText("SECTION 3 — INSPECTIQ PHOTO LEGAL MODEL (SYSTEM OF RECORD)", id: "section3", font: .title3.bold(), isHeader: true)
+                            highlightedText("SECTION 3 — NEXGENSPEC PHOTO LEGAL MODEL (SYSTEM OF RECORD)", id: "section3", font: .title3.bold(), isHeader: true)
                             highlightedText("DESIGN & LIFECYCLE", font: .headline, isHeader: true)
                             Group {
                                 highlightedText("• Capture: Photos and media are captured or imported directly into NexGenSpec, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.", font: .body)
@@ -389,7 +389,7 @@ public struct TermsAndConditionsView: View {
         • No Premature Deletion: Originals cannot be deleted or overwritten before the retention period ends, except with written admin approval in documented exceptions.
         • Justification: Guarantees the integrity of records if you’re ever challenged.
 
-        SECTION 3 — INSPECTIQ PHOTO LEGAL MODEL (SYSTEM OF RECORD)
+        SECTION 3 — NEXGENSPEC PHOTO LEGAL MODEL (SYSTEM OF RECORD)
         DESIGN & LIFECYCLE
         • Capture: Photos and media are captured or imported directly into NexGenSpec, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.
         • Storage: All originals are saved in a secure, immutable archive inside NexGenSpec, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).
@@ -552,7 +552,7 @@ public struct TermsAndConditionsView: View {
         case "section3":
             contentForId =
             """
-            SECTION 3 — INSPECTIQ PHOTO LEGAL MODEL (SYSTEM OF RECORD)
+            SECTION 3 — NEXGENSPEC PHOTO LEGAL MODEL (SYSTEM OF RECORD)
             DESIGN & LIFECYCLE
             • Capture: Photos and media are captured or imported directly into NexGenSpec, never into the device’s personal gallery/camera roll. This immediately marks the image as official evidence.
             • Storage: All originals are saved in a secure, immutable archive inside NexGenSpec, with unique IDs, timestamps, inspection IDs, and context tags (system/area/category).

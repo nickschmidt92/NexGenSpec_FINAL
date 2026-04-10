@@ -1,6 +1,6 @@
 //
 //  InspectionRootView.swift
-//  InspectIQ
+//  NexGenSpec
 //
 //  Re-written 2026-02-17
 //
@@ -60,6 +60,7 @@ struct InspectionRootView: View {
 
 
 /// A helper namespace for sample data that compiles on every device.
+@MainActor
 private enum PreviewSamples {
 
     /// iPhone layout with two sections and one FINAL version

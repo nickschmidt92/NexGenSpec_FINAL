@@ -164,15 +164,18 @@ struct AppSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(AppFont.headline)
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColor.accent)
             .frame(maxWidth: .infinity, minHeight: TouchTarget.minHeight)
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColor.heroGradient)
+                    .fill(Color.clear)
             )
-            .shadow(color: AppColor.accent.opacity(configuration.isPressed ? 0.12 : 0.24), radius: 12, x: 0, y: 8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AppColor.accent, lineWidth: 1.5)
+            )
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
     }

@@ -7,6 +7,7 @@ import Foundation
 import Combine
 import UIKit
 
+@MainActor
 public final class InspectionStore: ObservableObject {
 
     /// Lightweight list for dashboard. Full version loaded via loadFullVersion(id).

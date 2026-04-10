@@ -15,7 +15,6 @@ struct ItemDetailView: View {
     var isLocked: Bool
 
     @State private var selectedImages: [PhotosPickerItem] = []
-    @State private var showAnnotationSheet = false
     @State private var showCamera = false
     @State private var photoToAnnotate: InspectionPhoto?
 
@@ -163,7 +162,6 @@ struct ItemDetailView: View {
                                         .onTapGesture {
                                             guard !isLocked else { return }
                                             photoToAnnotate = photo
-                                            showAnnotationSheet = true
                                         }
                                     if !isLocked {
                                         Text("Tap to annotate")
@@ -234,13 +232,10 @@ struct ItemDetailView: View {
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle(item.title)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showAnnotationSheet) {
-            if let photo = photoToAnnotate {
-                AsyncPhotoAnnotationSheet(jobId: jobId, photo: photo, onSaveOverlay: { overlay in
-                    AnnotationStore.save(overlay, jobId: jobId, photoId: photo.id)
-                    photoToAnnotate = nil
-                })
-            }
+        .sheet(item: $photoToAnnotate) { photo in
+            AsyncPhotoAnnotationSheet(jobId: jobId, photo: photo, onSaveOverlay: { overlay in
+                AnnotationStore.save(overlay, jobId: jobId, photoId: photo.id)
+            })
         }
         .sheet(isPresented: $showCamera) {
             CameraCaptureView(

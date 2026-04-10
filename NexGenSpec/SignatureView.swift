@@ -1,6 +1,6 @@
 //
 //  SignatureView.swift
-//  InspectIQ
+//  NexGenSpec
 //
 //  Created by ChatGPT on 2/5/26.
 //
