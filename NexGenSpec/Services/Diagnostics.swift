@@ -1,10 +1,18 @@
 import Foundation
+import FirebaseCrashlytics
 
 enum Diagnostics {
     private static let maxBytes = 512 * 1024
     private static let queue = DispatchQueue(label: "com.nexgenspec.diagnostics")
 
     static func logError(context: String, error: Error? = nil) {
+        // Report to Crashlytics for remote monitoring
+        if let error {
+            Crashlytics.crashlytics().record(error: error, userInfo: ["context": context])
+        } else {
+            Crashlytics.crashlytics().log("ERROR: \(context)")
+        }
+
         queue.async {
             let timestamp = ISO8601DateFormatter().string(from: Date())
             let message: String
@@ -18,6 +26,8 @@ enum Diagnostics {
     }
 
     static func logInfo(_ context: String) {
+        Crashlytics.crashlytics().log("INFO: \(context)")
+
         queue.async {
             let timestamp = ISO8601DateFormatter().string(from: Date())
             append("[\(timestamp)] [INFO] \(context)")

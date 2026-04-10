@@ -45,12 +45,12 @@ public final class PhotoLoadService: @unchecked Sendable {
                 }
                 let thumbURL = FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(photoFileName)
                 let fullURL = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(photoFileName)
-                if let data = try? Data(contentsOf: thumbURL), let img = Self.decodeImage(data: data, maxPixelSize: Int(self.thumbMaxSize * 2)) {
+                if let img = Self.decodeImageFromURL(thumbURL, maxPixelSize: Int(self.thumbMaxSize * 2)) {
                     self.thumbCache.setObject(img, forKey: key, cost: self.imageCost(img))
                     continuation.resume(returning: img)
                     return
                 }
-                guard let fullData = try? Data(contentsOf: fullURL), let full = Self.decodeImage(data: fullData, maxPixelSize: 2048) else {
+                guard let full = Self.decodeImageFromURL(fullURL, maxPixelSize: 2048) else {
                     continuation.resume(returning: nil)
                     return
                 }
@@ -77,7 +77,7 @@ public final class PhotoLoadService: @unchecked Sendable {
         return await withCheckedContinuation { continuation in
             queue.async {
                 let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(photoFileName)
-                guard let data = try? Data(contentsOf: url), let img = Self.decodeImage(data: data, maxPixelSize: 4096) else {
+                guard let img = Self.decodeImageFromURL(url, maxPixelSize: 4096) else {
                     continuation.resume(returning: nil)
                     return
                 }
@@ -93,7 +93,7 @@ public final class PhotoLoadService: @unchecked Sendable {
             let thumbURL = FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(fileName)
             if (try? thumbURL.checkResourceIsReachable()) == true { return }
             let fullURL = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
-            guard let data = try? Data(contentsOf: fullURL), let full = Self.decodeImage(data: data, maxPixelSize: 2048) else { return }
+            guard let full = Self.decodeImageFromURL(fullURL, maxPixelSize: 2048) else { return }
             let thumb = self.resizedForThumbnail(full, maxSize: self.thumbMaxSize)
             if let jpeg = thumb.jpegData(compressionQuality: 0.8) {
                 try? FileSecurity.ensureProtectedDirectory(thumbURL.deletingLastPathComponent())
@@ -113,8 +113,12 @@ public final class PhotoLoadService: @unchecked Sendable {
         }
     }
 
-    private static func decodeImage(data: Data, maxPixelSize: Int) -> UIImage? {
-        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    /// Decodes an image from a file URL without loading the full file into memory.
+    /// Uses CGImageSourceCreateWithURL to stream directly from disk, avoiding
+    /// the memory spike of Data(contentsOf:) on 48MP+ ProRAW photos (~100MB).
+    private static func decodeImageFromURL(_ url: URL, maxPixelSize: Int) -> UIImage? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: false,

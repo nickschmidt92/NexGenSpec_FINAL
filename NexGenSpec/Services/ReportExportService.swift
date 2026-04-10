@@ -29,13 +29,15 @@ public final class ReportExportService: ObservableObject {
     public init() {}
 
     /// Export report for version. Updates progress and result on main. Supports cancellation via cancelExport().
-    public func export(version: InspectionVersion) async {
+    /// Set `watermark` to true for free-tier exports (adds "NexGenSpec Free" overlay).
+    public func export(version: InspectionVersion, watermark: Bool = false) async {
         guard !isExporting else { return }
         isExporting = true
         progress = 0
         result = nil
         errorMessage = nil
         let versionCopy = version
+        let wm = watermark
         let task = Task {
             // Heavy work (HTML + write) off main thread; then PDF on main (WKWebView needs main).
             // Step 1: render HTML + assets off main. HTML is the source of truth and must always succeed.
@@ -56,7 +58,8 @@ public final class ReportExportService: ObservableObject {
                     let html = HTMLReportRenderer.renderHTML(
                         for: versionCopy,
                         imageFolderURL: imagesDir,
-                        videosFolderURL: videosDir
+                        videosFolderURL: videosDir,
+                        watermark: wm
                     )
                     let tempHTML = reportDir.appendingPathComponent("index.html")
                     try FileSecurity.writeProtected(Data(html.utf8), to: tempHTML)

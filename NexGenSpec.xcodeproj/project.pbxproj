@@ -10,6 +10,7 @@
 		2839C1E52F46795E0012726E /* RoomPlan.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2839C1E42F46795E0012726E /* RoomPlan.framework */; };
 		EBB43AFC2F86138700BE850A /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFB2F86138700BE850A /* FirebaseAuth */; };
 		EBB43AFE2F86138700BE850A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFD2F86138700BE850A /* FirebaseCore */; };
+		EBB43B002F86138700BE850A /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFF2F86138700BE850A /* FirebaseCrashlytics */; };
 		T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -54,6 +55,7 @@
 				2839C1E52F46795E0012726E /* RoomPlan.framework in Frameworks */,
 				EBB43AFE2F86138700BE850A /* FirebaseCore in Frameworks */,
 				EBB43AFC2F86138700BE850A /* FirebaseAuth in Frameworks */,
+				EBB43B002F86138700BE850A /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -485,6 +487,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = EBB43AFA2F86138700BE850A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
+		};
+		EBB43AFF2F86138700BE850A /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EBB43AFA2F86138700BE850A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

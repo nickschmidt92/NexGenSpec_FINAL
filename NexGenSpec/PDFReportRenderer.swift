@@ -35,7 +35,7 @@ public enum PDFReportRenderer {
     /// and produces a paginated PDF using WKWebView.pdf(configuration:).
     /// Throws on failure so callers can fall back to the HTML file.
     @MainActor
-    public static func generatePDF(for version: InspectionVersion) async throws -> URL {
+    public static func generatePDF(for version: InspectionVersion, watermark: Bool = false) async throws -> URL {
         let reportDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("pdf-\(version.id.uuidString)", isDirectory: true)
         let imagesDir = reportDir.appendingPathComponent("images", isDirectory: true)
@@ -50,11 +50,13 @@ public enum PDFReportRenderer {
         // Render HTML off the main actor. Images are streamed to disk so we never hold
         // all photo bytes in memory simultaneously.
         let versionCopy = version
+        let wm = watermark
         let html: String = await Task.detached(priority: .userInitiated) {
             HTMLReportRenderer.renderHTML(
                 for: versionCopy,
                 imageFolderURL: imagesDir,
-                videosFolderURL: videosDir
+                videosFolderURL: videosDir,
+                watermark: wm
             )
         }.value
 

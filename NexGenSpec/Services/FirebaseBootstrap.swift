@@ -8,6 +8,7 @@
 
 import Foundation
 import FirebaseCore
+import FirebaseCrashlytics
 
 enum FirebaseBootstrap {
     private static var didConfigure = false
@@ -20,5 +21,8 @@ enum FirebaseBootstrap {
         // If the plist is missing the app will crash here, which is the behavior we want —
         // shipping without the plist would silently disable auth.
         FirebaseApp.configure()
+
+        // Enable Crashlytics for production crash reporting.
+        Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
     }
 }

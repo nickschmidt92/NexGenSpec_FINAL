@@ -17,7 +17,8 @@ enum HTMLReportRenderer {
         for version: InspectionVersion,
         imageFolderURL: URL? = nil,
         videosFolderURL: URL? = nil,
-        absoluteAssetFileURLs: Bool = false
+        absoluteAssetFileURLs: Bool = false,
+        watermark: Bool = false
     ) -> String {
         let inspection = version.inspection
         let counts = inspection.summaryCounts()
@@ -58,6 +59,8 @@ enum HTMLReportRenderer {
         html, body { background: #f4f7fb; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; }
         .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-25deg); font-size: 48px; font-weight: bold; color: rgba(0,0,0,0.08); pointer-events: none; z-index: 0; }
+        .free-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-30deg); font-size: 56px; font-weight: 900; color: rgba(0,100,200,0.10); pointer-events: none; z-index: 9999; letter-spacing: 4px; white-space: nowrap; }
+        .free-banner { background: linear-gradient(135deg, #0066cc, #00aaff); color: #fff; text-align: center; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.9rem; font-weight: 600; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
         .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; }
         .header-card { margin-bottom: 24px; }
@@ -94,7 +97,9 @@ enum HTMLReportRenderer {
         </head>
         <body>
         \(isDraft ? "<div class=\"draft-watermark\">DRAFT — NOT FINAL</div>" : "")
+        \(watermark ? "<div class=\"free-watermark\">NEXGENSPEC FREE</div>" : "")
         <div class="container">
+        \(watermark ? "<div class=\"free-banner\">Generated with NexGenSpec Free — Upgrade to Pro for clean, branded reports</div>" : "")
         <div class="card header-card">
         <h1>Inspection Report</h1>
         <p class="meta"><strong>Client:</strong> \(escapeHTML(inspection.clientName))</p>
@@ -209,7 +214,7 @@ private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
     let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
-        return try? Data(contentsOf: url)
+        return nil
     }
     let maxPixelSize: CGFloat = 2048
     let options: [CFString: Any] = [
@@ -218,7 +223,7 @@ private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
         kCGImageSourceCreateThumbnailWithTransform: true
     ]
     guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-        return try? Data(contentsOf: url)
+        return nil
     }
     let uiImage = UIImage(cgImage: cgImage)
     return uiImage.pngData()

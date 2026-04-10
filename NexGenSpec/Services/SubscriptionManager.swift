@@ -30,6 +30,17 @@ public final class SubscriptionManager: ObservableObject {
         public static let all: [String] = [annualPro, monthlyPro, annual, monthly]
     }
 
+    // MARK: - Persistence keys (offline grace)
+
+    private enum CacheKey {
+        static let isPro = "nexgenspec.entitlement.isPro"
+        static let activeProduct = "nexgenspec.entitlement.activeProductID"
+        static let lastVerified = "nexgenspec.entitlement.lastVerifiedDate"
+    }
+
+    /// Grace period: trust cached entitlement for 7 days offline.
+    private static let gracePeriod: TimeInterval = 7 * 24 * 60 * 60
+
     // MARK: - Published state
 
     /// All loaded subscription products, ordered highest tier → lowest.
@@ -52,6 +63,16 @@ public final class SubscriptionManager: ObservableObject {
     private var updatesTask: Task<Void, Never>?
 
     public init() {
+        // Restore cached entitlement immediately so UI shows Pro on launch
+        // even before StoreKit async calls complete.
+        let cached = UserDefaults.standard.bool(forKey: CacheKey.isPro)
+        let lastVerified = UserDefaults.standard.object(forKey: CacheKey.lastVerified) as? Date ?? .distantPast
+        let withinGrace = Date().timeIntervalSince(lastVerified) < Self.gracePeriod
+        if cached && withinGrace {
+            self.isPro = true
+            self.activeProductID = UserDefaults.standard.string(forKey: CacheKey.activeProduct)
+        }
+
         // Start listening for transaction updates immediately so renewals
         // and out-of-app purchases update entitlement state in real time.
         updatesTask = Task.detached(priority: .background) { [weak self] in
@@ -136,6 +157,7 @@ public final class SubscriptionManager: ObservableObject {
     }
 
     /// Walks `Transaction.currentEntitlements` and sets `isPro`.
+    /// Persists result to UserDefaults for offline grace period.
     private func updateEntitlements() async {
         var foundID: String?
         for await result in Transaction.currentEntitlements {
@@ -149,6 +171,11 @@ public final class SubscriptionManager: ObservableObject {
         }
         self.activeProductID = foundID
         self.isPro = (foundID != nil)
+
+        // Persist for offline grace
+        UserDefaults.standard.set(self.isPro, forKey: CacheKey.isPro)
+        UserDefaults.standard.set(self.activeProductID, forKey: CacheKey.activeProduct)
+        UserDefaults.standard.set(Date(), forKey: CacheKey.lastVerified)
     }
 
     private func handle(transactionResult: VerificationResult<Transaction>) async {

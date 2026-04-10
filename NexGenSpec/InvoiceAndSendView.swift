@@ -142,14 +142,10 @@ struct InvoiceAndSendView: View {
     }
 
     private func runExport() {
-        guard subscriptions.isPro else {
-            showPaywall = true
-            return
-        }
         exportedPDFURL = nil
         exportService.reset()
         Task {
-            await exportService.export(version: version)
+            await exportService.export(version: version, watermark: !subscriptions.isPro)
         }
     }
 
@@ -162,12 +158,8 @@ struct InvoiceAndSendView: View {
             showMailCompose = true
             return
         }
-        guard subscriptions.isPro else {
-            showPaywall = true
-            return
-        }
         Task { @MainActor in
-            await exportService.export(version: version)
+            await exportService.export(version: version, watermark: !subscriptions.isPro)
             if case .success(_, let pdf?) = exportService.result {
                 exportedPDFURL = pdf
                 showMailCompose = true
