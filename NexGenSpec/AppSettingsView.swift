@@ -13,6 +13,7 @@ struct AppSettingsView: View {
     @State private var showPurgeResult = false
 
     @EnvironmentObject private var subscriptions: SubscriptionManager
+    @ObservedObject private var profile = InspectorProfile.shared
     @State private var showPaywall = false
 
     // Delete Account flow
@@ -60,6 +61,17 @@ struct AppSettingsView: View {
                         Text("Deleting your account permanently removes your login and erases all inspections, photos, and reports stored on this device. This cannot be undone.")
                             .font(AppFont.caption)
                             .foregroundStyle(.secondary)
+                    }
+
+                    SettingsSectionCard(
+                        title: "Inspector Profile",
+                        subtitle: "Saved across inspections. Auto-fills new inspection forms and appears on reports."
+                    ) {
+                        SettingsTextFieldRow(title: "Inspector Name", text: $profile.inspectorName, systemImage: "person.fill")
+                        SettingsTextFieldRow(title: "Company Name", text: $profile.companyName, systemImage: "building.2.fill")
+                        SettingsTextFieldRow(title: "License #", text: $profile.licenseNumber, systemImage: "checkmark.seal.fill")
+                        SettingsTextFieldRow(title: "Phone", text: $profile.phone, systemImage: "phone.fill")
+                        SettingsTextFieldRow(title: "Email", text: $profile.email, systemImage: "envelope.fill")
                     }
 
                     SettingsSectionCard(
@@ -488,6 +500,30 @@ private struct SettingsSecureFieldRow: View {
             .background(AppColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
+    }
+}
+
+private struct SettingsTextFieldRow: View {
+    let title: String
+    @Binding var text: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: systemImage)
+                .foregroundStyle(AppColor.accent)
+                .frame(width: 20)
+
+            TextField(title, text: $text)
+                .font(AppFont.body)
+                .textInputAutocapitalization(title == "Email" ? .never : .words)
+                .autocorrectionDisabled()
+                .keyboardType(title == "Phone" ? .phonePad : title == "Email" ? .emailAddress : .default)
+        }
+        .padding(.horizontal, Spacing.md)
+        .frame(minHeight: 50)
+        .background(AppColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 

@@ -121,7 +121,7 @@ enum HTMLReportRenderer {
         \(emailPhoneMeta)
         <p class="meta"><strong>Property:</strong> \(escapeHTML(inspection.propertyAddress))</p>
         <p class="meta"><strong>Date:</strong> \(htmlDateFormatter.string(from: inspection.inspectionDate))</p>
-        <p class="meta"><strong>Inspector:</strong> \(escapeHTML(inspection.inspectorName))</p>
+        <p class="meta"><strong>Inspector:</strong> \(escapeHTML(inspection.inspectorName))\(!InspectorProfile.shared.companyName.isEmpty ? " — \(escapeHTML(InspectorProfile.shared.companyName))" : "")\(!InspectorProfile.shared.licenseNumber.isEmpty ? " (License: \(escapeHTML(InspectorProfile.shared.licenseNumber)))" : "")</p>
         <div class="summary">
         <span class="badge safety">Safety: \(counts.safety)</span>
         <span class="badge major">Major: \(counts.major)</span>

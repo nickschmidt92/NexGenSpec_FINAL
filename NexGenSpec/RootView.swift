@@ -45,12 +45,26 @@ struct RootView: View {
         Group {
             if !authManager.isAuthenticated {
                 LoginView(authManager: authManager)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .leading)),
+                        removal: .opacity.combined(with: .move(edge: .leading))
+                    ))
             } else if !termsAccepted {
                 TermsAndConditionsView(onAcknowledge: .constant(acknowledgeCallback))
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                        removal: .opacity.combined(with: .move(edge: .leading))
+                    ))
             } else {
                 DashboardView()
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                        removal: .opacity
+                    ))
             }
         }
+        .animation(.easeInOut(duration: 0.35), value: authManager.isAuthenticated)
+        .animation(.easeInOut(duration: 0.35), value: termsAccepted)
         .onAppear(perform: refreshTermsAcceptance)
         .onChange(of: authManager.isAuthenticated) { _, _ in
             refreshTermsAcceptance()

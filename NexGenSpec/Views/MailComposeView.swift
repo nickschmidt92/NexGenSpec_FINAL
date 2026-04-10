@@ -13,6 +13,7 @@ struct MailComposeView: UIViewControllerRepresentable {
     var toRecipients: [String]
     var subject: String
     var body: String
+    var isHTML: Bool = false
     var attachmentURL: URL?
     var onDismiss: () -> Void
 
@@ -21,7 +22,7 @@ struct MailComposeView: UIViewControllerRepresentable {
         vc.mailComposeDelegate = context.coordinator
         vc.setToRecipients(toRecipients)
         vc.setSubject(subject)
-        vc.setMessageBody(body, isHTML: false)
+        vc.setMessageBody(body, isHTML: isHTML)
         if let url = attachmentURL, let data = try? Data(contentsOf: url) {
             vc.addAttachmentData(data, mimeType: "application/pdf", fileName: url.lastPathComponent)
         }

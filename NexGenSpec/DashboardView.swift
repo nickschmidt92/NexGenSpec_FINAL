@@ -189,7 +189,7 @@ struct DashboardView: View {
         newClientEmail = ""
         newClientPhone = ""
         newPropertyAddress = ""
-        newInspectorName = ""
+        newInspectorName = InspectorProfile.shared.inspectorName
         inspectorConfirmed = false
         showNewInspectionSheet = true
     }
