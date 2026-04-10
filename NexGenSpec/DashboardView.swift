@@ -23,6 +23,7 @@ struct DashboardView: View {
     @State private var newInspectorName   = ""
     @State private var versionToDeleteID: UUID?
     @State private var showTemplateError = false
+    @StateObject private var locationService = LocationService()
     @State private var showSettings = false
 
     // MARK: - View
@@ -211,6 +212,32 @@ struct DashboardView: View {
                 }
                 Section("Property & Inspector") {
                     TextField("Property Address",   text: $newPropertyAddress)
+                    Button {
+                        locationService.fetchCurrentAddress { address in
+                            if let address {
+                                newPropertyAddress = address
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if locationService.isLocating {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Locating…")
+                            } else {
+                                Image(systemName: "location.fill")
+                                Text("Use Current Location")
+                            }
+                        }
+                        .font(.subheadline)
+                    }
+                    .disabled(locationService.isLocating)
+                    .accessibilityLabel("Use current location for property address")
+                    if let error = locationService.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                     TextField("Inspector Name",     text: $newInspectorName)
                 }
                 Section {

@@ -10,6 +10,10 @@
 	<string>Speech recognition allows hands-free commands and note dictation during inspections.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used for importing/exporting inspection images and annotations.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>NexGenSpec supports Bluetooth headsets and microphones for hands-free voice commands during inspections.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>NexGenSpec uses your location to auto-fill the property address when creating a new inspection.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Used for secure authentication if enabled (optional).</string>
 	<key>PrivacyPolicyURL</key>
