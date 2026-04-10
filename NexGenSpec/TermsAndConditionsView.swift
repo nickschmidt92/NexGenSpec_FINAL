@@ -32,7 +32,7 @@ public struct TermsAndConditionsView: View {
                             markSize: 60
                         )
 
-                        Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from D.I.A. Inspections.")
+                        Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from NexGenSpec.")
                             .font(AppFont.footnote)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -51,13 +51,13 @@ public struct TermsAndConditionsView: View {
                         .padding(.top, 4)
 
                         HStack(spacing: Spacing.sm) {
-                            Link(destination: URL(string: "https://www.dia-inspections.com/privacy")!) {
+                            Link(destination: URL(string: "https://www.nexgenspec.com/privacy")!) {
                                 TermsQuickLink(title: "Privacy Policy", systemImage: "hand.raised.fill")
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("View Privacy Policy")
 
-                            Link(destination: URL(string: "https://www.dia-inspections.com/terms")!) {
+                            Link(destination: URL(string: "https://www.nexgenspec.com/terms")!) {
                                 TermsQuickLink(title: "Terms of Service", systemImage: "doc.text.fill")
                             }
                             .buttonStyle(.plain)
@@ -103,19 +103,19 @@ public struct TermsAndConditionsView: View {
                             highlightedText("Terms & Conditions", id: "title", font: .title.bold(), isHeader: true)
                             
                             Group {
-                                highlightedText("These terms and conditions outline the rules and regulations for the use of D.I.A. Inspections' website, located at https://www.dia-inspections.com.\n\n", font: .body)
+                                highlightedText("These terms and conditions outline the rules and regulations for the use of NexGenSpec' website, located at https://www.nexgenspec.com.\n\n", font: .body)
                                 highlightedText("Cookies:", font: .headline, isHeader: true)
-                                highlightedText("We employ the use of cookies. By accessing the website, you agree to use cookies in agreement with D.I.A. Inspections’ Privacy Policy.\n\n", font: .body)
+                                highlightedText("We employ the use of cookies. By accessing the website, you agree to use cookies in agreement with NexGenSpec’ Privacy Policy.\n\n", font: .body)
                                 highlightedText("License:", font: .headline, isHeader: true)
-                                highlightedText("Unless otherwise stated, D.I.A. Inspections and/or its licensors own the intellectual property rights for all material on the website. All intellectual property rights are reserved. You may access this from the website for your own personal use subjected to restrictions set in these terms and conditions.\n\n", font: .body)
+                                highlightedText("Unless otherwise stated, NexGenSpec and/or its licensors own the intellectual property rights for all material on the website. All intellectual property rights are reserved. You may access this from the website for your own personal use subjected to restrictions set in these terms and conditions.\n\n", font: .body)
                                 highlightedText("You must not:", font: .body)
                                 highlightedText("• Republish material\n• Sell, rent or sub-license material\n• Reproduce, duplicate or copy material\n• Redistribute content without prior written consent\n\n", font: .body)
                                 highlightedText("User Comments:", font: .headline, isHeader: true)
-                                highlightedText("Certain parts of this website allow users to post comments. D.I.A. Inspections does not filter, edit, publish or review Comments prior to their presence on the website. Comments reflect the views of the author only and do not represent the views of D.I.A. Inspections.\n\n", font: .body)
+                                highlightedText("Certain parts of this website allow users to post comments. NexGenSpec does not filter, edit, publish or review Comments prior to their presence on the website. Comments reflect the views of the author only and do not represent the views of NexGenSpec.\n\n", font: .body)
                                 highlightedText("Hyperlinking to our Content:", font: .headline, isHeader: true)
                                 highlightedText("The following organizations may link to our Website without prior written approval:\n- Government agencies\n- Search engines\n- News organizations\n- Online directory distributors\n- System wide Accredited Businesses\n\n", font: .body)
                                 highlightedText("Modification of Terms:", font: .headline, isHeader: true)
-                                highlightedText("D.I.A. Inspections may revise these terms and conditions at any time. By using the website you are expected to review these terms on a regular basis to ensure you understand all terms and conditions governing use.\n\n", font: .body)
+                                highlightedText("NexGenSpec may revise these terms and conditions at any time. By using the website you are expected to review these terms on a regular basis to ensure you understand all terms and conditions governing use.\n\n", font: .body)
                                 highlightedText("Your Privacy:", font: .headline, isHeader: true)
                                 highlightedText("Please read our Privacy Policy to understand how we handle your personal data.\n\n", font: .body)
                                 highlightedText("Contact Us:", font: .headline, isHeader: true)
@@ -125,8 +125,8 @@ public struct TermsAndConditionsView: View {
                                     Text("If you have any questions about these Terms, please contact us at ")
                                         .font(.body)
                                         .foregroundColor(.primary)
-                                    Link("support@dia-inspections.com",
-                                         destination: URL(string: "mailto:support@dia-inspections.com")!)
+                                    Link("contact@nexgenspec.com",
+                                         destination: URL(string: "mailto:contact@nexgenspec.com")!)
                                     .font(.body)
                                     .foregroundColor(.accentColor)
                                     .accessibilityLabel("Contact Support Email")
@@ -140,7 +140,7 @@ public struct TermsAndConditionsView: View {
                         Group {
                             highlightedText("SECTION 1 — INSPECTION AGREEMENT LANGUAGE", id: "section1", font: .title3.bold(), isHeader: true)
                             highlightedText("INSPECTION DOCUMENTATION & DIGITAL MEDIA", font: .headline, isHeader: true)
-                            highlightedText("By scheduling and permitting this inspection, you authorize D.I.A. Inspections (\"Inspector\") to capture, create, and retain photos, videos, thermal images, drone imagery, and 3D/LiDAR scans of the property. These records are collected for inspection reporting, internal quality assurance, and to provide you with a clear, detailed summary of the property’s condition.\n\nThe Inspector retains full ownership and custody of all original inspection records, including photos and digital files. You, as the client, receive a copy of the inspection report, which may include selected photos and media as needed for context. All media is securely stored and may be backed up to trusted cloud services for retention and disaster recovery.\n\nYour privacy is important: inspection documentation will not be shared publicly or with third parties except as required by law, with your consent, or as necessary for insurance, legal, or compliance purposes related to this inspection. Use of all documentation is strictly limited to inspection, reporting, dispute resolution, or as otherwise required to fulfill contractual or legal obligations. If there is any dispute, D.I.A. Inspections’ digital records may be relied upon as evidence.", font: .body)
+                            highlightedText("By scheduling and permitting this inspection, you authorize NexGenSpec (\"Inspector\") to capture, create, and retain photos, videos, thermal images, drone imagery, and 3D/LiDAR scans of the property. These records are collected for inspection reporting, internal quality assurance, and to provide you with a clear, detailed summary of the property’s condition.\n\nThe Inspector retains full ownership and custody of all original inspection records, including photos and digital files. You, as the client, receive a copy of the inspection report, which may include selected photos and media as needed for context. All media is securely stored and may be backed up to trusted cloud services for retention and disaster recovery.\n\nYour privacy is important: inspection documentation will not be shared publicly or with third parties except as required by law, with your consent, or as necessary for insurance, legal, or compliance purposes related to this inspection. Use of all documentation is strictly limited to inspection, reporting, dispute resolution, or as otherwise required to fulfill contractual or legal obligations. If there is any dispute, NexGenSpec’ digital records may be relied upon as evidence.", font: .body)
                             highlightedText("Plain-English Client Summary:", font: .headline, isHeader: true)
                             highlightedText("\"We take detailed photos, videos, and 3D scans to make your inspection report accurate, protect both parties, and maintain quality. We keep the originals safe; you get a copy in your report. Your images are private and used only for your inspection, not for marketing or social media.\"", font: .body)
                             Divider()
@@ -331,13 +331,13 @@ public struct TermsAndConditionsView: View {
         """
         Terms & Conditions
 
-        These terms and conditions outline the rules and regulations for the use of D.I.A. Inspections' website, located at https://www.dia-inspections.com.
+        These terms and conditions outline the rules and regulations for the use of NexGenSpec' website, located at https://www.nexgenspec.com.
 
         Cookies:
-        We employ the use of cookies. By accessing the website, you agree to use cookies in agreement with D.I.A. Inspections’ Privacy Policy.
+        We employ the use of cookies. By accessing the website, you agree to use cookies in agreement with NexGenSpec’ Privacy Policy.
 
         License:
-        Unless otherwise stated, D.I.A. Inspections and/or its licensors own the intellectual property rights for all material on the website. All intellectual property rights are reserved. You may access this from the website for your own personal use subjected to restrictions set in these terms and conditions.
+        Unless otherwise stated, NexGenSpec and/or its licensors own the intellectual property rights for all material on the website. All intellectual property rights are reserved. You may access this from the website for your own personal use subjected to restrictions set in these terms and conditions.
 
         You must not:
         • Republish material
@@ -346,7 +346,7 @@ public struct TermsAndConditionsView: View {
         • Redistribute content without prior written consent
 
         User Comments:
-        Certain parts of this website allow users to post comments. D.I.A. Inspections does not filter, edit, publish or review Comments prior to their presence on the website. Comments reflect the views of the author only and do not represent the views of D.I.A. Inspections.
+        Certain parts of this website allow users to post comments. NexGenSpec does not filter, edit, publish or review Comments prior to their presence on the website. Comments reflect the views of the author only and do not represent the views of NexGenSpec.
 
         Hyperlinking to our Content:
         The following organizations may link to our Website without prior written approval:
@@ -357,21 +357,21 @@ public struct TermsAndConditionsView: View {
         - System wide Accredited Businesses
 
         Modification of Terms:
-        D.I.A. Inspections may revise these terms and conditions at any time. By using the website you are expected to review these terms on a regular basis to ensure you understand all terms and conditions governing use.
+        NexGenSpec may revise these terms and conditions at any time. By using the website you are expected to review these terms on a regular basis to ensure you understand all terms and conditions governing use.
 
         Your Privacy:
         Please read our Privacy Policy to understand how we handle your personal data.
 
         Contact Us:
-        If you have any questions about these Terms, please contact us at support@dia-inspections.com.
+        If you have any questions about these Terms, please contact us at contact@nexgenspec.com.
 
         SECTION 1 — INSPECTION AGREEMENT LANGUAGE
         INSPECTION DOCUMENTATION & DIGITAL MEDIA
-        By scheduling and permitting this inspection, you authorize D.I.A. Inspections ("Inspector") to capture, create, and retain photos, videos, thermal images, drone imagery, and 3D/LiDAR scans of the property. These records are collected for inspection reporting, internal quality assurance, and to provide you with a clear, detailed summary of the property’s condition.
+        By scheduling and permitting this inspection, you authorize NexGenSpec ("Inspector") to capture, create, and retain photos, videos, thermal images, drone imagery, and 3D/LiDAR scans of the property. These records are collected for inspection reporting, internal quality assurance, and to provide you with a clear, detailed summary of the property’s condition.
 
         The Inspector retains full ownership and custody of all original inspection records, including photos and digital files. You, as the client, receive a copy of the inspection report, which may include selected photos and media as needed for context. All media is securely stored and may be backed up to trusted cloud services for retention and disaster recovery.
 
-        Your privacy is important: inspection documentation will not be shared publicly or with third parties except as required by law, with your consent, or as necessary for insurance, legal, or compliance purposes related to this inspection. Use of all documentation is strictly limited to inspection, reporting, dispute resolution, or as otherwise required to fulfill contractual or legal obligations. If there is any dispute, D.I.A. Inspections’ digital records may be relied upon as evidence.
+        Your privacy is important: inspection documentation will not be shared publicly or with third parties except as required by law, with your consent, or as necessary for insurance, legal, or compliance purposes related to this inspection. Use of all documentation is strictly limited to inspection, reporting, dispute resolution, or as otherwise required to fulfill contractual or legal obligations. If there is any dispute, NexGenSpec’ digital records may be relied upon as evidence.
 
         Plain-English Client Summary:
         "We take detailed photos, videos, and 3D scans to make your inspection report accurate, protect both parties, and maintain quality. We keep the originals safe; you get a copy in your report. Your images are private and used only for your inspection, not for marketing or social media."
@@ -524,11 +524,11 @@ public struct TermsAndConditionsView: View {
             """
             SECTION 1 — INSPECTION AGREEMENT LANGUAGE
             INSPECTION DOCUMENTATION & DIGITAL MEDIA
-            By scheduling and permitting this inspection, you authorize D.I.A. Inspections (\"Inspector\") to capture, create, and retain photos, videos, thermal images, drone imagery, and 3D/LiDAR scans of the property. These records are collected for inspection reporting, internal quality assurance, and to provide you with a clear, detailed summary of the property’s condition.
+            By scheduling and permitting this inspection, you authorize NexGenSpec (\"Inspector\") to capture, create, and retain photos, videos, thermal images, drone imagery, and 3D/LiDAR scans of the property. These records are collected for inspection reporting, internal quality assurance, and to provide you with a clear, detailed summary of the property’s condition.
 
             The Inspector retains full ownership and custody of all original inspection records, including photos and digital files. You, as the client, receive a copy of the inspection report, which may include selected photos and media as needed for context. All media is securely stored and may be backed up to trusted cloud services for retention and disaster recovery.
 
-            Your privacy is important: inspection documentation will not be shared publicly or with third parties except as required by law, with your consent, or as necessary for insurance, legal, or compliance purposes related to this inspection. Use of all documentation is strictly limited to inspection, reporting, dispute resolution, or as otherwise required to fulfill contractual or legal obligations. If there is any dispute, D.I.A. Inspections’ digital records may be relied upon as evidence.
+            Your privacy is important: inspection documentation will not be shared publicly or with third parties except as required by law, with your consent, or as necessary for insurance, legal, or compliance purposes related to this inspection. Use of all documentation is strictly limited to inspection, reporting, dispute resolution, or as otherwise required to fulfill contractual or legal obligations. If there is any dispute, NexGenSpec’ digital records may be relied upon as evidence.
 
             Plain-English Client Summary:
             "We take detailed photos, videos, and 3D scans to make your inspection report accurate, protect both parties, and maintain quality. We keep the originals safe; you get a copy in your report. Your images are private and used only for your inspection, not for marketing or social media."
@@ -705,9 +705,9 @@ private struct TermsDataSafetySummaryFallbackView: View {
 
                     Divider()
 
-                    Link("View Full Privacy Policy", destination: URL(string: "https://www.dia-inspections.com/privacy")!)
+                    Link("View Full Privacy Policy", destination: URL(string: "https://www.nexgenspec.com/privacy")!)
                         .font(.headline)
-                    Link("View Terms of Service", destination: URL(string: "https://www.dia-inspections.com/terms")!)
+                    Link("View Terms of Service", destination: URL(string: "https://www.nexgenspec.com/terms")!)
                         .font(.headline)
                 }
                 .padding()

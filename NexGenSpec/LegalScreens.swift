@@ -13,10 +13,22 @@ struct Branding {
     static let accentColor = AppColor.accent
 }
 
-// MARK: - URLs and Effective Dates (Replace with your actual URLs and dates)
+// MARK: - URLs and Effective Dates
 struct LegalConstants {
-    static let privacyPolicyURL = URL(string: Bundle.main.object(forInfoDictionaryKey: "PrivacyPolicyURL") as? String ?? "")!
-    static let termsOfServiceURL = URL(string: Bundle.main.object(forInfoDictionaryKey: "TermsAndConditionsURL") as? String ?? "")!
+    // Safe URL resolution: try Info.plist first, fall back to canonical
+    // nexgenspec.com endpoints. No force-unwraps — an empty/missing plist
+    // key on older builds used to crash the app when tapping the link.
+    private static let fallbackPrivacy = "https://www.nexgenspec.com/privacy"
+    private static let fallbackTerms   = "https://www.nexgenspec.com/terms"
+
+    static let privacyPolicyURL: URL = {
+        let s = (Bundle.main.object(forInfoDictionaryKey: "PrivacyPolicyURL") as? String) ?? ""
+        return URL(string: s) ?? URL(string: fallbackPrivacy)!
+    }()
+    static let termsOfServiceURL: URL = {
+        let s = (Bundle.main.object(forInfoDictionaryKey: "TermsAndConditionsURL") as? String) ?? ""
+        return URL(string: s) ?? URL(string: fallbackTerms)!
+    }()
     static let dataSafetyPDFName = "DataSafetySummary" // PDF in bundle
 
     static let privacyPolicyEffectiveDate = "Effective Date: January 1, 2026"

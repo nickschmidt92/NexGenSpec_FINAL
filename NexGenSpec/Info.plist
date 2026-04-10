@@ -17,8 +17,8 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Used for secure authentication if enabled (optional).</string>
 	<key>PrivacyPolicyURL</key>
-	<string>https://www.dia-inspections.com/privacy</string>
+	<string>https://www.nexgenspec.com/privacy</string>
 	<key>TermsAndConditionsURL</key>
-	<string>https://www.dia-inspections.com/terms</string>
+	<string>https://www.nexgenspec.com/terms</string>
 </dict>
 </plist>

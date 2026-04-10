@@ -360,11 +360,11 @@ public final class AuthManager: ObservableObject {
         case .wrongPassword, .invalidCredential:
                                             return "Incorrect email or password."
         case .userNotFound:                 return "No account found for that email."
-        case .userDisabled:                 return "This account has been disabled. Contact support@nexgenspec.com."
+        case .userDisabled:                 return "This account has been disabled. Contact contact@nexgenspec.com."
         case .networkError:                 return "Network error. Check your connection and try again."
         case .tooManyRequests:              return "Too many attempts. Please wait a minute and try again."
         case .requiresRecentLogin:          return "For security, please sign in again before making this change."
-        case .operationNotAllowed:          return "Email/password sign-in is not enabled. Contact support@nexgenspec.com."
+        case .operationNotAllowed:          return "Email/password sign-in is not enabled. Contact contact@nexgenspec.com."
         default:                            return ns.localizedDescription
         }
     }
