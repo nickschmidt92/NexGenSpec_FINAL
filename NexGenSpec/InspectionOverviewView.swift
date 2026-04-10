@@ -45,8 +45,8 @@ struct InspectionOverviewView: View {
                         Text(version.state.displayName)
                             .font(.headline)
                             .padding(8)
-                            .background(version.state.isEditable ? Color.orange.opacity(0.2) : Color.green.opacity(0.2))
-                            .foregroundColor(version.state.isEditable ? .orange : .green)
+                            .background(version.state.isEditable ? AppColor.warning.opacity(0.2) : AppColor.success.opacity(0.2))
+                            .foregroundColor(version.state.isEditable ? AppColor.warning : AppColor.success)
                             .clipShape(Capsule())
                         Spacer()
                     }
@@ -289,7 +289,7 @@ struct InspectionOverviewView: View {
     @ViewBuilder
     private var exportOverlay: some View {
         if exportService.isExporting || exportService.errorMessage != nil {
-                Color.black.opacity(0.3)
+                AppColor.brandNavy.opacity(0.4)
                     .ignoresSafeArea()
                 VStack(spacing: 12) {
                     if let err = exportService.errorMessage {

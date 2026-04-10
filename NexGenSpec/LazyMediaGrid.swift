@@ -56,11 +56,11 @@ struct LazyMediaGrid: View {
                                     .foregroundColor(.secondary)
                                     .padding(24)
                             @unknown default:
-                                Color.gray
+                                AppColor.surface
                             }
                         }
                         .frame(width: 120, height: 120)
-                        .background(Color(.systemGray6))
+                        .background(AppColor.surface)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .accessibilityLabel(Text(url.lastPathComponent))
                         .onTapGesture {

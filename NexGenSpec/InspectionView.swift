@@ -162,7 +162,7 @@ struct InspectionView: View {
                 }
                 .accessibilityLabel("Overview")
                 .accessibilityHint("Cover page, export report, capture room")
-                .listRowBackground(selectedPane == .overview ? Color.secondary.opacity(0.12) : Color.clear)
+                .listRowBackground(selectedPane == .overview ? AppColor.accent.opacity(0.10) : Color.clear)
             }
             Section("Sections") {
                 ForEach(draft.inspection.sections) { section in
@@ -171,7 +171,7 @@ struct InspectionView: View {
                     }
                     .accessibilityLabel(section.title)
                     .accessibilityHint("\(section.items.count) items")
-                    .listRowBackground(selectedPane == .section(section.id) ? Color.secondary.opacity(0.12) : Color.clear)
+                    .listRowBackground(selectedPane == .section(section.id) ? AppColor.accent.opacity(0.10) : Color.clear)
                 }
             }
             Section("Actions") {
@@ -180,20 +180,20 @@ struct InspectionView: View {
                 }
                 .accessibilityLabel("Summary")
                 .accessibilityHint("Findings by severity")
-                .listRowBackground(selectedPane == .summary ? Color.secondary.opacity(0.12) : Color.clear)
+                .listRowBackground(selectedPane == .summary ? AppColor.accent.opacity(0.10) : Color.clear)
                 Button { selectedPane = .finalize } label: {
                     Label("Finalize", systemImage: "lock.shield")
                 }
                 .accessibilityLabel("Finalize")
                 .accessibilityHint("Signatures and lock report")
-                .listRowBackground(selectedPane == .finalize ? Color.secondary.opacity(0.12) : Color.clear)
+                .listRowBackground(selectedPane == .finalize ? AppColor.accent.opacity(0.10) : Color.clear)
                 if draft.locked {
                     Button { selectedPane = .invoice } label: {
                         Label("Invoice & Send", systemImage: "envelope.badge")
                     }
                     .accessibilityLabel("Invoice and send")
                     .accessibilityHint("Customer contact, invoice form, send to client and NexGenSpec")
-                    .listRowBackground(selectedPane == .invoice ? Color.secondary.opacity(0.12) : Color.clear)
+                    .listRowBackground(selectedPane == .invoice ? AppColor.accent.opacity(0.10) : Color.clear)
                 }
             }
         }
@@ -306,8 +306,8 @@ private struct SectionRowView: View {
                 Text("\(section.safetyCount + section.majorCount + section.marginalCount + section.minorCount)")
                     .font(.caption2)
                     .padding(4)
-                    .background(Color.orange.opacity(0.2))
-                    .foregroundColor(.orange)
+                    .background(AppColor.warning.opacity(0.2))
+                    .foregroundColor(AppColor.warning)
                     .clipShape(Circle())
             }
         }
@@ -363,7 +363,7 @@ private struct InspectionItemRowLabel: View {
                     .font(.headline)
                 Text(item.status.displayName)
                     .font(.caption)
-                    .foregroundColor(item.isDefect ? .red : .secondary)
+                    .foregroundColor(item.isDefect ? AppColor.critical : .secondary)
             }
             Spacer()
             if let sev = item.defectSeverity {

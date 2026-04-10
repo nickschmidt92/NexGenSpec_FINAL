@@ -21,12 +21,12 @@ struct SignatureView: View {
                 Section(header: Text("Inspector Signature")) {
                     SignaturePad(image: $inspectorSignature)
                         .frame(height: 200)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray))
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColor.border))
                 }
                 Section(header: Text("Client / Real Estate Agent")) {
                     SignaturePad(image: $clientSignature)
                         .frame(height: 200)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray))
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColor.border))
                 }
             }
             .navigationTitle("Signatures")
@@ -73,11 +73,11 @@ struct SignaturePad: View {
     @Binding var image: UIImage?
     @State private var currentDrawing: [CGPoint] = []
     @State private var drawings: [[CGPoint]] = []
-    @State private var lineColor: Color = .black
+    @State private var lineColor: Color = Color(uiColor: .label)
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Color.white
+                AppColor.elevatedSurface
                 Path { path in
                     for drawing in drawings {
                         guard let first = drawing.first else { continue }

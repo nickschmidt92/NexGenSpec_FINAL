@@ -18,7 +18,7 @@ struct PaywallView: View {
     @State private var showError = false
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             AppScreenBackground {
                 ScrollView {
                     VStack(spacing: 24) {

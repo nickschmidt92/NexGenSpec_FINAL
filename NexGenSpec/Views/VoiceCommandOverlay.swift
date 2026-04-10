@@ -30,7 +30,7 @@ struct VoiceCommandOverlay: View {
                     .padding(.vertical, 10)
                     .background(
                         Capsule()
-                            .fill(Color.black.opacity(0.75))
+                            .fill(AppColor.brandNavy.opacity(0.85))
                     )
                     .opacity(feedbackOpacity)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -46,7 +46,7 @@ struct VoiceCommandOverlay: View {
                     .padding(.vertical, 6)
                     .background(
                         Capsule()
-                            .fill(Color.blue.opacity(0.7))
+                            .fill(AppColor.accent.opacity(0.7))
                     )
                     .padding(.bottom, 4)
             }
@@ -81,12 +81,12 @@ struct VoiceCommandOverlay: View {
                                     : LinearGradient(colors: [AppColor.brandBlue, AppColor.brandCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
                             )
                             .frame(width: 56, height: 56)
-                            .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                            .shadow(color: AppColor.cardShadow, radius: 6, y: 3)
 
                         if voiceManager.isListening {
                             // Pulsing ring
                             Circle()
-                                .stroke(Color.red.opacity(0.4), lineWidth: 3)
+                                .stroke(AppColor.critical.opacity(0.4), lineWidth: 3)
                                 .frame(width: 66, height: 66)
                                 .scaleEffect(voiceManager.isListening ? 1.2 : 1.0)
                                 .opacity(voiceManager.isListening ? 0.0 : 1.0)

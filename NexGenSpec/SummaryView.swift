@@ -24,7 +24,7 @@ struct SummaryView: View {
             // Search bar
             TextField("Search", text: $searchText)
                 .padding(8)
-                .background(Color(.systemGray6))
+                .background(AppColor.surface)
                 .cornerRadius(8)
                 .padding(.horizontal)
                 .onChange(of: searchText) { _, _ in }
@@ -96,7 +96,7 @@ private struct SeverityFilterButton: View {
                 Text(severity.displayName)
                     .font(.caption)
                     .padding(6)
-                    .background(isSelected ? AppColor.forSeverity(severity).opacity(0.2) : Color(.systemGray5))
+                    .background(isSelected ? AppColor.forSeverity(severity).opacity(0.2) : AppColor.surface)
                     .foregroundColor(isSelected ? AppColor.forSeverity(severity) : .primary)
                     .clipShape(Capsule())
             }

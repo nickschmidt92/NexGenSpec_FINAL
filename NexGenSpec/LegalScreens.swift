@@ -41,13 +41,13 @@ struct PrivacyPolicyView: View {
     @State private var externalLink: URL? = nil
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             AppScreenBackground {
                 ScrollView {
                     VStack(spacing: 16) {
                         Text(LegalConstants.privacyPolicyEffectiveDate)
                             .font(.subheadline)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.secondary)
                             .padding(.top)
 
                         BrandLockup(
@@ -123,13 +123,13 @@ struct TermsOfServiceView: View {
     @State private var externalLink: URL? = nil
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             AppScreenBackground {
                 ScrollView {
                     VStack(spacing: 16) {
                         Text(LegalConstants.termsOfServiceEffectiveDate)
                             .font(.subheadline)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.secondary)
                             .padding(.top)
 
                         BrandLockup(
@@ -204,7 +204,7 @@ struct DataSafetySummaryView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Group {
                 if let pdfURL = Bundle.main.url(forResource: LegalConstants.dataSafetyPDFName, withExtension: "pdf") {
                     PDFKitView(url: pdfURL)
@@ -344,7 +344,7 @@ struct TermsAndConditionsViewWithAcceptance: View {
     @State private var accepted = false
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack {
                 // Assuming TermsAndConditionsView is implemented elsewhere and shows T&C text
                 TermsAndConditionsView()
@@ -357,7 +357,7 @@ struct TermsAndConditionsViewWithAcceptance: View {
                         .bold()
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(accepted ? Color.green : Branding.accentColor)
+                        .background(accepted ? AppColor.success : Branding.accentColor)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                         .padding()
@@ -436,7 +436,7 @@ struct OnboardingLegalView: View {
                     .bold()
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(acceptedTerms ? Color.green : Branding.accentColor)
+                    .background(acceptedTerms ? AppColor.success : Branding.accentColor)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .padding(.horizontal)

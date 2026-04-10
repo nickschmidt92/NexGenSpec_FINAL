@@ -94,9 +94,9 @@ struct LoginView: View {
                             .accessibilityLabel("Log In")
 
                             HStack(spacing: Spacing.sm) {
-                                Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+                                Rectangle().fill(AppColor.border).frame(height: 1)
                                 Text("or").font(AppFont.footnote).foregroundStyle(.secondary)
-                                Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
+                                Rectangle().fill(AppColor.border).frame(height: 1)
                             }
 
                             Button {
@@ -108,8 +108,8 @@ struct LoginView: View {
                                         .fontWeight(.semibold)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 50)
-                                .foregroundStyle(.white)
-                                .background(Color.black)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
+                                .background(Color(uiColor: .label))
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
                             .disabled(authManager.isBusy)
