@@ -31,10 +31,22 @@ struct PaywallView: View {
                             .multilineTextAlignment(.center)
                             .accessibilityAddTraits(.isHeader)
 
-                        Text("Unlock unlimited inspections, PDF export, voice input, LiDAR scanning, and the annotation pack. Cancel anytime in Settings.")
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+                        if let remaining = subscriptions.freeInspectionsRemaining, remaining <= 0 {
+                            Text("You've used all \(SubscriptionManager.freeInspectionLimit) free inspections. Subscribe to continue creating inspections with full PDF export, voice input, LiDAR scanning, and more.")
+                                .font(.body)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        } else if let remaining = subscriptions.freeInspectionsRemaining {
+                            Text("You have \(remaining) free inspection\(remaining == 1 ? "" : "s") remaining. Subscribe for unlimited inspections, clean PDF export, voice input, LiDAR scanning, and the annotation pack.")
+                                .font(.body)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        } else {
+                            Text("Unlock unlimited inspections, PDF export, voice input, LiDAR scanning, and the annotation pack. Cancel anytime in Settings.")
+                                .font(.body)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
 
                         premiumFeaturesList
 
@@ -98,11 +110,11 @@ struct PaywallView: View {
     private var premiumFeaturesList: some View {
         VStack(alignment: .leading, spacing: 16) {
             featureRow(title: "Unlimited Inspections", requiresUpgrade: true)
-            featureRow(title: "PDF Export", requiresUpgrade: true)
+            featureRow(title: "Clean, Branded PDF Reports", requiresUpgrade: true)
             featureRow(title: "Voice Input", requiresUpgrade: true)
             featureRow(title: "LiDAR Scanning", requiresUpgrade: true)
             featureRow(title: "Annotation Pack", requiresUpgrade: true)
-            featureRow(title: "Basic Inspection Reports", requiresUpgrade: false)
+            featureRow(title: "\(SubscriptionManager.freeInspectionLimit) Free Inspections", requiresUpgrade: false)
         }
         .inspectionCard()
         .padding(.horizontal)

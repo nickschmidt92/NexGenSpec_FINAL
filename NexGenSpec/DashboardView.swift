@@ -13,9 +13,11 @@ struct DashboardView: View {
     // MARK: - Dependencies
     @EnvironmentObject private var store: InspectionStore
     @EnvironmentObject private var authManager: AuthManager
+    @EnvironmentObject private var subscriptions: SubscriptionManager
 
     // MARK: - Local state
     @State private var showNewInspectionSheet = false
+    @State private var showPaywall = false
     @State private var newClientName       = ""
     @State private var newClientEmail     = ""
     @State private var newClientPhone     = ""
@@ -123,6 +125,7 @@ struct DashboardView: View {
                     }
                 }
                 .sheet(isPresented: $showNewInspectionSheet) { newInspectionSheet }
+                .sheet(isPresented: $showPaywall) { PaywallView() }
                 .sheet(isPresented: $showSettings) {
                     NavigationStack {
                         AppSettingsView()
@@ -186,6 +189,10 @@ struct DashboardView: View {
     }
 
     private func prepareForNewInspection() {
+        guard subscriptions.canCreateInspection else {
+            showPaywall = true
+            return
+        }
         newClientName = ""
         newClientEmail = ""
         newClientPhone = ""
@@ -269,6 +276,7 @@ struct DashboardView: View {
                                 inspectorName:   newInspectorName,
                                 inspectorConfirmed: inspectorConfirmed
                             )
+                            subscriptions.recordInspectionCreated()
                             showNewInspectionSheet = false
                         }
                     }

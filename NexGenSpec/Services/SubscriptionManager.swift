@@ -30,6 +30,35 @@ public final class SubscriptionManager: ObservableObject {
         public static let all: [String] = [annualPro, monthlyPro, annual, monthly]
     }
 
+    // MARK: - Free trial
+
+    /// Number of inspections allowed before a subscription is required.
+    public static let freeInspectionLimit = 3
+
+    private enum TrialKey {
+        static let inspectionsCreated = "nexgenspec.trial.inspectionsCreated"
+    }
+
+    /// Number of inspections the user has created (persisted across launches).
+    @Published public private(set) var freeInspectionsUsed: Int = 0
+
+    /// True if the user can create a new inspection (subscribed, or under free limit).
+    public var canCreateInspection: Bool {
+        isPro || freeInspectionsUsed < Self.freeInspectionLimit
+    }
+
+    /// Remaining free inspections. Returns nil if subscribed.
+    public var freeInspectionsRemaining: Int? {
+        isPro ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
+    }
+
+    /// Call after a new inspection is successfully created.
+    public func recordInspectionCreated() {
+        guard !isPro else { return }
+        freeInspectionsUsed += 1
+        UserDefaults.standard.set(freeInspectionsUsed, forKey: TrialKey.inspectionsCreated)
+    }
+
     // MARK: - Persistence keys (offline grace)
 
     private enum CacheKey {
@@ -63,6 +92,9 @@ public final class SubscriptionManager: ObservableObject {
     private var updatesTask: Task<Void, Never>?
 
     public init() {
+        // Restore free trial counter
+        self.freeInspectionsUsed = UserDefaults.standard.integer(forKey: TrialKey.inspectionsCreated)
+
         // Restore cached entitlement immediately so UI shows Pro on launch
         // even before StoreKit async calls complete.
         let cached = UserDefaults.standard.bool(forKey: CacheKey.isPro)

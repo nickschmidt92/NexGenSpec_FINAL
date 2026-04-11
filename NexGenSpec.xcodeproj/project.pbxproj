@@ -114,6 +114,7 @@
 				A1B2C3D4E5F6000000000008 /* Sources */,
 				A1B2C3D4E5F6000000000003 /* Frameworks */,
 				A1B2C3D4E5F6000000000009 /* Resources */,
+				EBB440FB2F89BCE100BE850A /* Upload Crashlytics dSYMs */,
 			);
 			buildRules = (
 			);
@@ -190,6 +191,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		EBB440FB2F89BCE100BE850A /* Upload Crashlytics dSYMs */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Upload Crashlytics dSYMs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Skip dSYM upload in simulator builds\nif [ \"$EFFECTIVE_PLATFORM_NAME\" = \"-iphonesimulator\" ]; then\n  echo \"Skipping Crashlytics dSYM upload for simulator build.\"\n  exit 0\nfi\n\n\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols\" -gsp \"${SRCROOT}/NexGenSpec/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\" || echo \"warning: dSYM upload skipped\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A1B2C3D4E5F6000000000008 /* Sources */ = {
@@ -337,6 +359,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NexGenSpec/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
@@ -345,7 +368,6 @@
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NexGenSpec uses speech recognition for hands-free voice commands and inspection note dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_FILE = NexGenSpec/Info.plist;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -373,6 +395,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NexGenSpec/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
@@ -381,7 +404,6 @@
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NexGenSpec uses speech recognition for hands-free voice commands and inspection note dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_FILE = NexGenSpec/Info.plist;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
