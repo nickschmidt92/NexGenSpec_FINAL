@@ -303,17 +303,16 @@ struct BrandLockup: View {
         .padding(.vertical, Spacing.md)
         .background(
             LinearGradient(
-                colors: [AppColor.brandBlue, AppColor.brandBlue.opacity(0.85)],
+                colors: [AppColor.brandNavy, Color(red: 0.11, green: 0.12, blue: 0.23)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .shadow(color: AppColor.brandBlue.opacity(0.25), radius: 18, x: 0, y: 10)
     }
 
     private var logoMaxWidth: CGFloat {
