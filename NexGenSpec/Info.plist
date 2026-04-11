@@ -28,8 +28,8 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>PrivacyPolicyURL</key>
-	<string>https://www.nexgenspec.com/privacy</string>
+	<string>https://nexgenspec.com/privacy</string>
 	<key>TermsAndConditionsURL</key>
-	<string>https://www.nexgenspec.com/terms</string>
+	<string>https://nexgenspec.com/terms</string>
 </dict>
 </plist>

@@ -20,8 +20,8 @@ struct LegalConstants {
     // Safe URL resolution: try Info.plist first, fall back to canonical
     // nexgenspec.com endpoints. No force-unwraps — an empty/missing plist
     // key on older builds used to crash the app when tapping the link.
-    private static let fallbackPrivacy = "https://www.nexgenspec.com/privacy"
-    private static let fallbackTerms   = "https://www.nexgenspec.com/terms"
+    private static let fallbackPrivacy = "https://nexgenspec.com/privacy"
+    private static let fallbackTerms   = "https://nexgenspec.com/terms"
 
     static let privacyPolicyURL: URL = {
         let s = (Bundle.main.object(forInfoDictionaryKey: "PrivacyPolicyURL") as? String) ?? ""

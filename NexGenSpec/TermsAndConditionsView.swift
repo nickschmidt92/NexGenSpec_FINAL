@@ -51,13 +51,13 @@ public struct TermsAndConditionsView: View {
                         .padding(.top, 4)
 
                         HStack(spacing: Spacing.sm) {
-                            Link(destination: URL(string: "https://www.nexgenspec.com/privacy")!) {
+                            Link(destination: URL(string: "https://nexgenspec.com/privacy")!) {
                                 TermsQuickLink(title: "Privacy Policy", systemImage: "hand.raised.fill")
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("View Privacy Policy")
 
-                            Link(destination: URL(string: "https://www.nexgenspec.com/terms")!) {
+                            Link(destination: URL(string: "https://nexgenspec.com/terms")!) {
                                 TermsQuickLink(title: "Terms of Service", systemImage: "doc.text.fill")
                             }
                             .buttonStyle(.plain)
@@ -103,7 +103,7 @@ public struct TermsAndConditionsView: View {
                             highlightedText("Terms & Conditions", id: "title", font: .title.bold(), isHeader: true)
                             
                             Group {
-                                highlightedText("These terms and conditions outline the rules and regulations for the use of NexGenSpec' website, located at https://www.nexgenspec.com.\n\n", font: .body)
+                                highlightedText("These terms and conditions outline the rules and regulations for the use of NexGenSpec' website, located at https://nexgenspec.com.\n\n", font: .body)
                                 highlightedText("Cookies:", font: .headline, isHeader: true)
                                 highlightedText("We employ the use of cookies. By accessing the website, you agree to use cookies in agreement with NexGenSpec’ Privacy Policy.\n\n", font: .body)
                                 highlightedText("License:", font: .headline, isHeader: true)
@@ -331,7 +331,7 @@ public struct TermsAndConditionsView: View {
         """
         Terms & Conditions
 
-        These terms and conditions outline the rules and regulations for the use of NexGenSpec' website, located at https://www.nexgenspec.com.
+        These terms and conditions outline the rules and regulations for the use of NexGenSpec' website, located at https://nexgenspec.com.
 
         Cookies:
         We employ the use of cookies. By accessing the website, you agree to use cookies in agreement with NexGenSpec’ Privacy Policy.
@@ -705,9 +705,9 @@ private struct TermsDataSafetySummaryFallbackView: View {
 
                     Divider()
 
-                    Link("View Full Privacy Policy", destination: URL(string: "https://www.nexgenspec.com/privacy")!)
+                    Link("View Full Privacy Policy", destination: URL(string: "https://nexgenspec.com/privacy")!)
                         .font(.headline)
-                    Link("View Terms of Service", destination: URL(string: "https://www.nexgenspec.com/terms")!)
+                    Link("View Terms of Service", destination: URL(string: "https://nexgenspec.com/terms")!)
                         .font(.headline)
                 }
                 .padding()
