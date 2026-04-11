@@ -127,12 +127,8 @@ struct CardStyle: ViewModifier {
         content
             .padding(Spacing.md)
             .background(AppColor.elevatedSurface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(AppColor.border, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: AppColor.cardShadow, radius: 18, x: 0, y: 10)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: AppColor.cardShadow, radius: 6, x: 0, y: 2)
     }
 }
 
@@ -151,12 +147,11 @@ struct AppPrimaryButtonStyle: ButtonStyle {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.xs)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColor.heroGradient)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppColor.brandBlue)
             )
-            .shadow(color: AppColor.accent.opacity(configuration.isPressed ? 0.12 : 0.24), radius: 12, x: 0, y: 8)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -169,15 +164,11 @@ struct AppSecondaryButtonStyle: ButtonStyle {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.xs)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.clear)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppColor.accent.opacity(0.1))
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(AppColor.accent, lineWidth: 1.5)
-            )
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -191,33 +182,6 @@ struct AppScreenBackground<Content: View>: View {
     var body: some View {
         ZStack {
             AppColor.background
-                .ignoresSafeArea()
-
-            // Subtle blue tint top-left — adapts to both modes
-            LinearGradient(
-                colors: [
-                    AppColor.accent.opacity(0.06),
-                    AppColor.background
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            // Soft accent circle (top-right)
-            Circle()
-                .fill(AppColor.accent.opacity(0.06))
-                .frame(width: 260, height: 260)
-                .blur(radius: 30)
-                .offset(x: 160, y: -290)
-                .ignoresSafeArea()
-
-            // Decorative hexagon outline
-            HexagonShape()
-                .stroke(AppColor.accent.opacity(0.06), lineWidth: 1)
-                .frame(width: 320, height: 320)
-                .rotationEffect(.degrees(8))
-                .offset(x: 170, y: -250)
                 .ignoresSafeArea()
 
             content
@@ -260,11 +224,11 @@ struct BrandMark: View {
 struct BrandLockup: View {
     var title: String = "NexGenSpec"
     var subtitle: String? = "Field-ready inspection reports"
-    var markSize: CGFloat = 60
+    var markSize: CGFloat = 48
     var alignment: HorizontalAlignment = .leading
 
     var body: some View {
-        VStack(alignment: alignment, spacing: Spacing.sm) {
+        VStack(alignment: alignment, spacing: Spacing.xs) {
             if UIImage(named: "NexGenSpecLogo") != nil {
                 Image("NexGenSpecLogo")
                     .resizable()
@@ -272,51 +236,29 @@ struct BrandLockup: View {
                     .frame(maxWidth: logoMaxWidth)
                     .accessibilityLabel(title)
             } else {
-                HStack(alignment: .center, spacing: Spacing.md) {
+                HStack(alignment: .center, spacing: Spacing.sm) {
                     BrandMark(size: markSize)
 
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text(title)
-                            .font(AppFont.hero)
-                            .foregroundStyle(.white)
-                            .kerning(-1.2)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(AppFont.subheadline)
-                                .foregroundStyle(Color.white.opacity(0.80))
-                        }
-                    }
+                    Text(title)
+                        .font(AppFont.title2)
+                        .foregroundStyle(.primary)
+                        .kerning(-0.5)
                 }
             }
 
-            if let subtitle, UIImage(named: "NexGenSpecLogo") != nil {
+            if let subtitle {
                 Text(subtitle)
-                    .font(AppFont.subheadline)
-                    .foregroundStyle(Color.white.opacity(0.80))
+                    .font(AppFont.footnote)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(alignment == .center ? .center : .leading)
             }
         }
-        .padding(.horizontal, Spacing.lg)
-        .padding(.vertical, Spacing.md)
-        .background(
-            LinearGradient(
-                colors: [AppColor.brandNavy, Color(red: 0.11, green: 0.12, blue: 0.23)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
     }
 
     private var logoMaxWidth: CGFloat {
-        max(markSize * 3.6, 220)
+        max(markSize * 3, 180)
     }
 }
 
