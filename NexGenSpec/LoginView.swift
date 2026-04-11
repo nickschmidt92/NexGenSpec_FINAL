@@ -24,23 +24,27 @@ struct LoginView: View {
         AppScreenBackground {
             ScrollView {
                 VStack(spacing: Spacing.xl) {
-                    VStack(spacing: Spacing.lg) {
-                        BrandLockup(
-                            subtitle: "Professional inspection reports, secure media, and field-ready workflows.",
-                            markSize: 100,
-                            alignment: .center
-                        )
+                    VStack(spacing: Spacing.md) {
+                        if UIImage(named: "NexGenSpecLogo") != nil {
+                            Image("NexGenSpecLogo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 280)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .accessibilityLabel("NexGenSpec Logo")
+                        } else {
+                            BrandLockup(
+                                subtitle: "Professional inspection reports, secure media, and field-ready workflows.",
+                                markSize: 100,
+                                alignment: .center
+                            )
+                        }
 
                         HStack(spacing: Spacing.sm) {
                             LoginCapabilityChip(title: "LiDAR Ready", systemImage: "viewfinder")
                             LoginCapabilityChip(title: "PDF Reports", systemImage: "doc.richtext")
                             LoginCapabilityChip(title: "Audit Trail", systemImage: "lock.doc")
                         }
-
-                        Text("Built for field inspectors who need evidence-grade media, defensible reports, and a cleaner handoff to the client.")
-                            .font(AppFont.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: 780)
                     .padding(.horizontal, Spacing.lg)

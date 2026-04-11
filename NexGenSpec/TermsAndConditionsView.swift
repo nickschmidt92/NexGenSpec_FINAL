@@ -32,7 +32,7 @@ public struct TermsAndConditionsView: View {
                             markSize: 60
                         )
 
-                        Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace and is legally separate from NexGenSpec.")
+                        Text("NexGenSpec is inspection reporting software only. You are responsible for licensing, insurance, and report content. This app is not a marketplace.")
                             .font(AppFont.footnote)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)

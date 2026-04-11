@@ -66,23 +66,32 @@ private struct WelcomeScreen: View {
     let onStart: () -> Void
 
     var body: some View {
-        AppScreenBackground {
-            VStack(spacing: 40) {
+        ZStack {
+            AppColor.brandNavy
+                .ignoresSafeArea()
+
+            VStack(spacing: 32) {
                 Spacer()
 
-                BrandLockup(
-                    subtitle: "Field-ready inspection workflows with cleaner reports and secure records.",
-                    markSize: 88,
-                    alignment: .center
-                )
-                .frame(maxWidth: 420)
-                .accessibilityLabel("NexGenSpec Logo")
+                if UIImage(named: "NexGenSpecLogo") != nil {
+                    Image("NexGenSpecLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 320)
+                        .accessibilityLabel("NexGenSpec Logo")
+                } else {
+                    BrandMark(size: 100)
+                    Text("NexGenSpec")
+                        .font(AppFont.hero)
+                        .foregroundStyle(.white)
+                        .kerning(-1.2)
+                }
 
                 Text("The future of inspections is here.\nLet's get you set up.")
                     .font(.title3)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
+                    .foregroundStyle(Color.white.opacity(0.7))
+                    .padding(.horizontal, 32)
 
                 Spacer()
 
@@ -94,6 +103,7 @@ private struct WelcomeScreen: View {
                 .accessibilityLabel("Get started with NexGenSpec")
 
                 Spacer()
+                    .frame(height: 40)
             }
             .padding()
         }
