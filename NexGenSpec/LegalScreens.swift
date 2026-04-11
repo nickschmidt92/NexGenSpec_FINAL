@@ -33,8 +33,8 @@ struct LegalConstants {
     }()
     static let dataSafetyPDFName = "DataSafetySummary" // PDF in bundle
 
-    static let privacyPolicyEffectiveDate = "Effective Date: January 1, 2026"
-    static let termsOfServiceEffectiveDate = "Effective Date: January 1, 2026"
+    static let privacyPolicyEffectiveDate = "Effective Date: April 10, 2026"
+    static let termsOfServiceEffectiveDate = "Effective Date: April 10, 2026"
 }
 
 // MARK: - PrivacyPolicyView (Full Text + External Link)
