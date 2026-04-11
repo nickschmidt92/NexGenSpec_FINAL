@@ -42,8 +42,8 @@ public struct TermsAndConditionsView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                         VStack(spacing: 2) {
-                            Text("Effective Date: February 7, 2026 (Terms of Service)")
-                            Text("Effective Date: February 7, 2026 (Privacy Policy)")
+                            Text("Effective Date: April 10, 2026 (Terms of Service)")
+                            Text("Effective Date: April 10, 2026 (Privacy Policy)")
                         }
                         .font(.footnote)
                         .foregroundColor(.secondary)
