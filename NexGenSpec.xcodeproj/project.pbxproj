@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C4D5E6F7A8B90C1D2E3F4A5C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C4D5E6F7A8B90C1D2E3F4A5B /* PrivacyInfo.xcprivacy */; };
 		2839C1E52F46795E0012726E /* RoomPlan.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2839C1E42F46795E0012726E /* RoomPlan.framework */; };
 		EBB43AFC2F86138700BE850A /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFB2F86138700BE850A /* FirebaseAuth */; };
 		EBB43AFE2F86138700BE850A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFD2F86138700BE850A /* FirebaseCore */; };
@@ -25,6 +26,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C4D5E6F7A8B90C1D2E3F4A5B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = NexGenSpec/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2839C1E42F46795E0012726E /* RoomPlan.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RoomPlan.framework; path = System/Library/Frameworks/RoomPlan.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F6000000000001 /* NexGenSpec.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NexGenSpec.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecTests.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 		A1B2C3D4E5F6000000000004 = {
 			isa = PBXGroup;
 			children = (
+				C4D5E6F7A8B90C1D2E3F4A5B /* PrivacyInfo.xcprivacy */,
 				A1B2C3D4E5F6000000000002 /* NexGenSpec */,
 				T1B2C3D4E5F6000000000005 /* NexGenSpecTests */,
 				2839C1E32F46795D0012726E /* Frameworks */,
@@ -187,6 +190,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C4D5E6F7A8B90C1D2E3F4A5C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
