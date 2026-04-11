@@ -16,6 +16,9 @@ struct AppSettingsView: View {
     @ObservedObject private var profile = InspectorProfile.shared
     @State private var showPaywall = false
 
+    // Logo picker
+    @State private var showLogoPicker = false
+
     // Delete Account flow
     @State private var showDeleteConfirm = false
     @State private var showDeletePasswordSheet = false
@@ -67,6 +70,61 @@ struct AppSettingsView: View {
                         title: "Inspector Profile",
                         subtitle: "Saved across inspections. Auto-fills new inspection forms and appears on reports."
                     ) {
+                        // Company logo
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Label("Company Logo", systemImage: "photo.badge.plus")
+                                .font(AppFont.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            HStack(spacing: Spacing.md) {
+                                if let logo = profile.companyLogo {
+                                    Image(uiImage: logo)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 64, height: 64)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                                        )
+                                } else {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(Color.secondary.opacity(0.1))
+                                        .frame(width: 64, height: 64)
+                                        .overlay(
+                                            Image(systemName: "building.2")
+                                                .font(.title2)
+                                                .foregroundStyle(.secondary)
+                                        )
+                                }
+
+                                VStack(alignment: .leading, spacing: Spacing.xs) {
+                                    Button {
+                                        showLogoPicker = true
+                                    } label: {
+                                        Text(profile.companyLogo == nil ? "Add Logo" : "Change Logo")
+                                            .font(AppFont.subheadline.weight(.semibold))
+                                    }
+
+                                    if profile.companyLogo != nil {
+                                        Button(role: .destructive) {
+                                            profile.removeCompanyLogo()
+                                        } label: {
+                                            Text("Remove")
+                                                .font(AppFont.caption)
+                                        }
+                                    }
+                                }
+
+                                Spacer()
+                            }
+
+                            Text("Appears on PDF reports in place of the NexGenSpec logo.")
+                                .font(AppFont.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.bottom, Spacing.xs)
+
                         SettingsTextFieldRow(title: "Inspector Name", text: $profile.inspectorName, systemImage: "person.fill")
                         SettingsTextFieldRow(title: "Company Name", text: $profile.companyName, systemImage: "building.2.fill")
                         SettingsTextFieldRow(title: "License #", text: $profile.licenseNumber, systemImage: "checkmark.seal.fill")
@@ -237,6 +295,13 @@ struct AppSettingsView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .environmentObject(subscriptions)
+        }
+        .sheet(isPresented: $showLogoPicker) {
+            LogoImagePicker { image in
+                if let image {
+                    profile.companyLogo = image
+                }
+            }
         }
     }
 
@@ -539,6 +604,40 @@ private struct SettingsBadge: View {
             .background(AppColor.accent.opacity(0.12))
             .foregroundStyle(AppColor.accent)
             .clipShape(Capsule())
+    }
+}
+
+// MARK: - Logo Image Picker
+
+private struct LogoImagePicker: UIViewControllerRepresentable {
+    let onPick: (UIImage?) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onPick: (UIImage?) -> Void
+        init(onPick: @escaping (UIImage?) -> Void) { self.onPick = onPick }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage)
+            onPick(image)
+            picker.dismiss(animated: true)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onPick(nil)
+            picker.dismiss(animated: true)
+        }
     }
 }
 

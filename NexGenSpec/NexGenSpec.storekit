@@ -30,19 +30,19 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "789.99",
+          "displayPrice" : "289.99",
           "familyShareable" : false,
           "groupNumber" : 1,
-          "internalID" : "annualpro1",
+          "internalID" : "annual",
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Full-featured Pro with unlimited exports, LiDAR, voice commands, and priority support",
+              "description" : "Unlimited inspections, branded PDFs, voice commands, LiDAR, annotations, invoicing",
               "displayName" : "Pro Annual",
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.nexgenspec.annualpro1",
+          "productID" : "com.nexgenspec.annual",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Pro Annual",
           "subscriptionGroupID" : "nexgenspec_pro",
@@ -55,71 +55,21 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "78.99",
-          "familyShareable" : false,
-          "groupNumber" : 2,
-          "internalID" : "monthlypro1",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "Full-featured Pro with unlimited exports, LiDAR, voice commands, and priority support",
-              "displayName" : "Pro Monthly",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.nexgenspec.monthlypro1",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Pro Monthly",
-          "subscriptionGroupID" : "nexgenspec_pro",
-          "type" : "RecurringSubscription"
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "289.99",
-          "familyShareable" : false,
-          "groupNumber" : 3,
-          "internalID" : "annual",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "PDF exports, inspection templates, and cloud backup",
-              "displayName" : "Standard Annual",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.nexgenspec.annual",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Standard Annual",
-          "subscriptionGroupID" : "nexgenspec_pro",
-          "type" : "RecurringSubscription"
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
           "displayPrice" : "28.99",
           "familyShareable" : false,
-          "groupNumber" : 4,
+          "groupNumber" : 2,
           "internalID" : "monthly1",
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "PDF exports, inspection templates, and cloud backup",
-              "displayName" : "Standard Monthly",
+              "description" : "Unlimited inspections, branded PDFs, voice commands, LiDAR, annotations, invoicing",
+              "displayName" : "Pro Monthly",
               "locale" : "en_US"
             }
           ],
           "productID" : "com.nexgenspec.monthly1",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Standard Monthly",
+          "referenceName" : "Pro Monthly",
           "subscriptionGroupID" : "nexgenspec_pro",
           "type" : "RecurringSubscription"
         }

@@ -25,6 +25,8 @@
 	<string>NexGenSpec uses your location to auto-fill the property address when creating a new inspection.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Used for secure authentication if enabled (optional).</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>PrivacyPolicyURL</key>
 	<string>https://www.nexgenspec.com/privacy</string>
 	<key>TermsAndConditionsURL</key>

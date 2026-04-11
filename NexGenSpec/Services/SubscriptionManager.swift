@@ -2,15 +2,13 @@
 //  SubscriptionManager.swift
 //  NexGenSpec
 //
-//  StoreKit 2 entitlement manager. Owns the 4 App Store product IDs, loads
+//  StoreKit 2 entitlement manager. Owns the App Store product IDs, loads
 //  them, listens for transaction updates, and publishes `isPro` so the rest
 //  of the app can gate features (export, unlimited inspections, etc.).
 //
 //  Product IDs configured in App Store Connect (NexGenSpec Pro group):
-//    - com.nexgenspec.annual       ($289.99 / year)
 //    - com.nexgenspec.monthly1     ($28.99  / month)
-//    - com.nexgenspec.annualpro1   ($789.99 / year)
-//    - com.nexgenspec.monthlypro1  ($78.99  / month)
+//    - com.nexgenspec.annual       ($289.99 / year)
 //
 
 import Foundation
@@ -22,12 +20,20 @@ public final class SubscriptionManager: ObservableObject {
     // MARK: - Product IDs
 
     public enum ProductID {
-        public static let monthly    = "com.nexgenspec.monthly1"
-        public static let annual     = "com.nexgenspec.annual"
-        public static let monthlyPro = "com.nexgenspec.monthlypro1"
-        public static let annualPro  = "com.nexgenspec.annualpro1"
+        // Current single-tier Pro products
+        public static let monthly = "com.nexgenspec.monthly1"
+        public static let annual  = "com.nexgenspec.annual"
 
-        public static let all: [String] = [annualPro, monthlyPro, annual, monthly]
+        // Legacy IDs (old two-tier pricing) — kept so existing subscribers
+        // retain entitlements if they purchased before the tier change.
+        static let legacyMonthlyPro = "com.nexgenspec.monthlypro1"
+        static let legacyAnnualPro  = "com.nexgenspec.annualpro1"
+
+        /// Products available for purchase (shown in paywall).
+        public static let current: [String] = [annual, monthly]
+
+        /// All recognized IDs including legacy (used for entitlement checks).
+        public static let all: [String] = [annual, monthly, legacyAnnualPro, legacyMonthlyPro]
     }
 
     // MARK: - Free trial
@@ -175,9 +181,9 @@ public final class SubscriptionManager: ObservableObject {
 
     private func loadProducts() async {
         do {
-            let fetched = try await Product.products(for: ProductID.all)
-            // Preserve our preferred display order (highest tier first).
-            let order = ProductID.all
+            let fetched = try await Product.products(for: ProductID.current)
+            // Preserve our preferred display order (annual first).
+            let order = ProductID.current
             self.products = fetched.sorted {
                 (order.firstIndex(of: $0.id) ?? .max)
                 < (order.firstIndex(of: $1.id) ?? .max)

@@ -54,11 +54,19 @@ struct PaywallView: View {
                             VStack(spacing: 8) {
                                 ProgressView("Loading purchase options…")
                                 if let err = subscriptions.lastError {
+                                    #if DEBUG
                                     Text("Debug: \(err)")
                                         .font(.caption)
                                         .foregroundColor(.red)
                                         .multilineTextAlignment(.center)
                                         .padding(.horizontal)
+                                    #else
+                                    Text("Unable to load purchase options. Please check your connection and try again.")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal)
+                                    #endif
                                 }
                                 Button("Retry") {
                                     Task { await subscriptions.refresh() }

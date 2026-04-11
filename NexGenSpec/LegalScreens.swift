@@ -3,8 +3,10 @@ import SwiftUI
 // MARK: - AuditLog Helper
 struct LegacyAuditLogHelper {
     static func logAcceptance(of screen: String) {
-        // Implement actual logging here, e.g., send to server or save locally
+        #if DEBUG
         print("User accepted \(screen) at \(Date())")
+        #endif
+        AuditLog.log(event: "Accepted \(screen)")
     }
 }
 

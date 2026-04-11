@@ -28,7 +28,7 @@ home inspection,property report,inspector,defect,PDF,real estate,building,checkl
 ───────────────────────────────────────────────────────────────
 PROMOTIONAL TEXT (170 chars max — can be updated without new build)
 ───────────────────────────────────────────────────────────────
-Professional home inspections made simple. Capture defects, annotate photos, generate branded PDF reports, and send invoices — all from your iPad or iPhone.
+Professional home inspections made simple. Capture defects, annotate photos, generate PDF reports with your company logo, and send invoices — all from your iPad or iPhone.
 
 ───────────────────────────────────────────────────────────────
 DESCRIPTION (4000 chars max)
@@ -42,7 +42,7 @@ CAPTURE & ANNOTATE
 Take photos directly in the app and mark them up with arrows, circles, and PencilKit drawings. Annotations are baked into report images while originals are preserved as untouched evidence.
 
 PROFESSIONAL PDF REPORTS
-Generate branded inspection reports with your company name, license number, and the NexGenSpec logo. Reports include severity badges, photo evidence, signatures, and a SHA-256 verification hash for tamper-proof delivery.
+Generate professional inspection reports with your company logo, name, and license number. Reports include severity badges, photo evidence, signatures, and a SHA-256 verification hash for tamper-proof delivery.
 
 HANDS-FREE VOICE COMMANDS (PRO)
 Use voice commands during inspections: "Next room", "Add note cracked foundation", "Defect: broken window". Stay focused on the inspection while NexGenSpec handles the documentation.
@@ -51,7 +51,7 @@ LIDAR ROOM SCANNING
 Capture 3D room scans using your device's LiDAR sensor. USDZ models are saved alongside the inspection for dimensional reference.
 
 INVOICE & SEND
-Fill out an invoice, attach the PDF report, and email everything to your client directly from the app. Branded HTML email templates make every communication look professional.
+Fill out an invoice, attach the PDF report, and email everything to your client directly from the app. Professional HTML email templates make every communication look polished.
 
 BUILT FOR SECURITY
 - All data stored on-device with iOS Data Protection
@@ -60,15 +60,16 @@ BUILT FOR SECURITY
 - Finalized reports are locked and hash-verified
 - Delete account permanently removes all data
 
-SUBSCRIPTION PLANS
-NexGenSpec is free to download with basic features. Upgrade to Pro for:
-- Clean, unbranded PDF reports
+SUBSCRIPTION
+NexGenSpec is free to download with 3 full-featured inspections. Upgrade to Pro for:
+- Unlimited inspections
+- PDF reports with your company logo
 - Voice commands
-- Priority support
-- Unlimited exports
+- LiDAR room scanning
+- Annotation pack
+- Invoicing & client delivery
 
-Standard: $28.99/month or $289.99/year
-Pro: $78.99/month or $789.99/year
+Pro: $28.99/month or $289.99/year
 
 Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings > Apple ID > Subscriptions.
 
@@ -84,18 +85,27 @@ Initial release! Comprehensive home inspection app with PDF reports, photo annot
 APP REVIEW NOTES
 ───────────────────────────────────────────────────────────────
 Demo Account:
-  Email: supersecret123@yahoo.com
-  Password: [SET BEFORE SUBMISSION — create a Firebase Auth account with this email]
+  Email: appreview@nexgenspec.com
+  Password: [CREATE THIS ACCOUNT IN FIREBASE BEFORE SUBMISSION]
+
+  To test the full app flow:
+  1. Log in with the demo account above
+  2. Tap "Create New Inspection" on the Dashboard
+  3. Fill in a property address and add a section (e.g. "Roof")
+  4. Add a defect item, take or select a photo, add an annotation
+  5. Tap "Generate Report" to preview the PDF
+  6. Free users get 3 full inspections; the paywall appears after that
 
 Notes for Reviewer:
 - This is a professional home inspection app for licensed property inspectors.
 - The app requires login to protect inspection data (client PII, property photos).
-- Free users can generate watermarked PDF reports. Pro subscription removes the watermark and enables voice commands.
-- Voice commands require microphone and speech recognition permissions, which are requested at the time of use (not on launch).
-- LiDAR scanning requires a device with a LiDAR sensor (iPad Pro, iPhone Pro).
-- The "Delete Account" option is in Settings > Delete Account, with confirmation and re-authentication.
-- Subscriptions are auto-renewable and managed through App Store Connect.
-- The app does NOT collect data beyond what is needed for inspection reports.
+- Free users get 3 complete inspections with full PDF export. After 3 inspections, a Pro subscription ($28.99/mo or $289.99/yr) is required to continue creating new inspections.
+- Voice commands require microphone and speech recognition permissions, requested at the time of use (not on launch).
+- LiDAR scanning requires a device with a LiDAR sensor (iPad Pro, iPhone Pro). If no LiDAR sensor is present, the feature is hidden — this is expected behavior.
+- Company logo upload (Settings > Inspector Profile) allows inspectors to brand PDF reports with their own logo. If no logo is uploaded, the NexGenSpec app icon is used as a default.
+- The "Delete Account" option is in Settings > Delete Account, with confirmation and re-authentication. This permanently removes all user data from Firebase and the device.
+- Subscriptions are auto-renewable and managed through the App Store. Users can cancel in iOS Settings > Apple ID > Subscriptions.
+- The app stores all inspection data on-device. No user data is shared with third parties.
 
 ───────────────────────────────────────────────────────────────
 SCREENSHOT REQUIREMENTS
@@ -109,7 +119,7 @@ Recommended screenshots (in order):
   1. Dashboard with active inspections
   2. Inspection overview with sections sidebar
   3. Photo annotation with PencilKit markup
-  4. PDF report preview showing branded header
+  4. PDF report preview showing company logo header
   5. Finalize view with signatures
   6. Voice command overlay in action
   7. Settings with inspector profile
@@ -118,6 +128,6 @@ Recommended screenshots (in order):
 ───────────────────────────────────────────────────────────────
 SUPPORT & CONTACT
 ───────────────────────────────────────────────────────────────
-Support URL:    https://www.nexgenspec.com/support
+Support URL:    https://www.nexgenspec.com
 Support Email:  contact@nexgenspec.com
 Marketing URL:  https://www.nexgenspec.com

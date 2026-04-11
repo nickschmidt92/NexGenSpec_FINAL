@@ -36,13 +36,13 @@ public struct AuditLog {
                 handle.write(data)
             } else {
                 // Basic error reporting: data conversion failed
-                print("AuditLog Error: Failed to convert event line to data. Event: \(event), File URL: \(url)")
+                Diagnostics.logError(context: "AuditLog Error: Failed to convert event line to data. Event: \(event), File URL: \(url)")
                 // In production, implement user-facing error reporting here.
             }
             do {
                 try handle.close()
             } catch {
-                print("AuditLog Error: Failed to close file handle. Event: \(event), File URL: \(url), Error: \(error)")
+                Diagnostics.logError(context: "AuditLog Error: Failed to close file handle. Event: \(event), File URL: \(url), Error: \(error)")
                 // In production, implement user-facing error reporting here.
             }
         } else {
@@ -50,11 +50,11 @@ public struct AuditLog {
                 if let data = line.data(using: .utf8) {
                     try FileSecurity.writeProtected(data, to: url)
                 } else {
-                    print("AuditLog Error: Failed to convert event line to data. Event: \(event), File URL: \(url)")
+                    Diagnostics.logError(context: "AuditLog Error: Failed to convert event line to data. Event: \(event), File URL: \(url)")
                     // In production, implement user-facing error reporting here.
                 }
             } catch {
-                print("AuditLog Error: Failed to write event to log file. Event: \(event), File URL: \(url), Error: \(error)")
+                Diagnostics.logError(context: "AuditLog Error: Failed to write event to log file. Event: \(event), File URL: \(url), Error: \(error)")
                 // In production, implement user-facing error reporting here.
             }
         }

@@ -379,14 +379,22 @@ private struct DashboardHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            BrandLockup(
-                subtitle: "Track active inspections, secure your media, and keep reports moving.",
-                markSize: 68
-            )
+            HStack(alignment: .center, spacing: Spacing.sm) {
+                BrandMark(size: 44)
 
-            Text("Signed in as \(username ?? "Inspector")")
-                .font(AppFont.subheadline)
-                .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("NexGenSpec")
+                        .font(AppFont.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(username ?? "Inspector")
+                        .font(AppFont.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
 
             HStack(spacing: Spacing.sm) {
                 DashboardMetric(title: "Total", value: "\(totalCount)", systemImage: "tray.full.fill")

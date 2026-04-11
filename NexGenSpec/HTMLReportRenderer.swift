@@ -44,19 +44,21 @@ enum HTMLReportRenderer {
         if !inspection.clientEmail.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Email:</strong> \(escapeHTML(inspection.clientEmail))</p>\n" }
         if !inspection.clientPhone.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Phone:</strong> \(escapeHTML(inspection.clientPhone))</p>\n" }
 
-        // Embed app icon as base64 for report header branding
-        let logoBase64: String = {
+        // Embed company logo (or fallback to app icon) as base64 for report header
+        let customLogo = InspectorProfile.shared.companyLogoBase64
+        let logoBase64: String = customLogo ?? {
             if let asset = UIImage(named: "AppIcon"),
                let data = asset.pngData() {
                 return data.base64EncodedString()
             }
-            // Fallback: load from bundle icon files
             if let url = Bundle.main.url(forResource: "AppIcon60x60@2x", withExtension: "png"),
                let data = try? Data(contentsOf: url) {
                 return data.base64EncodedString()
             }
             return ""
         }()
+        let logoAlt = customLogo != nil ? escapeHTML(InspectorProfile.shared.companyName.isEmpty ? "Company Logo" : InspectorProfile.shared.companyName) : "NexGenSpec"
+        let logoLabel = customLogo != nil ? escapeHTML(InspectorProfile.shared.companyName) : "NexGenSpec"
 
         var html = """
         <!DOCTYPE html>
@@ -115,7 +117,7 @@ enum HTMLReportRenderer {
         <div class="container">
         \(watermark ? "<div class=\"free-banner\">Generated with NexGenSpec Free — Upgrade to Pro for clean, branded reports</div>" : "")
         <div class="card header-card">
-        \(!logoBase64.isEmpty ? "<div style=\"display:flex;align-items:center;gap:12px;margin-bottom:12px;\"><img src=\"data:image/png;base64,\(logoBase64)\" style=\"width:48px;height:48px;border-radius:10px;\" alt=\"NexGenSpec\"/><span style=\"font-size:1.1rem;font-weight:700;color:#0066cc;\">NexGenSpec</span></div>" : "")
+        \(!logoBase64.isEmpty ? "<div style=\"display:flex;align-items:center;gap:12px;margin-bottom:12px;\"><img src=\"data:image/png;base64,\(logoBase64)\" style=\"width:48px;height:48px;border-radius:10px;object-fit:contain;\" alt=\"\(logoAlt)\"/>\(!logoLabel.isEmpty ? "<span style=\"font-size:1.1rem;font-weight:700;color:#0066cc;\">\(logoLabel)</span>" : "")</div>" : "")
         <h1>Inspection Report</h1>
         <p class="meta"><strong>Client:</strong> \(escapeHTML(inspection.clientName))</p>
         \(emailPhoneMeta)

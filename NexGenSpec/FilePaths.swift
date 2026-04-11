@@ -9,7 +9,8 @@ enum FilePaths {
 
     static var documentDirectory: URL {
         guard let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            fatalError("Documents directory unavailable")
+            // Fallback to temp directory — should never happen on iOS but avoids a crash
+            return URL(fileURLWithPath: NSTemporaryDirectory())
         }
         return url
     }

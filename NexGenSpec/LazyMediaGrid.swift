@@ -82,6 +82,7 @@ struct LazyMediaGrid: View {
     }
 }
 
+#if DEBUG
 #Preview {
     // Demo URLs (replace with real photo/video URLs in app)
     let imageURLs = (1...16).map { _ in URL(string: "https://picsum.photos/200")! }
@@ -89,3 +90,4 @@ struct LazyMediaGrid: View {
     let sampleMedia = imageURLs + videoURLs
     LazyMediaGrid(mediaURLs: sampleMedia)
 }
+#endif
