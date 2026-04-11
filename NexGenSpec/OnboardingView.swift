@@ -184,7 +184,7 @@ private struct OnboardingLegalScreen: View {
 
             VStack(spacing: 12) {
                 NavigationLink {
-                    PrivacyPolicyView()
+                    PrivacyPolicyContent()
                         .onDisappear { viewedPrivacy = true }
                 } label: {
                     OnboardingLegalRow(
@@ -197,7 +197,7 @@ private struct OnboardingLegalScreen: View {
                 .buttonStyle(.plain)
 
                 NavigationLink {
-                    TermsOfServiceView()
+                    TermsOfServiceContent()
                         .onDisappear { viewedTerms = true }
                 } label: {
                     OnboardingLegalRow(

@@ -117,6 +117,78 @@ struct PrivacyPolicyView: View {
     }
 }
 
+// MARK: - PrivacyPolicyContent (no NavigationStack — for embedding in existing navigation)
+struct PrivacyPolicyContent: View {
+    @State private var showExternalLinkAlert = false
+    @State private var externalLink: URL? = nil
+
+    var body: some View {
+        AppScreenBackground {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text(LegalConstants.privacyPolicyEffectiveDate)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.top)
+
+                    Text("Privacy Policy")
+                        .font(.largeTitle)
+                        .bold()
+                        .foregroundColor(Branding.accentColor)
+                        .padding(.bottom, 10)
+
+                    Group {
+                        Text("""
+                        Your privacy is important to us. This policy explains how we collect, use, and protect your information when you use our app.
+
+                        We collect minimal personal information and never share it with third parties without your consent.
+
+                        We collect device information, usage data, and analytics to improve your experience.
+
+                        We implement reasonable security measures to safeguard your data.
+
+                        You have rights to access, update, or delete your personal information.
+
+                        For more details, please review the full Privacy Policy hosted on our website.
+                        """)
+                        .font(.body)
+                        .multilineTextAlignment(.leading)
+                    }
+                    .padding(.horizontal)
+
+                    Button(action: {
+                        externalLink = LegalConstants.privacyPolicyURL
+                        showExternalLinkAlert = true
+                    }) {
+                        Text("View Full Privacy Policy Online")
+                            .foregroundColor(Branding.accentColor)
+                            .font(.headline)
+                            .underline()
+                    }
+                    .padding(.vertical)
+
+                    Spacer(minLength: 30)
+                }
+                .padding(.horizontal)
+            }
+        }
+        .navigationTitle("Privacy Policy")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(isPresented: $showExternalLinkAlert) {
+            Alert(
+                title: Text("Open External Link?"),
+                message: Text("You are about to open the full Privacy Policy in your browser."),
+                primaryButton: .default(Text("Open")) {
+                    if let url = externalLink {
+                        UIApplication.shared.open(url)
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
+}
+
 // MARK: - TermsOfServiceView (Full Text + External Link)
 struct TermsOfServiceView: View {
     @State private var showExternalLinkAlert = false
@@ -196,6 +268,78 @@ struct TermsOfServiceView: View {
             }
         }
         .tint(Branding.accentColor)
+    }
+}
+
+// MARK: - TermsOfServiceContent (no NavigationStack — for embedding in existing navigation)
+struct TermsOfServiceContent: View {
+    @State private var showExternalLinkAlert = false
+    @State private var externalLink: URL? = nil
+
+    var body: some View {
+        AppScreenBackground {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text(LegalConstants.termsOfServiceEffectiveDate)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.top)
+
+                    Text("Terms of Service")
+                        .font(.largeTitle)
+                        .bold()
+                        .foregroundColor(Branding.accentColor)
+                        .padding(.bottom, 10)
+
+                    Group {
+                        Text("""
+                        Welcome to our app. By using our services, you agree to the following terms and conditions.
+
+                        Use of the app is subject to compliance with all applicable laws and these terms.
+
+                        We reserve the right to update these terms at any time; continued use signifies acceptance of changes.
+
+                        You are responsible for maintaining the confidentiality of your account and password.
+
+                        We provide the app 'as is' without warranties or guarantees.
+
+                        For the full Terms of Service, please visit our website.
+                        """)
+                        .font(.body)
+                        .multilineTextAlignment(.leading)
+                    }
+                    .padding(.horizontal)
+
+                    Button(action: {
+                        externalLink = LegalConstants.termsOfServiceURL
+                        showExternalLinkAlert = true
+                    }) {
+                        Text("View Full Terms of Service Online")
+                            .foregroundColor(Branding.accentColor)
+                            .font(.headline)
+                            .underline()
+                    }
+                    .padding(.vertical)
+
+                    Spacer(minLength: 30)
+                }
+                .padding(.horizontal)
+            }
+        }
+        .navigationTitle("Terms of Service")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(isPresented: $showExternalLinkAlert) {
+            Alert(
+                title: Text("Open External Link?"),
+                message: Text("You are about to open the full Terms of Service in your browser."),
+                primaryButton: .default(Text("Open")) {
+                    if let url = externalLink {
+                        UIApplication.shared.open(url)
+                    }
+                },
+                secondaryButton: .cancel()
+            )
+        }
     }
 }
 
