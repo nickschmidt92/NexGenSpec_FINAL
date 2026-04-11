@@ -21,7 +21,10 @@ struct LoginView: View {
     }
 
     var body: some View {
-        AppScreenBackground {
+        ZStack {
+            AppColor.brandNavy
+                .ignoresSafeArea()
+
             ScrollView {
                 VStack(spacing: Spacing.xl) {
                     VStack(spacing: Spacing.md) {
@@ -29,21 +32,14 @@ struct LoginView: View {
                             Image("NexGenSpecLogo")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(maxWidth: 280)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .frame(maxWidth: 240)
                                 .accessibilityLabel("NexGenSpec Logo")
                         } else {
-                            BrandLockup(
-                                subtitle: "Professional inspection reports, secure media, and field-ready workflows.",
-                                markSize: 100,
-                                alignment: .center
-                            )
-                        }
-
-                        HStack(spacing: Spacing.sm) {
-                            LoginCapabilityChip(title: "LiDAR Ready", systemImage: "viewfinder")
-                            LoginCapabilityChip(title: "PDF Reports", systemImage: "doc.richtext")
-                            LoginCapabilityChip(title: "Audit Trail", systemImage: "lock.doc")
+                            BrandMark(size: 80)
+                            Text("NexGenSpec")
+                                .font(AppFont.hero)
+                                .foregroundStyle(.white)
+                                .kerning(-1.2)
                         }
                     }
                     .frame(maxWidth: 780)
@@ -55,14 +51,15 @@ struct LoginView: View {
                             VStack(alignment: .leading, spacing: Spacing.xs) {
                                 Text("Sign In")
                                     .font(AppFont.title2)
+                                    .foregroundStyle(.white)
 
                                 Text("Use your NexGenSpec account email and password.")
                                     .font(AppFont.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.white.opacity(0.6))
                             }
 
                             VStack(spacing: Spacing.md) {
-                                AuthFieldContainer(title: "Email", systemImage: "envelope.fill") {
+                                LoginDarkField(title: "Email", systemImage: "envelope.fill") {
                                     TextField("you@example.com", text: $email)
                                         .textInputAutocapitalization(.never)
                                         .keyboardType(.emailAddress)
@@ -71,15 +68,17 @@ struct LoginView: View {
                                         .submitLabel(.next)
                                         .focused($focusedField, equals: .email)
                                         .onSubmit { focusedField = .password }
+                                        .foregroundStyle(.white)
                                 }
 
-                                AuthFieldContainer(title: "Password", systemImage: "lock.fill") {
+                                LoginDarkField(title: "Password", systemImage: "lock.fill") {
                                     SecureField("Password", text: $password)
                                         .textInputAutocapitalization(.never)
                                         .textContentType(.password)
                                         .submitLabel(.go)
                                         .focused($focusedField, equals: .password)
                                         .onSubmit { attemptLogin() }
+                                        .foregroundStyle(.white)
                                 }
                             }
 
@@ -98,9 +97,9 @@ struct LoginView: View {
                             .accessibilityLabel("Log In")
 
                             HStack(spacing: Spacing.sm) {
-                                Rectangle().fill(AppColor.border).frame(height: 1)
-                                Text("or").font(AppFont.footnote).foregroundStyle(.secondary)
-                                Rectangle().fill(AppColor.border).frame(height: 1)
+                                Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
+                                Text("or").font(AppFont.footnote).foregroundStyle(.white.opacity(0.5))
+                                Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
                             }
 
                             Button {
@@ -112,8 +111,8 @@ struct LoginView: View {
                                         .fontWeight(.semibold)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 50)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                .background(Color(uiColor: .label))
+                                .foregroundStyle(AppColor.brandNavy)
+                                .background(Color.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
                             .disabled(authManager.isBusy)
@@ -126,6 +125,7 @@ struct LoginView: View {
                                     showingForgotPassword = true
                                 }
                                 .font(AppFont.footnote)
+                                .foregroundStyle(.white.opacity(0.6))
 
                                 Spacer()
 
@@ -133,9 +133,16 @@ struct LoginView: View {
                                     showingCreateAccount = true
                                 }
                                 .font(AppFont.footnote)
+                                .foregroundStyle(AppColor.brandCyan)
                             }
                         }
-                        .inspectionCard()
+                        .padding(Spacing.lg)
+                        .background(Color.white.opacity(0.07))
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
                     }
                     .frame(maxWidth: 780)
                     .padding(.horizontal, Spacing.lg)
@@ -351,7 +358,7 @@ private struct CreateAccountView: View {
 
 // MARK: - Reusable UI bits (unchanged from previous version)
 
-private struct AuthFieldContainer<Content: View>: View {
+private struct LoginDarkField<Content: View>: View {
     let title: String
     let systemImage: String
     let content: Content
@@ -366,11 +373,11 @@ private struct AuthFieldContainer<Content: View>: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(title)
                 .font(AppFont.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.6))
 
             HStack(spacing: Spacing.sm) {
                 Image(systemName: systemImage)
-                    .foregroundStyle(AppColor.accent)
+                    .foregroundStyle(AppColor.brandCyan)
                     .frame(width: 20)
 
                 content
@@ -378,27 +385,12 @@ private struct AuthFieldContainer<Content: View>: View {
             }
             .padding(.horizontal, Spacing.md)
             .frame(minHeight: 54)
-            .background(AppColor.surface)
+            .background(Color.white.opacity(0.08))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(AppColor.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-    }
-}
-
-private struct LoginCapabilityChip: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(AppFont.caption)
-            .padding(.horizontal, Spacing.sm)
-            .padding(.vertical, Spacing.xs)
-            .background(AppColor.accent.opacity(0.12))
-            .foregroundStyle(AppColor.accent)
-            .clipShape(Capsule())
     }
 }
