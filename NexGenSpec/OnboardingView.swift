@@ -73,19 +73,17 @@ private struct WelcomeScreen: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                if UIImage(named: "NexGenSpecLogo") != nil {
-                    Image("NexGenSpecLogo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 320)
-                        .accessibilityLabel("NexGenSpec Logo")
-                } else {
-                    BrandMark(size: 100)
-                    Text("NexGenSpec")
-                        .font(AppFont.hero)
-                        .foregroundStyle(.white)
-                        .kerning(-1.2)
-                }
+                Image("NexGenSpecLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+                    .accessibilityLabel("NexGenSpec Logo")
+
+                Text("NexGenSpec")
+                    .font(AppFont.hero)
+                    .foregroundStyle(.white)
+                    .kerning(-1.2)
 
                 Text("The future of inspections is here.\nLet's get you set up.")
                     .font(.title3)
