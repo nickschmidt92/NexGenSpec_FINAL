@@ -28,7 +28,14 @@ struct InspectionView: View {
     @State private var draft: InspectionVersion = .empty
     @State private var selectedPane: InspectionPane = .overview
     @State private var showShortcutsHelp = false
+    @State private var showReportPreview = false
     @StateObject private var voiceManager = VoiceCommandManager()
+    @StateObject private var weatherService = WeatherService()
+
+    // Timer state
+    @State private var timerDisplayString = "00:00:00"
+    @State private var timerSessionStart: Date?
+    @State private var timerTimer: Timer?
 
     private var jobId: UUID {
         UUID(uuidString: draft.inspection.inspectionId) ?? version.id
@@ -48,6 +55,19 @@ struct InspectionView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    Label("Timer: \(timerDisplayString)", systemImage: "timer")
+                        .disabled(true)
+                    if let w = draft.inspection.weather {
+                        Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
+                            .disabled(true)
+                    } else if weatherService.isFetching {
+                        Label("Fetching weather…", systemImage: "cloud")
+                            .disabled(true)
+                    } else {
+                        Label("Weather unavailable", systemImage: "cloud.slash")
+                            .disabled(true)
+                    }
+                    Divider()
                     if store.isSaving {
                         Label("Saving…", systemImage: "arrow.triangle.2.circlepath")
                             .disabled(true)
@@ -64,6 +84,8 @@ struct InspectionView: View {
                         .keyboardShortcut(.rightArrow, modifiers: .command)
                     Button("Finalize") { selectedPane = .finalize }
                         .keyboardShortcut("f", modifiers: .command)
+                    Button("Preview Report") { showReportPreview = true }
+                        .keyboardShortcut("p", modifiers: [.command, .shift])
                     if draft.locked {
                         Button("Invoice & Send") { selectedPane = .invoice }
                             .keyboardShortcut("i", modifiers: .command)
@@ -79,14 +101,36 @@ struct InspectionView: View {
         .sheet(isPresented: $showShortcutsHelp) {
             ShortcutsHelpView()
         }
+        .fullScreenCover(isPresented: $showReportPreview) {
+            ReportPreviewView(version: draft)
+        }
         .onAppear {
             draft = version
             if draft.inspection.sections.isEmpty { selectedPane = .overview }
             voiceManager.onCommand = { action in
                 handleVoiceCommand(action)
             }
+            // Start timer
+            startTimer()
+            // Fetch weather if not already captured
+            if draft.inspection.weather == nil {
+                weatherService.fetchCurrentWeather { data in
+                    if let data {
+                        draft.inspection.weather = data
+                    }
+                }
+            }
         }
-        .onDisappear { updated(draft) }
+        .onDisappear {
+            pauseTimer()
+            updated(draft)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            pauseTimer()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            startTimer()
+        }
     }
 
     private func handleVoiceCommand(_ action: VoiceCommandManager.CommandAction) {
@@ -152,6 +196,42 @@ struct InspectionView: View {
         default:
             selectedPane = .section(sections[sections.count - 1].id)
         }
+    }
+
+    // MARK: - Timer
+
+    private func startTimer() {
+        if draft.inspection.timerStartDate == nil {
+            draft.inspection.timerStartDate = Date()
+        }
+        timerSessionStart = Date()
+        updateTimerDisplay()
+        timerTimer?.invalidate()
+        timerTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            Task { @MainActor in
+                updateTimerDisplay()
+            }
+        }
+    }
+
+    private func pauseTimer() {
+        timerTimer?.invalidate()
+        timerTimer = nil
+        if let sessionStart = timerSessionStart {
+            draft.inspection.timerElapsedSeconds += Date().timeIntervalSince(sessionStart)
+            timerSessionStart = nil
+        }
+    }
+
+    private func updateTimerDisplay() {
+        var total = draft.inspection.timerElapsedSeconds
+        if let sessionStart = timerSessionStart {
+            total += Date().timeIntervalSince(sessionStart)
+        }
+        let hours = Int(total) / 3600
+        let minutes = (Int(total) % 3600) / 60
+        let seconds = Int(total) % 60
+        timerDisplayString = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     private var sectionSidebar: some View {
@@ -307,7 +387,7 @@ private struct SectionRowView: View {
                     .font(.caption2)
                     .padding(4)
                     .background(AppColor.warning.opacity(0.2))
-                    .foregroundColor(AppColor.warning)
+                    .foregroundStyle(AppColor.warning)
                     .clipShape(Circle())
             }
         }
@@ -326,6 +406,7 @@ private struct ShortcutsHelpView: View {
                     shortcutRow("⌘←", "Previous section")
                     shortcutRow("⌘→", "Next section")
                     shortcutRow("⌘F", "Finalize")
+                    shortcutRow("⇧⌘P", "Preview Report")
                     shortcutRow("⌘I", "Invoice & Send (when finalized)")
                     shortcutRow("⌘?", "This shortcuts list")
                 }
@@ -347,7 +428,7 @@ private struct ShortcutsHelpView: View {
             Spacer()
             Text(keys)
                 .font(.system(.body, design: .monospaced))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -363,7 +444,7 @@ private struct InspectionItemRowLabel: View {
                     .font(.headline)
                 Text(item.status.displayName)
                     .font(.caption)
-                    .foregroundColor(item.isDefect ? AppColor.critical : .secondary)
+                    .foregroundStyle(item.isDefect ? AppColor.critical : Color.secondary)
             }
             Spacer()
             if let sev = item.defectSeverity {
@@ -371,7 +452,7 @@ private struct InspectionItemRowLabel: View {
                     .font(.caption)
                     .padding(4)
                     .background(sev.badgeColor.opacity(0.2))
-                    .foregroundColor(sev.badgeColor)
+                    .foregroundStyle(sev.badgeColor)
                     .clipShape(Capsule())
             }
         }

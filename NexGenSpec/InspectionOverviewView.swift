@@ -63,9 +63,28 @@ struct InspectionOverviewView: View {
                         }
                     }
                     
+                    // Weather info
+                    if let weather = version.inspection.weather {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Weather at Inspection")
+                                .font(.headline)
+                            HStack(spacing: 16) {
+                                Label(weather.temperatureString, systemImage: "thermometer")
+                                Label(weather.conditions, systemImage: "cloud.sun")
+                                Label(weather.humidityString, systemImage: "humidity")
+                                Label(weather.windSpeedString, systemImage: "wind")
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .background(Color.blue.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+
                     // Drone / Video
                     droneVideoSection
-                    
+
                     Spacer()
                 }
                 .padding()

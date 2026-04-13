@@ -187,8 +187,16 @@ public final class InspectionStore: ObservableObject {
 
 public extension InspectionStore {
 
-    func createNewInspection(clientName: String, clientEmail: String, clientPhone: String, propertyAddress: String, inspectorName: String, inspectorConfirmed: Bool) {
-        guard let template = heavyTemplate, inspectorConfirmed else { return }
+    func createNewInspection(clientName: String, clientEmail: String, clientPhone: String, propertyAddress: String, inspectorName: String, inspectorConfirmed: Bool, customTemplateId: String? = nil) {
+        let template: HeavyTemplate
+        if let customId = customTemplateId,
+           let custom = CustomTemplateStore.shared.template(for: customId) {
+            template = CustomTemplateStore.shared.toHeavyTemplate(custom)
+        } else {
+            guard let builtin = heavyTemplate else { return }
+            template = builtin
+        }
+        guard inspectorConfirmed else { return }
 
         let jobId = UUID()
         do {

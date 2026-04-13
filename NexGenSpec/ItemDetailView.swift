@@ -8,6 +8,7 @@
 
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 struct ItemDetailView: View {
     @Binding var item: InspectionItem
@@ -18,6 +19,15 @@ struct ItemDetailView: View {
     @State private var showCamera = false
     @State private var photoToAnnotate: InspectionPhoto?
     @State private var pendingAnnotationPhoto: InspectionPhoto?
+    @State private var photoToDelete: InspectionPhoto?
+    @State private var showDeleteConfirmation = false
+    @State private var draggedPhoto: InspectionPhoto?
+    @State private var importingCount = 0
+    @State private var importedSoFar = 0
+
+    // AI defect detection state
+    @State private var suggestedDefectTags: [String] = []
+    @State private var detectingPhotoId: UUID?
 
     private func bind<T>(_ keyPath: WritableKeyPath<InspectionItem, T>) -> Binding<T> {
         Binding(
@@ -153,7 +163,7 @@ struct ItemDetailView: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text("Tap a photo to annotate; capture or add from library.")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: Spacing.sm) {
                             ForEach(item.photos) { photo in
@@ -167,9 +177,35 @@ struct ItemDetailView: View {
                                     if !isLocked {
                                         Text("Tap to annotate")
                                             .font(.caption2)
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
+                                .contextMenu {
+                                    if !isLocked {
+                                        Button(role: .destructive) {
+                                            photoToDelete = photo
+                                            showDeleteConfirmation = true
+                                        } label: {
+                                            Label("Delete Photo", systemImage: "trash")
+                                        }
+                                    }
+                                }
+                                .onDrag {
+                                    draggedPhoto = photo
+                                    return NSItemProvider(object: photo.id.uuidString as NSString)
+                                }
+                                .onDrop(of: [.text], delegate: PhotoDropDelegate(
+                                    targetPhoto: photo,
+                                    draggedPhoto: $draggedPhoto,
+                                    photos: Binding(
+                                        get: { item.photos },
+                                        set: { newPhotos in
+                                            var copy = item
+                                            copy.photos = newPhotos
+                                            item = copy
+                                        }
+                                    )
+                                ))
                             }
                             if !isLocked {
                                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -179,30 +215,33 @@ struct ItemDetailView: View {
                                         VStack(spacing: 4) {
                                             Image(systemName: "camera.fill")
                                                 .font(.system(size: 44))
-                                                .foregroundColor(.accentColor)
+                                                .foregroundStyle(AppColor.accent)
                                             Text("Capture photo")
                                                 .font(.caption)
                                         }
                                         .frame(width: 100, height: 100)
-                                        .background(Color(.systemGray6))
+                                        .background(AppColor.surface)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Capture photo with camera")
                                 }
-                                PhotosPicker(selection: $selectedImages, maxSelectionCount: 1, matching: .images) {
+                                PhotosPicker(selection: $selectedImages, maxSelectionCount: 20, matching: .images) {
                                     VStack(spacing: 4) {
                                         Image(systemName: "photo.on.rectangle.angled")
                                             .font(.system(size: 44))
-                                            .foregroundColor(.accentColor)
-                                        Text("Add from library")
+                                            .foregroundStyle(AppColor.accent)
+                                        Text("Import from Library")
                                             .font(.caption)
                                     }
                                     .frame(width: 100, height: 100)
-                                    .background(Color(.systemGray6))
+                                    .background(AppColor.surface)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
                                 .onChange(of: selectedImages) { _, newItems in
+                                    guard !newItems.isEmpty else { return }
+                                    importingCount = newItems.count
+                                    importedSoFar = 0
                                     Task { @MainActor in
                                         for pickerItem in newItems {
                                             if let data = try? await pickerItem.loadTransferable(type: Data.self),
@@ -213,10 +252,26 @@ struct ItemDetailView: View {
                                                 copy.photos.append(photo)
                                                 item = copy
                                                 PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: fileName)
+                                                runDefectDetection(image: uiImage, photoId: photo.id)
                                             }
+                                            importedSoFar += 1
                                         }
                                         selectedImages = []
+                                        importingCount = 0
+                                        importedSoFar = 0
                                     }
+                                }
+                                if importingCount > 0 {
+                                    VStack(spacing: 4) {
+                                        ProgressView(value: Double(importedSoFar), total: Double(importingCount))
+                                            .frame(width: 80)
+                                        Text("\(importedSoFar)/\(importingCount)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(width: 100, height: 100)
+                                    .background(AppColor.surface)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
                             }
                         }
@@ -229,6 +284,88 @@ struct ItemDetailView: View {
             } footer: {
                 Text("\(item.photos.count) photo(s). Capture with camera or add from library; tap to draw or mark up.")
             }
+
+            // AI Defect Detection suggestions
+            if !isLocked && (!suggestedDefectTags.isEmpty || detectingPhotoId != nil) {
+                Section {
+                    if detectingPhotoId != nil {
+                        HStack(spacing: Spacing.sm) {
+                            ProgressView()
+                            Text("Analyzing photo for defects...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if !suggestedDefectTags.isEmpty {
+                        Text("AI-suggested defect tags — tap to accept:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        FlowLayout(spacing: 8) {
+                            ForEach(suggestedDefectTags, id: \.self) { tag in
+                                Button {
+                                    acceptDefectTag(tag)
+                                } label: {
+                                    Text(tag)
+                                        .font(.caption)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(AppColor.accentSoft)
+                                        .foregroundStyle(AppColor.accent)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        Button(role: .cancel) {
+                            suggestedDefectTags = []
+                        } label: {
+                            Text("Dismiss All")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Defect Detection")
+                }
+            }
+
+            // Show accepted defect tags on photos
+            if item.photos.contains(where: { !$0.defectTags.isEmpty }) {
+                Section {
+                    ForEach(item.photos.filter({ !$0.defectTags.isEmpty })) { photo in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(photo.fileName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            FlowLayout(spacing: 6) {
+                                ForEach(photo.defectTags, id: \.self) { tag in
+                                    HStack(spacing: 4) {
+                                        Text(tag)
+                                            .font(.caption2)
+                                        if !isLocked {
+                                            Button {
+                                                removeDefectTag(tag, from: photo)
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .font(.caption2)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue.opacity(0.1))
+                                    .foregroundStyle(.blue)
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Accepted Defect Tags")
+                }
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle(item.title)
@@ -238,6 +375,16 @@ struct ItemDetailView: View {
                 AnnotationStore.save(overlay, jobId: jobId, photoId: photo.id)
                 PhotoLoadService.shared.regenerateAnnotatedThumbnail(jobId: jobId, photo: photo)
             })
+        }
+        .alert("Delete Photo", isPresented: $showDeleteConfirmation, presenting: photoToDelete) { photo in
+            Button("Delete", role: .destructive) {
+                deletePhoto(photo)
+            }
+            Button("Cancel", role: .cancel) {
+                photoToDelete = nil
+            }
+        } message: { _ in
+            Text("Are you sure you want to delete this photo? This action cannot be undone.")
         }
         .sheet(isPresented: $showCamera, onDismiss: {
             if let photo = pendingAnnotationPhoto {
@@ -256,6 +403,7 @@ struct ItemDetailView: View {
                         item = copy
                         PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: fileName)
                         pendingAnnotationPhoto = photo
+                        runDefectDetection(image: image, photoId: photo.id)
                     }
                     showCamera = false
                 },
@@ -278,6 +426,101 @@ struct ItemDetailView: View {
         }
         return nil
     }
+
+    private func deletePhoto(_ photo: InspectionPhoto) {
+        // Remove the photo file from disk
+        let photoURL = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(photo.fileName)
+        try? FileManager.default.removeItem(at: photoURL)
+        // Remove the thumbnail from disk
+        let thumbURL = FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(photo.fileName)
+        try? FileManager.default.removeItem(at: thumbURL)
+        // Remove annotation if any
+        let annotationURL = FilePaths.annotationFile(jobId: jobId, photoId: photo.id)
+        try? FileManager.default.removeItem(at: annotationURL)
+        // Remove from model
+        var copy = item
+        copy.photos.removeAll { $0.id == photo.id }
+        // Re-number sortOrder
+        for i in copy.photos.indices {
+            copy.photos[i].sortOrder = i
+        }
+        item = copy
+        photoToDelete = nil
+    }
+
+    // MARK: - AI Defect Detection
+
+    /// Runs Vision-based defect detection on the given image in the background.
+    /// When results arrive, populates suggestedDefectTags for the inspector to review.
+    private func runDefectDetection(image: UIImage, photoId: UUID) {
+        detectingPhotoId = photoId
+        Task {
+            let tags = await DefectDetectionService.shared.detectDefects(in: image)
+            await MainActor.run {
+                detectingPhotoId = nil
+                if !tags.isEmpty {
+                    // Only show tags not already accepted on this photo
+                    let existingTags = Set(item.photos.first(where: { $0.id == photoId })?.defectTags ?? [])
+                    let newTags = tags.filter { !existingTags.contains($0) }
+                    if !newTags.isEmpty {
+                        suggestedDefectTags = newTags
+                    }
+                }
+            }
+        }
+    }
+
+    /// Accept a suggested defect tag and attach it to the most recently added photo.
+    private func acceptDefectTag(_ tag: String) {
+        guard let lastPhoto = item.photos.last else { return }
+        var copy = item
+        if let idx = copy.photos.firstIndex(where: { $0.id == lastPhoto.id }) {
+            if !copy.photos[idx].defectTags.contains(tag) {
+                copy.photos[idx].defectTags.append(tag)
+            }
+        }
+        item = copy
+        suggestedDefectTags.removeAll { $0 == tag }
+    }
+
+    /// Remove a defect tag from a specific photo.
+    private func removeDefectTag(_ tag: String, from photo: InspectionPhoto) {
+        var copy = item
+        if let idx = copy.photos.firstIndex(where: { $0.id == photo.id }) {
+            copy.photos[idx].defectTags.removeAll { $0 == tag }
+        }
+        item = copy
+    }
+}
+
+/// Drag-and-drop delegate for reordering photos in the horizontal scroll.
+private struct PhotoDropDelegate: DropDelegate {
+    let targetPhoto: InspectionPhoto
+    @Binding var draggedPhoto: InspectionPhoto?
+    @Binding var photos: [InspectionPhoto]
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedPhoto = nil
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged = draggedPhoto,
+              dragged.id != targetPhoto.id,
+              let fromIndex = photos.firstIndex(where: { $0.id == dragged.id }),
+              let toIndex = photos.firstIndex(where: { $0.id == targetPhoto.id }) else { return }
+        withAnimation(.default) {
+            photos.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+            // Update sortOrder to persist ordering
+            for i in photos.indices {
+                photos[i].sortOrder = i
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
 }
 
 /// Loads full image off main thread then presents PencilKit annotation (vector overlay). Saves overlay only; bake at export.
@@ -299,7 +542,7 @@ private struct AsyncPhotoAnnotationSheet: View {
                 )
             } else if failed {
                 Text("Could not load photo.")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             } else {
                 ProgressView("Loading…")
             }
@@ -310,6 +553,55 @@ private struct AsyncPhotoAnnotationSheet: View {
                 fullImage = img
                 if img == nil { failed = true }
             }
+        }
+    }
+}
+
+// MARK: - FlowLayout (wrapping horizontal layout for tags)
+
+/// A simple wrapping layout that places subviews left-to-right, wrapping to a
+/// new line when the available width is exceeded.  Uses the iOS 16+ Layout protocol.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth && currentX > 0 {
+                currentY += lineHeight + spacing
+                currentX = 0
+                lineHeight = 0
+            }
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+            totalWidth = max(totalWidth, currentX - spacing)
+        }
+        totalHeight = currentY + lineHeight
+        return CGSize(width: totalWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX: CGFloat = bounds.minX
+        var currentY: CGFloat = bounds.minY
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > bounds.maxX && currentX > bounds.minX {
+                currentY += lineHeight + spacing
+                currentX = bounds.minX
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: currentX, y: currentY), proposal: .unspecified)
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
         }
     }
 }

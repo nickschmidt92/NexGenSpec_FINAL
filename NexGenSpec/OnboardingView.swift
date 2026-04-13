@@ -67,7 +67,7 @@ private struct WelcomeScreen: View {
 
     var body: some View {
         ZStack {
-            AppColor.brandNavy
+            AppColor.brandPanelGradient
                 .ignoresSafeArea()
 
             VStack(spacing: 32) {
@@ -124,7 +124,7 @@ private struct FeaturesScreen: View {
                             .fill(AppColor.accent.opacity(0.12))
                             .frame(width: 42, height: 42)
                         Image(systemName: feature.systemImageName)
-                            .foregroundColor(AppColor.accent)
+                            .foregroundStyle(AppColor.accent)
                             .font(.system(size: 18, weight: .semibold))
                     }
                     VStack(alignment: .leading, spacing: 4) {
@@ -132,7 +132,7 @@ private struct FeaturesScreen: View {
                             .font(.headline)
                         Text(feature.description)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 6)
@@ -142,7 +142,7 @@ private struct FeaturesScreen: View {
 
             Text("LiDAR scanning requires iPad Pro or iPhone Pro. Voice commands require a Pro subscription.")
                 .font(.footnote)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 8)

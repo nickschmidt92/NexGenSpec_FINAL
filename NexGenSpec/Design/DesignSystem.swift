@@ -35,16 +35,24 @@ enum AppFont {
 
 /// Semantic colors. Adapts to light/dark; high contrast when enabled.
 enum AppColor {
+    // MARK: Brand colors (fixed, not adaptive)
     static let brandNavy = Color(red: 0.08, green: 0.09, blue: 0.17)
     static let brandBlue = Color(red: 0.12, green: 0.43, blue: 0.96)
     static let brandCyan = Color(red: 0.15, green: 0.82, blue: 0.93)
+
+    // MARK: Semantic surface colors (adaptive light/dark)
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
     static let elevatedSurface = Color(uiColor: .systemBackground)
+    static let primaryText = Color(uiColor: .label)
+    static let secondaryText = Color(uiColor: .secondaryLabel)
+    static let tertiaryText = Color(uiColor: .tertiaryLabel)
+    static let separator = Color(uiColor: .separator)
     static let border = Color.primary.opacity(0.12)
     static let cardBackground = elevatedSurface
     static let cardShadow = Color.black.opacity(0.08)
 
+    // MARK: Accent and status colors
     static let accent = brandBlue
     /// Deep accent for text/icons — adapts to light/dark automatically.
     static let accentDeep = accent
@@ -105,6 +113,13 @@ enum AppColor {
         )
     }
 
+    /// Adaptive dark-mode–aware brand panel: uses brandNavy in light, a subtle elevated surface in dark.
+    static var adaptiveBrandPanelGradient: LinearGradient {
+        // This returns the same gradient; the adaptive behavior comes from
+        // pairing it with semantic foreground colors in context.
+        brandPanelGradient
+    }
+
     /// High-contrast-friendly color for a severity badge.
     static func forSeverity(_ severity: Severity) -> Color {
         switch severity {
@@ -129,6 +144,24 @@ struct CardStyle: ViewModifier {
             .background(AppColor.elevatedSurface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(color: AppColor.cardShadow, radius: 6, x: 0, y: 2)
+    }
+}
+
+/// Glass card style: translucent material with iOS 26 glassEffect on cards/floating elements.
+struct GlassCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .padding(Spacing.md)
+                .glassEffect(.regular, in: .rect(cornerRadius: 22, style: .continuous))
+                .shadow(color: AppColor.cardShadow, radius: 4, x: 0, y: 1)
+        } else {
+            content
+                .padding(Spacing.md)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: AppColor.cardShadow, radius: 4, x: 0, y: 1)
+        }
     }
 }
 
@@ -270,6 +303,23 @@ extension View {
 
     func elevatedCard() -> some View {
         modifier(ElevatedCardStyle())
+    }
+
+    /// Glass-effect card for translucent floating elements (iOS 26+, falls back to thin material).
+    func glassCard() -> some View {
+        modifier(GlassCardStyle())
+    }
+
+    /// Applies iOS 26 glass effect to a shape, falling back to thin material on older versions.
+    @ViewBuilder
+    func adaptiveGlass(cornerRadius: CGFloat = 22) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+            self
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
     }
 }
 

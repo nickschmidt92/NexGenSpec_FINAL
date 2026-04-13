@@ -14,6 +14,7 @@ struct DashboardView: View {
     @EnvironmentObject private var store: InspectionStore
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var subscriptions: SubscriptionManager
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
     // MARK: - Local state
     @State private var showNewInspectionSheet = false
@@ -27,12 +28,38 @@ struct DashboardView: View {
     @State private var showTemplateError = false
     @StateObject private var locationService = LocationService()
     @State private var showSettings = false
+    @State private var showTemplatePicker = false
+    @State private var selectedTemplateId: String?
 
     // MARK: - View
     var body: some View {
         NavigationStack {
             AppScreenBackground {
                 List {
+                    // Offline banner
+                    if !networkMonitor.isConnected {
+                        Section {
+                            HStack(spacing: Spacing.sm) {
+                                Image(systemName: "wifi.slash")
+                                    .foregroundStyle(.white)
+                                Text("You're offline — data saved locally")
+                                    .font(AppFont.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, Spacing.sm)
+                            .padding(.horizontal, Spacing.md)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color.orange)
+                            )
+                        }
+                        .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.md, bottom: Spacing.xs, trailing: Spacing.md))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
                     Section {
                         DashboardHero(
                             username: authManager.currentUsername,
@@ -126,6 +153,16 @@ struct DashboardView: View {
                 }
                 .sheet(isPresented: $showNewInspectionSheet) { newInspectionSheet }
                 .sheet(isPresented: $showPaywall) { PaywallView() }
+                .sheet(isPresented: $showTemplatePicker) {
+                    NavigationStack {
+                        TemplatePickerSheet(selectedTemplateId: $selectedTemplateId) {
+                            showTemplatePicker = false
+                            showNewInspectionSheet = true
+                        } onCancel: {
+                            showTemplatePicker = false
+                        }
+                    }
+                }
                 .sheet(isPresented: $showSettings) {
                     NavigationStack {
                         AppSettingsView()
@@ -199,7 +236,15 @@ struct DashboardView: View {
         newPropertyAddress = ""
         newInspectorName = InspectorProfile.shared.inspectorName
         inspectorConfirmed = false
-        showNewInspectionSheet = true
+        selectedTemplateId = nil
+
+        let customTemplates = CustomTemplateStore.shared.templates
+        if customTemplates.isEmpty {
+            // Only built-in template, skip picker
+            showNewInspectionSheet = true
+        } else {
+            showTemplatePicker = true
+        }
     }
 
     // MARK: - Sheet
@@ -243,7 +288,7 @@ struct DashboardView: View {
                     if let error = locationService.errorMessage {
                         Text(error)
                             .font(.caption)
-                            .foregroundColor(.red)
+                            .foregroundStyle(.red)
                     }
                     TextField("Inspector Name",     text: $newInspectorName)
                 }
@@ -264,7 +309,7 @@ struct DashboardView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
-                        if store.templateLoadFailed {
+                        if store.templateLoadFailed && selectedTemplateId == nil {
                             showNewInspectionSheet = false
                             showTemplateError = true
                         } else {
@@ -274,7 +319,8 @@ struct DashboardView: View {
                                 clientPhone:    newClientPhone,
                                 propertyAddress: newPropertyAddress,
                                 inspectorName:   newInspectorName,
-                                inspectorConfirmed: inspectorConfirmed
+                                inspectorConfirmed: inspectorConfirmed,
+                                customTemplateId: selectedTemplateId
                             )
                             subscriptions.recordInspectionCreated()
                             showNewInspectionSheet = false
@@ -337,12 +383,18 @@ private struct VersionRow: View {
             }
         }
         .padding(Spacing.md)
-        .background(AppColor.softPanelGradient)
+        .background {
+            if #available(iOS 26.0, *) {
+                Color.clear
+            } else {
+                AppColor.softPanelGradient
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(AppColor.border, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .adaptiveGlass(cornerRadius: 22)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(metadata.clientName), \(metadata.propertyAddress), \(metadata.status.rawValue)")
         .accessibilityHint("Opens this inspection")
@@ -448,12 +500,18 @@ private struct DashboardActionButton: View {
             }
             .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
             .padding(Spacing.md)
-            .background(AppColor.softPanelGradient)
+            .background {
+                if #available(iOS 26.0, *) {
+                    Color.clear
+                } else {
+                    AppColor.softPanelGradient
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(AppColor.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .adaptiveGlass(cornerRadius: 22)
         }
         .buttonStyle(.plain)
     }
@@ -533,6 +591,68 @@ private struct EmptyStatePromise: View {
             .background(AppColor.accent.opacity(0.12))
             .clipShape(Capsule())
             .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Template Picker Sheet
+
+private struct TemplatePickerSheet: View {
+    @Binding var selectedTemplateId: String?
+    let onSelect: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        List {
+            Section("Choose a Template") {
+                // Built-in template
+                Button {
+                    selectedTemplateId = nil
+                    onSelect()
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text("DIA Inspect - Heavy Template")
+                                .font(AppFont.headline)
+                            Text("Built-in template")
+                                .font(AppFont.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(AppColor.accent)
+                    }
+                    .padding(.vertical, Spacing.xs)
+                }
+
+                // Custom templates
+                ForEach(CustomTemplateStore.shared.templates) { template in
+                    Button {
+                        selectedTemplateId = template.templateId
+                        onSelect()
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text(template.name)
+                                    .font(AppFont.headline)
+                                Text("\(template.sections.count) sections")
+                                    .font(AppFont.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "doc.badge.gearshape")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, Spacing.xs)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Template")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { onCancel() }
+            }
+        }
     }
 }
 

@@ -40,12 +40,28 @@ public struct InspectionPhoto: Identifiable, Codable, Equatable {
     public var fileName: String
     public var caption: String
     public var sortOrder: Int
+    /// AI-detected defect tags accepted by the inspector.
+    public var defectTags: [String]
 
-    public init(id: UUID = UUID(), fileName: String, caption: String = "", sortOrder: Int = 0) {
+    public init(id: UUID = UUID(), fileName: String, caption: String = "", sortOrder: Int = 0, defectTags: [String] = []) {
         self.id = id
         self.fileName = fileName
         self.caption = caption
         self.sortOrder = sortOrder
+        self.defectTags = defectTags
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, fileName, caption, sortOrder, defectTags
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        fileName = try c.decode(String.self, forKey: .fileName)
+        caption = try c.decodeIfPresent(String.self, forKey: .caption) ?? ""
+        sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
+        defectTags = try c.decodeIfPresent([String].self, forKey: .defectTags) ?? []
     }
 }
 
@@ -160,6 +176,12 @@ public struct Inspection: Identifiable, Codable, Equatable {
     public var signatures: [InspectionSignature]
     public var inspectorConfirmed: Bool
     public var videos: [InspectionVideo]
+    /// Weather conditions captured at inspection time.
+    public var weather: WeatherData?
+    /// Timer: when the inspection was first opened.
+    public var timerStartDate: Date?
+    /// Timer: total elapsed seconds (accumulated across sessions).
+    public var timerElapsedSeconds: Double
 
     public var id: String { inspectionId }
 
@@ -178,7 +200,10 @@ public struct Inspection: Identifiable, Codable, Equatable {
         sections: [InspectionSection],
         signatures: [InspectionSignature] = [],
         inspectorConfirmed: Bool = false,
-        videos: [InspectionVideo] = []
+        videos: [InspectionVideo] = [],
+        weather: WeatherData? = nil,
+        timerStartDate: Date? = nil,
+        timerElapsedSeconds: Double = 0
     ) {
         self.inspectionId = id.uuidString
         self.inspectionNumber = inspectionNumber
@@ -195,6 +220,9 @@ public struct Inspection: Identifiable, Codable, Equatable {
         self.signatures = signatures
         self.inspectorConfirmed = inspectorConfirmed
         self.videos = videos
+        self.weather = weather
+        self.timerStartDate = timerStartDate
+        self.timerElapsedSeconds = timerElapsedSeconds
     }
 }
 
@@ -204,6 +232,7 @@ extension Inspection {
         case inspectionId, inspectionNumber, title, description, creationDate
         case clientName, clientEmail, clientPhone, propertyAddress, inspectionDate
         case inspectorName, sections, signatures, inspectorConfirmed, videos
+        case weather, timerStartDate, timerElapsedSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -223,6 +252,9 @@ extension Inspection {
         signatures = try c.decode([InspectionSignature].self, forKey: .signatures)
         inspectorConfirmed = try c.decode(Bool.self, forKey: .inspectorConfirmed)
         videos = try c.decodeIfPresent([InspectionVideo].self, forKey: .videos) ?? []
+        weather = try c.decodeIfPresent(WeatherData.self, forKey: .weather)
+        timerStartDate = try c.decodeIfPresent(Date.self, forKey: .timerStartDate)
+        timerElapsedSeconds = try c.decodeIfPresent(Double.self, forKey: .timerElapsedSeconds) ?? 0
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -242,6 +274,9 @@ extension Inspection {
         try c.encode(signatures, forKey: .signatures)
         try c.encode(inspectorConfirmed, forKey: .inspectorConfirmed)
         try c.encode(videos, forKey: .videos)
+        try c.encodeIfPresent(weather, forKey: .weather)
+        try c.encodeIfPresent(timerStartDate, forKey: .timerStartDate)
+        try c.encode(timerElapsedSeconds, forKey: .timerElapsedSeconds)
     }
 }
 

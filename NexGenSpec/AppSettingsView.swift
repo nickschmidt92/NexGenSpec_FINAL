@@ -133,6 +133,22 @@ struct AppSettingsView: View {
                     }
 
                     SettingsSectionCard(
+                        title: "Templates",
+                        subtitle: "Manage inspection templates. Duplicate the built-in template and customize it."
+                    ) {
+                        NavigationLink {
+                            TemplateManagerView()
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Manage Templates",
+                                subtitle: "View, duplicate, and edit inspection templates.",
+                                systemImage: "doc.badge.gearshape.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    SettingsSectionCard(
                         title: "Legal & Data Safety",
                         subtitle: "Review the customer-facing legal text, retention posture, and data-safety summary."
                     ) {

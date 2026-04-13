@@ -31,6 +31,7 @@ struct NexGenSpecApp: App {
                 .environmentObject(authManager)
                 .environmentObject(subscriptions)
                 .tint(AppColor.accent)
+                .preferredColorScheme(nil) // Respect system light/dark setting
         }
     }
 }

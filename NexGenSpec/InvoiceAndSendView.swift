@@ -35,7 +35,7 @@ struct InvoiceAndSendView: View {
             Section(header: Text("Report")) {
                 if exportedPDFURL != nil {
                     LabeledContent("PDF", value: "Exported")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 HStack {
                     Button {
