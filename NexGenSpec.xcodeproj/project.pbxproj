@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C4D5E6F7A8B90C1D2E3F4A5C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C4D5E6F7A8B90C1D2E3F4A5B /* PrivacyInfo.xcprivacy */; };
 		2839C1E52F46795E0012726E /* RoomPlan.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2839C1E42F46795E0012726E /* RoomPlan.framework */; };
 		EBB43AFC2F86138700BE850A /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFB2F86138700BE850A /* FirebaseAuth */; };
 		EBB43AFE2F86138700BE850A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFD2F86138700BE850A /* FirebaseCore */; };
@@ -190,7 +189,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C4D5E6F7A8B90C1D2E3F4A5C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,6 +197,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		EBB440FB2F89BCE100BE850A /* Upload Crashlytics dSYMs */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

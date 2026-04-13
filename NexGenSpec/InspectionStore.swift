@@ -28,9 +28,11 @@ public final class InspectionStore: ObservableObject {
         load()
         loadHeavyTemplate()
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.saveWorkItem?.cancel()
-            self?.saveWorkItem = nil
-            self?.save()
+            MainActor.assumeIsolated {
+                self?.saveWorkItem?.cancel()
+                self?.saveWorkItem = nil
+                self?.save()
+            }
         }
     }
 
