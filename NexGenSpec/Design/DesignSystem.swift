@@ -193,31 +193,11 @@ struct BrandMark: View {
     var size: CGFloat = 64
 
     var body: some View {
-        ZStack {
-            HexagonShape()
-                .fill(Color.white.opacity(0.15))
-                .frame(width: size, height: size)
-                .overlay(
-                    HexagonShape()
-                        .stroke(Color.white.opacity(0.30), lineWidth: 1)
-                )
-
-            HexagonShape()
-                .stroke(Color.white.opacity(0.60), lineWidth: size * 0.08)
-                .frame(width: size * 0.94, height: size * 0.94)
-
-            HexagonShape()
-                .inset(by: size * 0.17)
-                .stroke(Color.white.opacity(0.60), lineWidth: size * 0.08)
-                .frame(width: size * 0.94, height: size * 0.94)
-
-            Text("S")
-                .font(.system(size: size * 0.70, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 5)
-        }
-        .frame(width: size, height: size)
-        .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 6)
+        Image("NexGenSpecLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityLabel("NexGenSpec")
     }
 }
 
@@ -228,23 +208,16 @@ struct BrandLockup: View {
     var alignment: HorizontalAlignment = .leading
 
     var body: some View {
-        VStack(alignment: alignment, spacing: Spacing.xs) {
-            if UIImage(named: "NexGenSpecLogo") != nil {
-                Image("NexGenSpecLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: logoMaxWidth)
-                    .accessibilityLabel(title)
-            } else {
-                HStack(alignment: .center, spacing: Spacing.sm) {
-                    BrandMark(size: markSize)
+        VStack(alignment: alignment, spacing: Spacing.sm) {
+            HStack(alignment: .center, spacing: Spacing.sm) {
+                BrandMark(size: markSize)
 
-                    Text(title)
-                        .font(AppFont.title2)
-                        .foregroundStyle(.primary)
-                        .kerning(-0.5)
-                }
+                Text(title)
+                    .font(AppFont.title2)
+                    .foregroundStyle(.primary)
+                    .kerning(-0.5)
             }
+            .frame(maxWidth: .infinity, alignment: alignment == .center ? .center : .leading)
 
             if let subtitle {
                 Text(subtitle)
@@ -255,10 +228,6 @@ struct BrandLockup: View {
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
-    }
-
-    private var logoMaxWidth: CGFloat {
-        max(markSize * 3, 180)
     }
 }
 

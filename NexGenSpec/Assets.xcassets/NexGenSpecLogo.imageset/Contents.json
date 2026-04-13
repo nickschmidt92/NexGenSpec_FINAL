@@ -1,15 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "FINAL - NexGenSpec Logo.png",
+      "filename" : "NexGenSpecLogo.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
+      "filename" : "NexGenSpecLogo@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
+      "filename" : "NexGenSpecLogo@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }
