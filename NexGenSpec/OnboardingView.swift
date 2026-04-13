@@ -73,7 +73,7 @@ private struct WelcomeScreen: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                BrandMark(size: 160)
+                BrandMark(size: 180)
 
                 Text("NexGenSpec")
                     .font(AppFont.hero)

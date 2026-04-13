@@ -192,50 +192,12 @@ struct AppScreenBackground<Content: View>: View {
 struct BrandMark: View {
     var size: CGFloat = 64
 
-    private var outerGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 91/255, green: 195/255, blue: 248/255),   // bright cyan top
-                Color(red: 55/255, green: 140/255, blue: 246/255),   // blue mid
-                Color(red: 52/255, green: 94/255, blue: 194/255)     // darker blue bottom
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
-    private var innerColor: Color {
-        Color(red: 30/255, green: 62/255, blue: 120/255)
-    }
-
     var body: some View {
-        ZStack {
-            // Outer hex with gradient
-            HexagonShape()
-                .fill(outerGradient)
-                .frame(width: size, height: size)
-
-            // Inner dark hex face
-            HexagonShape()
-                .fill(innerColor)
-                .frame(width: size * 0.72, height: size * 0.72)
-
-            // S letter
-            Text("S")
-                .font(.system(size: size * 0.42, weight: .bold, design: .rounded))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 80/255, green: 180/255, blue: 250/255),
-                            Color(red: 50/255, green: 130/255, blue: 220/255)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        }
-        .frame(width: size, height: size)
-        .accessibilityLabel("NexGenSpec")
+        Image("NexGenSpecLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityLabel("NexGenSpec")
     }
 }
 
