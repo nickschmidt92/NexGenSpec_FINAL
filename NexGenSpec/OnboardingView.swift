@@ -73,12 +73,7 @@ private struct WelcomeScreen: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                Image("NexGenSpecLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 200)
-                    .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
-                    .accessibilityLabel("NexGenSpec Logo")
+                BrandMark(size: 160)
 
                 Text("NexGenSpec")
                     .font(AppFont.hero)
