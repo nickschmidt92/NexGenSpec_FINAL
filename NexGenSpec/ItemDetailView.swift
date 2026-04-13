@@ -17,6 +17,7 @@ struct ItemDetailView: View {
     @State private var selectedImages: [PhotosPickerItem] = []
     @State private var showCamera = false
     @State private var photoToAnnotate: InspectionPhoto?
+    @State private var pendingAnnotationPhoto: InspectionPhoto?
 
     private func bind<T>(_ keyPath: WritableKeyPath<InspectionItem, T>) -> Binding<T> {
         Binding(
@@ -235,9 +236,17 @@ struct ItemDetailView: View {
         .sheet(item: $photoToAnnotate) { photo in
             AsyncPhotoAnnotationSheet(jobId: jobId, photo: photo, onSaveOverlay: { overlay in
                 AnnotationStore.save(overlay, jobId: jobId, photoId: photo.id)
+                PhotoLoadService.shared.regenerateAnnotatedThumbnail(jobId: jobId, photo: photo)
             })
         }
-        .sheet(isPresented: $showCamera) {
+        .sheet(isPresented: $showCamera, onDismiss: {
+            if let photo = pendingAnnotationPhoto {
+                pendingAnnotationPhoto = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    photoToAnnotate = photo
+                }
+            }
+        }) {
             CameraCaptureView(
                 onCapture: { image in
                     if let fileName = savePhoto(image) {
@@ -246,6 +255,7 @@ struct ItemDetailView: View {
                         copy.photos.append(photo)
                         item = copy
                         PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: fileName)
+                        pendingAnnotationPhoto = photo
                     }
                     showCamera = false
                 },

@@ -13,6 +13,13 @@ import ImageIO
 /// If imageFolderURL is set, images are written there and HTML references them (reduces memory for large reports).
 enum HTMLReportRenderer {
 
+    private static let reportIdDateFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        return fmt
+    }()
+
     static func renderHTML(
         for version: InspectionVersion,
         imageFolderURL: URL? = nil,
@@ -97,7 +104,7 @@ enum HTMLReportRenderer {
         .item-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
         .item-card .badge { display: inline-block; margin-left: 8px; }
         .item-card p { margin: 6px 0; }
-        .item-card .photo { display: block; max-width: 100%; height: auto; border-radius: 8px; margin-top: 8px; page-break-inside: avoid; break-inside: avoid; }
+        .item-card .photo { display: block; max-width: 100%; width: 5in; height: auto; border-radius: 8px; margin-top: 8px; page-break-inside: avoid; break-inside: avoid; }
         .signatures { margin-top: 24px; }
         .signatures img { max-width: 200px; height: auto; border: 1px solid #dee2e6; border-radius: 8px; }
         .footer { margin-top: 32px; padding: 16px 20px; border-top: 2px solid #dee2e6; font-size: 0.8rem; color: #666; background: #f8f9fa; border-radius: 0 0 var(--radius) var(--radius); }
@@ -170,12 +177,12 @@ enum HTMLReportRenderer {
                     if let data = loadPhotoData(jobId: jobId, fileName: photo.fileName),
                        let reportData = AnnotationBakeService.bakedImageData(jobId: jobId, photo: photo, photoData: data) {
                         if let folder = imageFolderURL {
-                            let fileURL = folder.appendingPathComponent("\(photo.id.uuidString).png")
+                            let fileURL = folder.appendingPathComponent("\(photo.id.uuidString).jpg")
                             try? FileSecurity.writeProtected(reportData, to: fileURL)
-                            let imagePath = absoluteAssetFileURLs ? fileURL.absoluteString : "images/\(photo.id.uuidString).png"
+                            let imagePath = absoluteAssetFileURLs ? fileURL.absoluteString : "images/\(photo.id.uuidString).jpg"
                             imagesHTML += "<img class=\"photo\" src=\"\(imagePath)\" alt=\"Inspection photo\"/>"
                         } else {
-                            imagesHTML += "<img class=\"photo\" src=\"data:image/png;base64,\(reportData.base64EncodedString())\" alt=\"Inspection photo\"/>"
+                            imagesHTML += "<img class=\"photo\" src=\"data:image/jpeg;base64,\(reportData.base64EncodedString())\" alt=\"Inspection photo\"/>"
                         }
                     }
                 }
@@ -214,8 +221,11 @@ enum HTMLReportRenderer {
 
         html += "<div class=\"footer\">"
         if let hash = reportHash {
-            html += "<div class=\"hash-label\">Report Verification</div>"
-            html += "<span class=\"hash\">SHA-256: \(hash)</span>"
+            let datePart = Self.reportIdDateFormatter.string(from: Date())
+            let shortHash = String(hash.prefix(4)).uppercased()
+            let reportId = "NGS-\(datePart)-\(shortHash)"
+            html += "<div class=\"hash-label\">Report ID</div>"
+            html += "<span class=\"hash\">\(reportId)</span>"
         } else if isDraft {
             html += "This is a draft. Finalized reports include a verification hash."
         }
@@ -226,14 +236,14 @@ enum HTMLReportRenderer {
 
 private let htmlDateFormatter = DateFormatters.mediumDateTime
 
-/// Loads photo data downsampled to a max dimension of 2048px to prevent OOM on 48MP+ images.
+/// Loads photo data downsampled to a max dimension of 1024px to prevent OOM on 48MP+ images.
 private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
     let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
         return nil
     }
-    let maxPixelSize: CGFloat = 2048
+    let maxPixelSize: CGFloat = 1024
     let options: [CFString: Any] = [
         kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
         kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -243,7 +253,7 @@ private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
         return nil
     }
     let uiImage = UIImage(cgImage: cgImage)
-    return uiImage.pngData()
+    return uiImage.jpegData(compressionQuality: 0.6)
 }
 
 private func escapeHTML(_ input: String) -> String {

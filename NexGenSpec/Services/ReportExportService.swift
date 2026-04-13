@@ -91,7 +91,8 @@ public final class ReportExportService: ObservableObject {
             do {
                 pdfURL = try await PDFReportRenderer.generatePDF(
                     fromHTMLFile: htmlResult.htmlURL,
-                    baseURL: htmlResult.reportDir
+                    baseURL: htmlResult.reportDir,
+                    clientName: versionCopy.inspection.clientName
                 )
             } catch {
                 Diagnostics.logError(context: "PDF generation failed; returning HTML-only export", error: error)
@@ -139,7 +140,7 @@ public final class ReportExportService: ObservableObject {
         let tmp = FileManager.default.temporaryDirectory
         guard let files = try? FileManager.default.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.contentModificationDateKey], options: .skipsHiddenFiles) else { return }
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
-        let prefixes = ["report-", "pdf-", "InspectionReport-"]
+        let prefixes = ["report-", "pdf-", "InspectionReport-", "InspectionReport_"]
         for url in files where prefixes.contains(where: { url.lastPathComponent.hasPrefix($0) }) {
             let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             let modified = vals?.contentModificationDate ?? .distantPast

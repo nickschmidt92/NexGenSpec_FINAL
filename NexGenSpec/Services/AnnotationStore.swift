@@ -22,3 +22,4 @@ enum AnnotationStore {
         try? FileSecurity.writeProtected(data, to: url)
     }
 }
+

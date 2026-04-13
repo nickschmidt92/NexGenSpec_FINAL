@@ -21,6 +21,7 @@ struct InvoiceAndSendView: View {
     @State private var mailUnavailableAlert = false
     @State private var showExportError = false
     @State private var showPaywall = false
+    @State private var showLargePDFWarning = false
 
     private let nexGenSpecEmail = "contact@nexgenspec.com"
 
@@ -51,12 +52,18 @@ struct InvoiceAndSendView: View {
                 }
             }
             Section(header: Text("Invoice")) {
-                TextField("Price", text: $invoicePrice)
-                    .keyboardType(.decimalPad)
+                HStack(spacing: 2) {
+                    Text("$")
+                    TextField("Price", text: $invoicePrice)
+                        .keyboardType(.decimalPad)
+                }
                 TextField("Additional services", text: $additionalServices, axis: .vertical)
                     .lineLimit(3...6)
-                TextField("Total", text: $invoiceTotal)
-                    .keyboardType(.decimalPad)
+                HStack(spacing: 2) {
+                    Text("$")
+                    TextField("Total", text: $invoiceTotal)
+                        .keyboardType(.decimalPad)
+                }
             }
             Section {
                 Button {
@@ -73,6 +80,12 @@ struct InvoiceAndSendView: View {
             if !isExporting {
                 if case .success(_, let pdf?) = exportService.result {
                     exportedPDFURL = pdf
+                    // Warn if PDF exceeds 20 MB — email providers may reject large attachments
+                    if let attrs = try? FileManager.default.attributesOfItem(atPath: pdf.path),
+                       let fileSize = attrs[.size] as? UInt64,
+                       fileSize > 20 * 1024 * 1024 {
+                        showLargePDFWarning = true
+                    }
                 }
                 if exportService.errorMessage != nil { showExportError = true }
             }
@@ -94,6 +107,12 @@ struct InvoiceAndSendView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .environmentObject(subscriptions)
+        }
+        .alert("Large PDF", isPresented: $showLargePDFWarning) {
+            Button("Send Anyway") { }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("The exported PDF exceeds 20 MB. Some email providers may reject attachments this large. Consider reducing the number of photos or using a file-sharing link instead.")
         }
         .alert("Export failed", isPresented: $showExportError) {
             Button("OK") { showExportError = false; exportService.reset() }
@@ -124,8 +143,8 @@ struct InvoiceAndSendView: View {
     private var invoiceEmailHTML: String {
         let inspection = version.inspection
         let dateStr = inspection.inspectionDate.formatted(date: .abbreviated, time: .omitted)
-        let priceDisplay = invoicePrice.isEmpty ? "—" : invoicePrice
-        let totalDisplay = invoiceTotal.isEmpty ? "—" : invoiceTotal
+        let priceDisplay = invoicePrice.isEmpty ? "—" : "$\(invoicePrice)"
+        let totalDisplay = invoiceTotal.isEmpty ? "—" : "$\(invoiceTotal)"
         let additionalRow = additionalServices.isEmpty ? "" : """
             <tr><td style="padding:8px 12px;color:#666;">Additional Services</td><td style="padding:8px 12px;text-align:right;">\(additionalServices)</td></tr>
             """

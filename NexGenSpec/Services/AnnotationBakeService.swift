@@ -11,12 +11,12 @@ import PencilKit
 
 enum AnnotationBakeService {
 
-    /// Returns PNG data of photo with overlay drawn on top. If no overlay, returns original photo data.
+    /// Returns JPEG data of photo with overlay drawn on top. If no overlay, returns original photo data.
     static func bakedImageData(jobId: UUID, photo: InspectionPhoto, photoData: Data?) -> Data? {
         guard let photoData = photoData, let base = UIImage(data: photoData) else { return photoData }
         guard let overlay = AnnotationStore.load(jobId: jobId, photoId: photo.id) else { return photoData }
         let composited = composite(overlay: overlay, onto: base, canvasSize: base.size)
-        return composited.pngData()
+        return composited.jpegData(compressionQuality: 0.6)
     }
 
     private static func composite(overlay: AnnotationOverlay, onto image: UIImage, canvasSize: CGSize) -> UIImage {

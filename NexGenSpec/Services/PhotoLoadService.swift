@@ -8,6 +8,12 @@
 import Foundation
 import UIKit
 import ImageIO
+import PencilKit
+
+extension Notification.Name {
+    /// Posted when an annotated thumbnail is regenerated. `userInfo` contains "photoId" (UUID).
+    static let thumbnailDidUpdate = Notification.Name("com.nexgenspec.thumbnailDidUpdate")
+}
 
 /// Loads photos from disk on a background queue. Use for UI to avoid freezing with 300+ images.
 /// In-memory thumbnail cache (bounded) to avoid re-decoding when scrolling back.
@@ -99,6 +105,88 @@ public final class PhotoLoadService: @unchecked Sendable {
                 try? FileSecurity.ensureProtectedDirectory(thumbURL.deletingLastPathComponent())
                 try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])
             }
+        }
+    }
+
+    /// Regenerates the thumbnail for a photo with annotations composited on top.
+    /// Call after saving annotations so thumbnails reflect the current markup.
+    public func regenerateAnnotatedThumbnail(jobId: UUID, photo: InspectionPhoto) {
+        let photoFileName = photo.fileName
+        let photoId = photo.id
+        let cacheKey = "\(jobId.uuidString)-\(photoId.uuidString)" as NSString
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let fullURL = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(photoFileName)
+            guard let fullImage = Self.decodeImageFromURL(fullURL, maxPixelSize: 2048) else { return }
+
+            // Composite annotations onto the full image, then resize to thumbnail
+            let imageToThumbnail: UIImage
+            if let overlay = AnnotationStore.load(jobId: jobId, photoId: photoId) {
+                imageToThumbnail = Self.compositeOverlay(overlay, onto: fullImage)
+            } else {
+                imageToThumbnail = fullImage
+            }
+
+            let thumb = self.resizedForThumbnail(imageToThumbnail, maxSize: self.thumbMaxSize)
+            let thumbURL = FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(photoFileName)
+            if let jpeg = thumb.jpegData(compressionQuality: 0.8) {
+                try? FileSecurity.ensureProtectedDirectory(thumbURL.deletingLastPathComponent())
+                try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])
+            }
+            self.thumbCache.setObject(thumb, forKey: cacheKey, cost: self.imageCost(thumb))
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .thumbnailDidUpdate, object: nil, userInfo: ["photoId": photoId])
+            }
+        }
+    }
+
+    /// Composites an AnnotationOverlay onto a base image (mirrors AnnotationBakeService logic).
+    private static func compositeOverlay(_ overlay: AnnotationOverlay, onto image: UIImage) -> UIImage {
+        let cw = overlay.canvasWidth ?? Double(image.size.width)
+        let ch = overlay.canvasHeight ?? Double(image.size.height)
+        let scaleX = cw > 0 ? image.size.width / cw : 1
+        let scaleY = ch > 0 ? image.size.height / ch : 1
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+        return renderer.image { context in
+            image.draw(at: .zero)
+            let cg = context.cgContext
+            if let data = overlay.drawingData, let drawing = try? PKDrawing(data: data) {
+                cg.saveGState()
+                cg.scaleBy(x: scaleX, y: scaleY)
+                drawing.image(from: drawing.bounds, scale: 1).draw(at: drawing.bounds.origin)
+                cg.restoreGState()
+            }
+            for arrow in overlay.arrows {
+                let color = Self.annotationColor(name: arrow.colorName)
+                cg.setStrokeColor(color.cgColor)
+                cg.setLineWidth(3 * max(scaleX, scaleY))
+                cg.beginPath()
+                cg.move(to: CGPoint(x: arrow.startX * scaleX, y: arrow.startY * scaleY))
+                cg.addLine(to: CGPoint(x: arrow.endX * scaleX, y: arrow.endY * scaleY))
+                cg.strokePath()
+            }
+            for circle in overlay.circles {
+                let color = Self.annotationColor(name: circle.colorName)
+                cg.setStrokeColor(color.cgColor)
+                cg.setLineWidth(3 * max(scaleX, scaleY))
+                let r = CGRect(
+                    x: (circle.centerX - circle.radius) * scaleX,
+                    y: (circle.centerY - circle.radius) * scaleY,
+                    width: circle.radius * 2 * scaleX,
+                    height: circle.radius * 2 * scaleY
+                )
+                cg.strokeEllipse(in: r)
+            }
+        }
+    }
+
+    private static func annotationColor(name: String) -> UIColor {
+        switch name {
+        case "yellow": return .systemYellow
+        case "green": return .systemGreen
+        default: return .systemRed
         }
     }
 

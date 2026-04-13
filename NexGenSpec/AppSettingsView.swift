@@ -169,16 +169,7 @@ struct AppSettingsView: View {
                         }
                         .buttonStyle(.plain)
 
-                        NavigationLink {
-                            LegalHistoryView()
-                        } label: {
-                            SettingsNavigationRow(
-                                title: "View Feedback Log",
-                                subtitle: "See the current audit and feedback history.",
-                                systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90"
-                            )
-                        }
-                        .buttonStyle(.plain)
+
                     }
 
                     if authManager.isAdmin {

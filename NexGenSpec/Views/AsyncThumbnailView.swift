@@ -15,6 +15,7 @@ struct AsyncThumbnailView: View {
 
     @State private var image: UIImage?
     @State private var loadTask: Task<Void, Never>?
+    @State private var reloadToken: UUID = UUID()
 
     var body: some View {
         Group {
@@ -31,9 +32,14 @@ struct AsyncThumbnailView: View {
         .frame(width: size.width, height: size.height)
         .clipped()
         .cornerRadius(6)
-        .task(id: "\(jobId)-\(photo.id)") {
+        .task(id: "\(jobId)-\(photo.id)-\(reloadToken)") {
             let img = await PhotoLoadService.shared.loadThumbnail(jobId: jobId, photo: photo)
             await MainActor.run { image = img }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .thumbnailDidUpdate)) { notification in
+            if let updatedId = notification.userInfo?["photoId"] as? UUID, updatedId == photo.id {
+                reloadToken = UUID()
+            }
         }
     }
 }

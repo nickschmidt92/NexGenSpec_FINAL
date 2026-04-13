@@ -46,34 +46,34 @@ struct InspectionView: View {
         }
         .navigationTitle(draft.inspection.clientName.isEmpty ? "Inspection \(draft.versionNumber)" : draft.inspection.clientName)
         .toolbar {
-            ToolbarItem(placement: .status) {
-                if store.isSaving {
-                    Text("Saving…").font(.caption).foregroundColor(.secondary)
-                } else if let t = store.lastSavedAt {
-                    Text("Saved \(t, style: .time)").font(.caption).foregroundColor(.secondary)
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    if store.isSaving {
+                        Label("Saving…", systemImage: "arrow.triangle.2.circlepath")
+                            .disabled(true)
+                    } else if let t = store.lastSavedAt {
+                        Label("Last saved at \(t, style: .time)", systemImage: "clock")
+                            .disabled(true)
+                    }
+                    Divider()
+                    Button("Save") { store.saveNow() }
+                        .keyboardShortcut("s", modifiers: .command)
+                    Button("Previous Section") { selectPreviousSection() }
+                        .keyboardShortcut(.leftArrow, modifiers: .command)
+                    Button("Next Section") { selectNextSection() }
+                        .keyboardShortcut(.rightArrow, modifiers: .command)
+                    Button("Finalize") { selectedPane = .finalize }
+                        .keyboardShortcut("f", modifiers: .command)
+                    if draft.locked {
+                        Button("Invoice & Send") { selectedPane = .invoice }
+                            .keyboardShortcut("i", modifiers: .command)
+                    }
+                    Divider()
+                    Button("Keyboard Shortcuts") { showShortcutsHelp = true }
+                        .keyboardShortcut("?", modifiers: .command)
+                } label: {
+                    Label("Actions", systemImage: "ellipsis.circle")
                 }
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button("Save") { store.saveNow() }
-                    .keyboardShortcut("s", modifiers: .command)
-                    .accessibilityLabel("Save now")
-                Button("Previous section") { selectPreviousSection() }
-                    .keyboardShortcut(.leftArrow, modifiers: .command)
-                    .accessibilityLabel("Previous section")
-                Button("Next section") { selectNextSection() }
-                    .keyboardShortcut(.rightArrow, modifiers: .command)
-                    .accessibilityLabel("Next section")
-                Button("Finalize") { selectedPane = .finalize }
-                    .keyboardShortcut("f", modifiers: .command)
-                    .accessibilityLabel("Go to Finalize")
-                if draft.locked {
-                    Button("Invoice & Send") { selectedPane = .invoice }
-                        .keyboardShortcut("i", modifiers: .command)
-                        .accessibilityLabel("Invoice and send")
-                }
-                Button("Keyboard Shortcuts") { showShortcutsHelp = true }
-                    .keyboardShortcut("?", modifiers: .command)
-                    .accessibilityLabel("Show keyboard shortcuts")
             }
         }
         .sheet(isPresented: $showShortcutsHelp) {

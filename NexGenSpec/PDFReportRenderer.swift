@@ -67,13 +67,14 @@ public enum PDFReportRenderer {
             throw PDFRenderError.writeFailed(error)
         }
 
-        return try await generatePDF(fromHTMLFile: indexURL, baseURL: reportDir)
+        return try await generatePDF(fromHTMLFile: indexURL, baseURL: reportDir, clientName: version.inspection.clientName)
     }
 
     /// Low-level: render an existing HTML file (with sibling asset folder) to a PDF.
     /// Memory-safe path using WKWebView.pdf(configuration:) (iOS 14+).
+    /// `clientName` is used for the output filename; pass nil to fall back to a UUID-based name.
     @MainActor
-    public static func generatePDF(fromHTMLFile htmlFileURL: URL, baseURL: URL) async throws -> URL {
+    public static func generatePDF(fromHTMLFile htmlFileURL: URL, baseURL: URL, clientName: String? = nil) async throws -> URL {
         // Pre-flight: refuse to spin up WebKit if we're already under memory pressure.
         if availableMemoryBytes() < 120 * 1024 * 1024 {
             Diagnostics.logError(
@@ -127,8 +128,16 @@ public enum PDFReportRenderer {
             throw PDFRenderError.pdfCreationFailed(error)
         }
 
+        let sanitizedClient = Self.sanitizeFilenameComponent(clientName ?? "")
+        let dateStamp = Self.filenameDateFormatter.string(from: Date())
+        let filenameStem: String
+        if sanitizedClient.isEmpty {
+            filenameStem = "InspectionReport_\(dateStamp)"
+        } else {
+            filenameStem = "InspectionReport_\(sanitizedClient)_\(dateStamp)"
+        }
         let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("InspectionReport-\(UUID().uuidString).pdf")
+            .appendingPathComponent("\(filenameStem).pdf")
         do {
             try FileSecurity.writeProtected(pdfData, to: outURL)
         } catch {
@@ -136,6 +145,27 @@ public enum PDFReportRenderer {
             throw PDFRenderError.writeFailed(error)
         }
         return outURL
+    }
+
+    // MARK: - Filename helpers
+
+    private static let filenameDateFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        return fmt
+    }()
+
+    /// Replaces spaces and non-alphanumeric characters with underscores, then collapses runs.
+    private static func sanitizeFilenameComponent(_ raw: String) -> String {
+        let allowed = CharacterSet.alphanumerics
+        let cleaned = raw.unicodeScalars
+            .map { allowed.contains($0) ? String($0) : "_" }
+            .joined()
+        // Collapse consecutive underscores and trim leading/trailing underscores
+        return cleaned
+            .replacingOccurrences(of: "_+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
     }
 
     // MARK: - Memory
