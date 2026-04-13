@@ -197,22 +197,24 @@
 /* Begin PBXShellScriptBuildPhase section */
 		EBB440FB2F89BCE100BE850A /* Upload Crashlytics dSYMs */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}",
+				"$(SRCROOT)/NexGenSpec/GoogleService-Info.plist",
 			);
 			name = "Upload Crashlytics dSYMs";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_TEMP_DIR)/upload-symbols-completed",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Skip dSYM upload in simulator builds\nif [ \"$EFFECTIVE_PLATFORM_NAME\" = \"-iphonesimulator\" ]; then\n  echo \"Skipping Crashlytics dSYM upload for simulator build.\"\n  exit 0\nfi\n\n\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols\" -gsp \"${SRCROOT}/NexGenSpec/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\" || echo \"warning: dSYM upload skipped\"\n";
+			shellScript = "# Skip dSYM upload in simulator builds\nif [ \"$EFFECTIVE_PLATFORM_NAME\" = \"-iphonesimulator\" ]; then\n  touch \"${TARGET_TEMP_DIR}/upload-symbols-completed\"\n  exit 0\nfi\n\n\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols\" -gsp \"${SRCROOT}/NexGenSpec/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\"\ntouch \"${TARGET_TEMP_DIR}/upload-symbols-completed\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
