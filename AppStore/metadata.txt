@@ -86,7 +86,7 @@ APP REVIEW NOTES
 ───────────────────────────────────────────────────────────────
 Demo Account:
   Email: appreview@nexgenspec.com
-  Password: [CREATE THIS ACCOUNT IN FIREBASE BEFORE SUBMISSION]
+  Password: NexGen-Review-2026!
 
   To test the full app flow:
   1. Log in with the demo account above
