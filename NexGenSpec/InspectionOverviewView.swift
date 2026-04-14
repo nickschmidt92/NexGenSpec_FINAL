@@ -213,6 +213,7 @@ struct InspectionOverviewView: View {
             TextField("Client Phone", text: binding(\.clientPhone))
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
+                .phoneFormatted(binding(\.clientPhone))
             DatePicker("Inspection Date", selection: binding(\.inspectionDate), displayedComponents: .date)
             TextField("Inspector Name", text: binding(\.inspectorName))
         }

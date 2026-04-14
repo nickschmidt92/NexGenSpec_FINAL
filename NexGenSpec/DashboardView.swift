@@ -261,6 +261,7 @@ struct DashboardView: View {
                     TextField("Phone",              text: $newClientPhone)
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
+                        .phoneFormatted($newClientPhone)
                 }
                 Section("Property & Inspector") {
                     TextField("Property Address",   text: $newPropertyAddress)
@@ -527,6 +528,8 @@ private struct DashboardMetric: View {
             Label(title, systemImage: systemImage)
                 .font(AppFont.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
             Text(value)
                 .font(AppFont.title2)
@@ -535,8 +538,15 @@ private struct DashboardMetric: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.md)
-        .background(AppColor.surface)
+        .background {
+            if #available(iOS 26.0, *) {
+                Color.clear
+            } else {
+                AppColor.surface
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .adaptiveGlass(cornerRadius: 18)
     }
 }
 

@@ -31,6 +31,7 @@ struct InspectionView: View {
     @State private var showReportPreview = false
     @StateObject private var voiceManager = VoiceCommandManager()
     @StateObject private var weatherService = WeatherService()
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     // Timer state
     @State private var timerDisplayString = "00:00:00"
@@ -43,13 +44,12 @@ struct InspectionView: View {
 
     var body: some View {
         ZStack {
-        NavigationSplitView {
-            sectionSidebar
-        } detail: {
-            paneDetailContent
-        }
-
-        VoiceCommandOverlay(voiceManager: voiceManager)
+            if sizeClass == .regular {
+                iPadSplitLayout
+            } else {
+                sectionSidebar
+            }
+            VoiceCommandOverlay(voiceManager: voiceManager)
         }
         .navigationTitle(draft.inspection.clientName.isEmpty ? "Inspection \(draft.versionNumber)" : draft.inspection.clientName)
         .toolbar {
@@ -237,43 +237,48 @@ struct InspectionView: View {
     private var sectionSidebar: some View {
         List {
             Section("Inspection") {
-                Button { selectedPane = .overview } label: {
+                NavigationLink {
+                    paneContent(for: .overview)
+                } label: {
                     Label("Overview", systemImage: "doc.text")
                 }
                 .accessibilityLabel("Overview")
                 .accessibilityHint("Cover page, export report, capture room")
-                .listRowBackground(selectedPane == .overview ? AppColor.accent.opacity(0.10) : Color.clear)
             }
             Section("Sections") {
                 ForEach(draft.inspection.sections) { section in
-                    Button { selectedPane = .section(section.id) } label: {
+                    NavigationLink {
+                        paneContent(for: .section(section.id))
+                    } label: {
                         SectionRowView(section: section)
                     }
                     .accessibilityLabel(section.title)
                     .accessibilityHint("\(section.items.count) items")
-                    .listRowBackground(selectedPane == .section(section.id) ? AppColor.accent.opacity(0.10) : Color.clear)
                 }
             }
             Section("Actions") {
-                Button { selectedPane = .summary } label: {
+                NavigationLink {
+                    paneContent(for: .summary)
+                } label: {
                     Label("Summary", systemImage: "list.bullet.rectangle")
                 }
                 .accessibilityLabel("Summary")
                 .accessibilityHint("Findings by severity")
-                .listRowBackground(selectedPane == .summary ? AppColor.accent.opacity(0.10) : Color.clear)
-                Button { selectedPane = .finalize } label: {
+                NavigationLink {
+                    paneContent(for: .finalize)
+                } label: {
                     Label("Finalize", systemImage: "lock.shield")
                 }
                 .accessibilityLabel("Finalize")
                 .accessibilityHint("Signatures and lock report")
-                .listRowBackground(selectedPane == .finalize ? AppColor.accent.opacity(0.10) : Color.clear)
                 if draft.locked {
-                    Button { selectedPane = .invoice } label: {
+                    NavigationLink {
+                        paneContent(for: .invoice)
+                    } label: {
                         Label("Invoice & Send", systemImage: "envelope.badge")
                     }
                     .accessibilityLabel("Invoice and send")
                     .accessibilityHint("Customer contact, invoice form, send to client and NexGenSpec")
-                    .listRowBackground(selectedPane == .invoice ? AppColor.accent.opacity(0.10) : Color.clear)
                 }
             }
         }
@@ -281,9 +286,54 @@ struct InspectionView: View {
         .navigationTitle("Sections")
     }
 
+    /// iPad-only: uses a NavigationSplitView for sidebar/detail layout.
+    /// This is NOT nested inside a parent NavigationStack — the DashboardView's
+    /// NavigationStack pushes to InspectionRootView, which renders InspectionView.
+    /// On iPad (regular width), we break out of the parent stack's push and render
+    /// a local split view for a better wide-screen experience.
+    private var iPadSplitLayout: some View {
+        NavigationSplitView {
+            List(selection: Binding<InspectionPane?>(
+                get: { selectedPane },
+                set: { if let p = $0 { selectedPane = p } }
+            )) {
+                Section("Inspection") {
+                    Label("Overview", systemImage: "doc.text")
+                        .tag(InspectionPane.overview)
+                }
+                Section("Sections") {
+                    ForEach(draft.inspection.sections) { section in
+                        SectionRowView(section: section)
+                            .tag(InspectionPane.section(section.id))
+                    }
+                }
+                Section("Actions") {
+                    Label("Summary", systemImage: "list.bullet.rectangle")
+                        .tag(InspectionPane.summary)
+                    Label("Finalize", systemImage: "lock.shield")
+                        .tag(InspectionPane.finalize)
+                    if draft.locked {
+                        Label("Invoice & Send", systemImage: "envelope.badge")
+                            .tag(InspectionPane.invoice)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("Sections")
+        } detail: {
+            paneDetailContent
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
     @ViewBuilder
     private var paneDetailContent: some View {
-        switch selectedPane {
+        paneContent(for: selectedPane)
+    }
+
+    @ViewBuilder
+    private func paneContent(for pane: InspectionPane) -> some View {
+        switch pane {
         case .overview:
             InspectionOverviewView(version: $draft)
         case .section(let sectionID):

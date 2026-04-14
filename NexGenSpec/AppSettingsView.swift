@@ -591,6 +591,12 @@ private struct SettingsTextFieldRow: View {
                 .textInputAutocapitalization(title == "Email" ? .never : .words)
                 .autocorrectionDisabled()
                 .keyboardType(title == "Phone" ? .phonePad : title == "Email" ? .emailAddress : .default)
+                .onChange(of: text) { _, newValue in
+                    if title == "Phone" {
+                        let formatted = formatPhoneNumber(newValue)
+                        if formatted != newValue { text = formatted }
+                    }
+                }
         }
         .padding(.horizontal, Spacing.md)
         .frame(minHeight: 50)

@@ -325,3 +325,45 @@ extension View {
 
 /// Scaled metric for layout that respects Dynamic Type.
 typealias AppScaled = ScaledMetric
+
+// MARK: - Phone Number Formatting
+
+/// Formats a raw digit string into (###) ###-#### as the user types.
+func formatPhoneNumber(_ value: String) -> String {
+    let digits = value.filter(\.isWholeNumber)
+    let limited = String(digits.prefix(10))
+    var result = ""
+    for (i, ch) in limited.enumerated() {
+        switch i {
+        case 0: result.append("(")
+            result.append(ch)
+        case 2: result.append(ch)
+            result.append(") ")
+        case 5: result.append(ch)
+            result.append("-")
+        default: result.append(ch)
+        }
+    }
+    return result
+}
+
+/// A `ViewModifier` that auto-formats a phone text binding to (###) ###-####.
+struct PhoneNumberFormatter: ViewModifier {
+    @Binding var text: String
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: text) { _, newValue in
+                let formatted = formatPhoneNumber(newValue)
+                if formatted != newValue {
+                    text = formatted
+                }
+            }
+    }
+}
+
+extension View {
+    func phoneFormatted(_ text: Binding<String>) -> some View {
+        modifier(PhoneNumberFormatter(text: text))
+    }
+}
