@@ -48,12 +48,14 @@ struct AppSettingsView: View {
                     ) {
                         SettingsValueRow(title: "User", value: authManager.currentUsername ?? "Unknown")
                         SettingsValueRow(title: "Role", value: roleLabel)
-                        SettingsValueRow(title: "Subscription", value: subscriptions.isPro ? "Pro" : "Free")
+                        SettingsValueRow(title: "Subscription", value: subscriptionLabel)
 
-                        Button(subscriptions.isPro ? "Manage Subscription" : "Upgrade to Pro") {
-                            showPaywall = true
+                        if !subscriptions.isAdminAccount {
+                            Button(subscriptions.isPro ? "Manage Subscription" : "Upgrade to Pro") {
+                                showPaywall = true
+                            }
+                            .buttonStyle(AppPrimaryButtonStyle())
                         }
-                        .buttonStyle(AppPrimaryButtonStyle())
 
                         Button("Log Out", role: .destructive) {
                             authManager.logout()
@@ -366,7 +368,7 @@ struct AppSettingsView: View {
         App: NexGenSpec \(appVersion) (\(build))
         Device: \(device.model) · iOS \(device.systemVersion)
         User: \(authManager.currentUsername ?? "unknown")
-        Subscription: \(subscriptions.isPro ? "Pro" : "Free")
+        Subscription: \(subscriptionLabel)
         """
     }
 
@@ -420,12 +422,23 @@ struct AppSettingsView: View {
     }
 
     private var roleLabel: String {
+        // The admin-email whitelist overrides the Firebase role so whitelisted
+        // accounts appear as "Admin" in the UI even before Firestore custom
+        // claims are wired up.
+        if subscriptions.isAdminAccount { return "Admin" }
         switch authManager.role {
         case .owner: return "Owner"
         case .admin: return "Admin"
         case .user: return "User"
         case .none: return "Signed Out"
         }
+    }
+
+    /// Displayed next to "Subscription" in Settings. Admins see "Admin" rather
+    /// than "Free" so the label matches their access level.
+    private var subscriptionLabel: String {
+        if subscriptions.isAdminAccount { return "Admin" }
+        return subscriptions.isPro ? "Pro" : "Free"
     }
 
     private func createEncryptedBackup() {

@@ -32,6 +32,14 @@ struct NexGenSpecApp: App {
                 .environmentObject(subscriptions)
                 .tint(AppColor.accent)
                 .preferredColorScheme(nil) // Respect system light/dark setting
+                // Keep SubscriptionManager in sync with the signed-in Firebase user
+                // so whitelisted admin emails get premium access automatically.
+                .onAppear {
+                    subscriptions.applyCurrentUser(email: authManager.currentUsername)
+                }
+                .onChange(of: authManager.currentUsername) { _, newEmail in
+                    subscriptions.applyCurrentUser(email: newEmail)
+                }
         }
     }
 }

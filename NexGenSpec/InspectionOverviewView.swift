@@ -122,17 +122,17 @@ struct InspectionOverviewView: View {
                             .disabled(isEditable)
                         Button {
                             Task {
-                                await exportService.export(version: version, watermark: !subscriptions.isPro)
+                                await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
                                 if case .success(_, let pdf) = exportService.result, let url = pdf {
                                     shareContent = ShareContent(items: [url])
                                 } else if case .failure = exportService.result {
                                     showExportError = true
                                 }
                             }
-                        } label: { Label(subscriptions.isPro ? "Full report (PDF)" : "Full report (PDF) – Free", systemImage: "doc.richtext") }
+                        } label: { Label(subscriptions.hasFeatureAccess ? "Full report (PDF)" : "Full report (PDF) – Free", systemImage: "doc.richtext") }
                             .disabled(exportService.isExporting || isEditable)
                             .accessibilityLabel("Full report PDF")
-                            .accessibilityHint(subscriptions.isPro ? "Generate and share full PDF report" : "Generate watermarked PDF report")
+                            .accessibilityHint(subscriptions.hasFeatureAccess ? "Generate and share full PDF report" : "Generate watermarked PDF report")
                     } label: { Label("Export", systemImage: "square.and.arrow.up") }
                         .accessibilityLabel("Export report")
                         .accessibilityHint("Share as text summary or full PDF report")

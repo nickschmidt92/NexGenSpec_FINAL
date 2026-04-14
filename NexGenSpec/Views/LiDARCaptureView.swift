@@ -52,26 +52,24 @@ struct LiDARCaptureView: View {
             .onChange(of: lastSavedScan) { _, _ in
                 savedScans = LiDARScanStore.loadScans(jobId: jobId)
             }
-            .fullScreenCover(isPresented: $showRoomPlanCapture) {
+            .fullScreenCover(isPresented: $showRoomPlanCapture, onDismiss: {
+                // After the capture cover fully finishes its dismissal animation,
+                // present the naming sheet if the user saved a scan. Cancel
+                // resets `isReady` to false, so cancelled flows skip this.
+                // Read the authoritative source (inner) so this works even if
+                // the box's Combine mirror failed to propagate.
+                #if canImport(RoomPlan)
+                if #available(iOS 16.0, *), pending.inner.isReady {
+                    pendingName = ""
+                    showNamingSheet = true
+                }
+                #endif
+            }) {
                 roomPlanCaptureSheet
             }
             .sheet(isPresented: $showNamingSheet) {
                 namingSheet
             }
-            #if canImport(RoomPlan)
-            .onChange(of: pending.isReady) { _, ready in
-                if #available(iOS 16.0, *), ready {
-                    // Scan finished processing — dismiss capture UI and ask for a name.
-                    showRoomPlanCapture = false
-                    pendingName = ""
-                    // Small delay so the fullScreenCover has time to dismiss before
-                    // the naming sheet is presented.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        showNamingSheet = true
-                    }
-                }
-            }
-            #endif
         }
     }
 
@@ -85,6 +83,11 @@ struct LiDARCaptureView: View {
                 pending: pending.inner,
                 onCancel: {
                     pending.inner.reset()
+                    showRoomPlanCapture = false
+                },
+                onSaveRequested: {
+                    // User tapped "Save Scan" after processing. Dismiss the cover;
+                    // onDismiss will then present the naming sheet.
                     showRoomPlanCapture = false
                 }
             )

@@ -198,7 +198,7 @@ struct InvoiceAndSendView: View {
         exportedPDFURL = nil
         exportService.reset()
         Task {
-            await exportService.export(version: version, watermark: !subscriptions.isPro)
+            await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
         }
     }
 
@@ -212,7 +212,7 @@ struct InvoiceAndSendView: View {
             return
         }
         Task { @MainActor in
-            await exportService.export(version: version, watermark: !subscriptions.isPro)
+            await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
             if case .success(_, let pdf?) = exportService.result {
                 exportedPDFURL = pdf
                 showMailCompose = true

@@ -57,6 +57,11 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     private let audioEngine = AVAudioEngine()
     
     private var cancellables = Set<AnyCancellable>()
+
+    /// Last transcript that produced a command. Used to debounce partial-result
+    /// matching so we don't re-fire the same command as the recognizer keeps
+    /// emitting partials with the same text.
+    private var lastFiredTranscript: String = ""
     
     // Command log entry struct
     struct AuditLogEntry: Identifiable {
@@ -170,6 +175,8 @@ final class VoiceCommandManager: NSObject, ObservableObject {
             recognitionTask?.cancel()
             recognitionTask = nil
             recognitionRequest = nil
+            transcript = ""
+            lastFiredTranscript = ""
             isListening = false
             micAccessibilityLabel = "Microphone is off"
         }
@@ -202,7 +209,13 @@ final class VoiceCommandManager: NSObject, ObservableObject {
                 if let result = result {
                     self.transcript = result.bestTranscription.formattedString
 
-                    // When final result, parse commands
+                    // Parse on every partial — `isFinal` only fires after several
+                    // seconds of silence, which is too slow for interactive
+                    // commands. We debounce by remembering the last transcript
+                    // that matched a command so we don't re-fire as the
+                    // recognizer keeps emitting partials with the same text.
+                    self.tryHandlePartialTranscript(self.transcript)
+
                     if result.isFinal {
                         self.handleFinalTranscript(self.transcript)
                     }
@@ -235,8 +248,66 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     // MARK: - Command Parsing
     
     private func handleFinalTranscript(_ transcript: String) {
+        // On isFinal, clear the debounce so the next utterance can re-fire a
+        // previously-used command (e.g. "next room" twice in a row).
+        lastFiredTranscript = ""
         let commandResult = parseCommand(transcript: transcript)
         logAudit(transcript: transcript, command: commandResult.command, result: commandResult.result)
+    }
+
+    /// Called on every partial result. Tries to match a command; if one matches
+    /// and hasn't been fired for this utterance yet, fires it and restarts the
+    /// recognition session to clear the buffer for the next command.
+    private func tryHandlePartialTranscript(_ transcript: String) {
+        let normalized = transcript
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, normalized != lastFiredTranscript else { return }
+
+        let commandResult = parseCommand(transcript: transcript, fireAction: false)
+        guard commandResult.command != nil else { return }
+
+        // Matched — debounce this transcript, log, fire the action once, then
+        // restart recognition so the next spoken command starts fresh.
+        lastFiredTranscript = normalized
+        logAudit(transcript: transcript, command: commandResult.command, result: commandResult.result)
+        _ = parseCommand(transcript: transcript, fireAction: true)
+        restartRecognition()
+    }
+
+    /// Tears down the current recognition task/request and starts a fresh one
+    /// so the recognizer's internal transcript buffer is cleared. The audio
+    /// engine keeps running so the user doesn't perceive any gap.
+    private func restartRecognition() {
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        transcript = ""
+        lastFiredTranscript = ""
+
+        // Re-attach a new recognition request to the already-running audio engine.
+        let newRequest = SFSpeechAudioBufferRecognitionRequest()
+        newRequest.shouldReportPartialResults = true
+        recognitionRequest = newRequest
+
+        recognitionTask = speechRecognizer?.recognitionTask(with: newRequest) { [weak self] result, error in
+            guard let self = self else { return }
+            Task { @MainActor in
+                if let result = result {
+                    self.transcript = result.bestTranscription.formattedString
+                    self.tryHandlePartialTranscript(self.transcript)
+                    if result.isFinal {
+                        self.handleFinalTranscript(self.transcript)
+                    }
+                }
+                if let error = error {
+                    // Silent on restart errors — the user can tap mic again.
+                    self.logAudit(transcript: self.transcript, command: nil,
+                                  result: "Recognition restart error: \(error.localizedDescription)")
+                }
+            }
+        }
     }
     
     /// Parses transcript and returns recognized command and processing result.
@@ -251,48 +322,56 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     /// - Parameter transcript: The recognized speech text.
     /// - Returns: A tuple with the recognized command string (or nil) and a human-readable result string.
     @discardableResult
-    func parseCommand(transcript: String) -> (command: String?, result: String) {
-        let lower = transcript.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    func parseCommand(transcript: String, fireAction: Bool = true) -> (command: String?, result: String) {
+        // Strip trailing punctuation Apple's recognizer sometimes adds
+        // ("go to summary." / "next room,") so matches still hit.
+        let trimmingSet = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        let lower = transcript.lowercased().trimmingCharacters(in: trimmingSet)
         var command: String?
         var result: String?
         var action: CommandAction?
 
         if lower.hasPrefix("add note") {
             command = "Add note"
-            let content = transcript.dropFirst("add note".count).trimmingCharacters(in: .whitespacesAndNewlines)
+            let content = transcript.dropFirst("add note".count).trimmingCharacters(in: trimmingSet)
             if content.isEmpty {
                 result = "Add note: no content provided"
             } else {
                 result = "Note added: \(content)"
                 action = .addNote(content)
             }
-        } else if lower == "next room" || lower == "next section" {
+        } else if lower == "next room" || lower == "next section"
+                    || lower.hasSuffix(" next room") || lower.hasSuffix(" next section") {
             command = "Next section"
             result = "Navigating to next section"
             action = .nextSection
-        } else if lower == "previous room" || lower == "previous section" {
+        } else if lower == "previous room" || lower == "previous section"
+                    || lower.hasSuffix(" previous room") || lower.hasSuffix(" previous section") {
             command = "Previous section"
             result = "Navigating to previous section"
             action = .previousSection
-        } else if lower == "capture photo" || lower == "take photo" {
+        } else if lower == "capture photo" || lower == "take photo"
+                    || lower.hasSuffix(" capture photo") || lower.hasSuffix(" take photo") {
             command = "Capture photo"
             result = "Photo capture triggered"
             action = .capturePhoto
         } else if lower.hasPrefix("defect") {
             command = "Defect"
             let stripped = lower.hasPrefix("defect:") ? String(transcript.dropFirst("defect:".count)) : String(transcript.dropFirst("defect".count))
-            let desc = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+            let desc = stripped.trimmingCharacters(in: trimmingSet)
             if desc.isEmpty {
                 result = "Defect: no description provided"
             } else {
                 result = "Defect noted: \(desc)"
                 action = .defect(desc)
             }
-        } else if lower == "go to summary" || lower == "summary" {
+        } else if lower == "go to summary" || lower == "summary"
+                    || lower.hasSuffix(" go to summary") || lower.hasSuffix(" summary") {
             command = "Go to summary"
             result = "Navigating to summary"
             action = .goToSummary
-        } else if lower == "go to finalize" || lower == "finalize" {
+        } else if lower == "go to finalize" || lower == "finalize"
+                    || lower.hasSuffix(" go to finalize") || lower.hasSuffix(" finalize") {
             command = "Go to finalize"
             result = "Navigating to finalize"
             action = .goToFinalize
@@ -307,8 +386,9 @@ final class VoiceCommandManager: NSObject, ObservableObject {
             UIAccessibility.post(notification: .announcement, argument: "Unrecognized voice command")
         }
 
-        // Dispatch the action to the host view
-        if let action {
+        // Dispatch the action to the host view. Partial-result matches pass
+        // fireAction=false so the caller can debounce before firing.
+        if fireAction, let action {
             onCommand?(action)
         }
 

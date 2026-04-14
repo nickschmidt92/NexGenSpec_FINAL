@@ -48,21 +48,66 @@ public final class SubscriptionManager: ObservableObject {
     /// Number of inspections the user has created (persisted across launches).
     @Published public private(set) var freeInspectionsUsed: Int = 0
 
-    /// True if the user can create a new inspection (subscribed, or under free limit).
+    /// True if the user can create a new inspection (subscribed, admin, or under free limit).
     public var canCreateInspection: Bool {
-        isPro || freeInspectionsUsed < Self.freeInspectionLimit
+        isPro || isAdminAccount || freeInspectionsUsed < Self.freeInspectionLimit
     }
 
-    /// Remaining free inspections. Returns nil if subscribed.
+    /// True if the user should have access to premium features (voice commands,
+    /// LiDAR, full PDF export, etc.). During the free trial window (first
+    /// `freeInspectionLimit` inspections), everything is unlocked so prospective
+    /// customers can evaluate the full app before subscribing. After the trial,
+    /// a paid subscription (or admin override) is required.
+    ///
+    /// Uses `<=` so that while the user is working inside their Nth free
+    /// inspection (N == `freeInspectionLimit`), premium features remain available.
+    public var hasFeatureAccess: Bool {
+        isPro || isAdminAccount || freeInspectionsUsed <= Self.freeInspectionLimit
+    }
+
+    /// Remaining free inspections. Returns nil if subscribed or admin.
     public var freeInspectionsRemaining: Int? {
-        isPro ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
+        (isPro || isAdminAccount) ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
     }
 
     /// Call after a new inspection is successfully created.
     public func recordInspectionCreated() {
-        guard !isPro else { return }
+        // Paid subscribers and admins never burn down the trial counter.
+        guard !isPro, !isAdminAccount else { return }
         freeInspectionsUsed += 1
         UserDefaults.standard.set(freeInspectionsUsed, forKey: TrialKey.inspectionsCreated)
+    }
+
+    // MARK: - Admin override (App Store review, internal testing, comps)
+
+    /// Email addresses whose Firebase accounts are treated as admin (unlimited
+    /// access, bypasses paywalls and trial limits). Used for:
+    ///   - App Store review — credentials go in Review Notes.
+    ///   - Internal QA — lets the team test Pro features without sandbox purchases.
+    ///   - Comps — press/partners granted free access without subscribing.
+    ///
+    /// The email list is visible to anyone who reverse-engineers the binary, so
+    /// protect the account(s) with strong passwords. Compare case-insensitively.
+    /// To add more admin emails later: edit this Set, rebuild, ship an update.
+    public static let adminEmails: Set<String> = [
+        "contact@nexgenspec.com"
+    ]
+
+    /// True if the currently signed-in Firebase user matches the admin whitelist.
+    /// Set by `applyCurrentUser(email:)`, which the app coordinator calls when
+    /// auth state changes.
+    @Published public private(set) var isAdminAccount: Bool = false
+
+    /// Wire this to `AuthManager.currentUsername`. Pass `nil` on sign-out.
+    public func applyCurrentUser(email: String?) {
+        let normalized = email?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if let normalized, Self.adminEmails.contains(normalized) {
+            isAdminAccount = true
+        } else {
+            isAdminAccount = false
+        }
     }
 
     // MARK: - Persistence keys (offline grace)

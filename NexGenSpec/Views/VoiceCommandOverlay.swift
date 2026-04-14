@@ -3,7 +3,8 @@
 //  NexGenSpec
 //
 //  Floating mic button + transcript display for hands-free voice commands.
-//  Pro-only feature. Overlays the inspection view as a ZStack layer.
+//  Available during the free trial window and to paid subscribers.
+//  Overlays the inspection view as a ZStack layer.
 //
 
 import SwiftUI
@@ -124,7 +125,10 @@ struct VoiceCommandOverlay: View {
             voiceManager.stopListening()
             return
         }
-        guard subscriptions.isPro else {
+        // Voice commands are available during the 3-inspection free trial AND
+        // for paid subscribers. Only gate with the paywall after trial usage
+        // is exhausted and no subscription is active.
+        guard subscriptions.hasFeatureAccess else {
             showPaywall = true
             return
         }

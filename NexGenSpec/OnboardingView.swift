@@ -28,7 +28,7 @@ struct OnboardingView: View {
         Feature(title: "Apple Pencil Support",
                 description: "Draw annotations directly on inspection photos with precision.",
                 systemImageName: "pencil.tip"),
-        Feature(title: "Voice Commands (Pro)",
+        Feature(title: "Voice Commands",
                 description: "Hands-free commands: \"Next room\", \"Add note\", \"Defect: broken window\".",
                 systemImageName: "mic.fill"),
         Feature(title: "PDF Reports & Invoicing",
