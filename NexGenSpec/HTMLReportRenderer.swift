@@ -52,6 +52,8 @@ enum HTMLReportRenderer {
         if !inspection.clientEmail.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Email:</strong> \(escapeHTML(inspection.clientEmail))</p>\n" }
         if !inspection.clientPhone.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Phone:</strong> \(escapeHTML(inspection.clientPhone))</p>\n" }
 
+        let agentsBlock = Self.renderAgentsBlock(inspection: inspection)
+
         // Embed company logo (or fallback to app icon) as base64 for report header
         let customLogo = InspectorProfile.shared.companyLogoBase64
         let logoBase64: String = customLogo ?? {
@@ -177,6 +179,7 @@ enum HTMLReportRenderer {
         <p class="meta"><strong>Property:</strong> \(escapeHTML(inspection.propertyAddress))</p>
         <p class="meta"><strong>Date:</strong> \(htmlDateFormatter.string(from: inspection.inspectionDate))</p>
         <p class="meta"><strong>Inspector:</strong> \(escapeHTML(inspection.inspectorName))\(!InspectorProfile.shared.companyName.isEmpty ? " — \(escapeHTML(InspectorProfile.shared.companyName))" : "")\(!InspectorProfile.shared.licenseNumber.isEmpty ? " (License: \(escapeHTML(InspectorProfile.shared.licenseNumber)))" : "")</p>
+        \(agentsBlock)
         <div class="summary">
         <span class="badge safety">Safety: \(counts.safety)</span>
         <span class="badge major">Major: \(counts.major)</span>
@@ -426,6 +429,33 @@ enum HTMLReportRenderer {
         """
 
         return html
+    }
+
+    // MARK: - Real Estate Agents
+
+    /// Renders zero, one, or two `<p class="meta">` lines for the buyer's
+    /// agent and listing agent. Each agent is only included if it has any
+    /// content (per `RealEstateAgent.hasContent`), and within an agent
+    /// only the populated fields are shown so the report stays clean.
+    private static func renderAgentsBlock(inspection: Inspection) -> String {
+        var lines: [String] = []
+        if let buyer = inspection.buyersAgent, buyer.hasContent {
+            lines.append(renderAgent(label: "Buyer's Agent", agent: buyer))
+        }
+        if let listing = inspection.listingAgent, listing.hasContent {
+            lines.append(renderAgent(label: "Listing Agent", agent: listing))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func renderAgent(label: String, agent: RealEstateAgent) -> String {
+        var parts: [String] = []
+        if !agent.name.isEmpty { parts.append(escapeHTML(agent.name)) }
+        if !agent.brokerage.isEmpty { parts.append(escapeHTML(agent.brokerage)) }
+        if !agent.phone.isEmpty { parts.append(escapeHTML(agent.phone)) }
+        if !agent.email.isEmpty { parts.append(escapeHTML(agent.email)) }
+        guard !parts.isEmpty else { return "" }
+        return "<p class=\"meta\"><strong>\(escapeHTML(label)):</strong> \(parts.joined(separator: " — "))</p>"
     }
 
     // MARK: - Weather & Timer Section

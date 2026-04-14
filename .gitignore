@@ -1,6 +1,25 @@
+# Apple
 .DS_Store
-_project_tmp/
 *.xcuserstate
 xcuserdata/
 *.xcworkspace/xcuserdata/
+
+# Xcode build products & caches
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Local scratch / backup dirs
+_project_tmp/
 _backups/
+
+# Agent / tooling local state
+.claude/

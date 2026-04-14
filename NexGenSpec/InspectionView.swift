@@ -64,8 +64,19 @@ struct InspectionView: View {
                         Label("Fetching weather…", systemImage: "cloud")
                             .disabled(true)
                     } else {
-                        Label("Weather unavailable", systemImage: "cloud.slash")
+                        // Surface the underlying reason (location denied, simulator
+                        // with no set location, WeatherKit entitlement missing, etc.)
+                        // so the user can fix whichever is the real problem.
+                        Label(weatherService.errorMessage ?? "Weather unavailable",
+                              systemImage: "cloud.slash")
                             .disabled(true)
+                        Button {
+                            weatherService.retry { data in
+                                if let data { draft.inspection.weather = data }
+                            }
+                        } label: {
+                            Label("Retry weather", systemImage: "arrow.clockwise")
+                        }
                     }
                     Divider()
                     if store.isSaving {

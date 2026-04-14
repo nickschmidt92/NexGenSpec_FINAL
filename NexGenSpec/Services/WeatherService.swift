@@ -75,28 +75,36 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             locationManager.requestLocation()
         case .denied, .restricted:
             isFetching = false
-            errorMessage = "Weather unavailable"
+            errorMessage = "Location permission denied"
             self.weatherData = nil
             completion?(nil)
             self.completion = nil
         @unknown default:
             isFetching = false
+            errorMessage = "Location status unknown"
             completion?(nil)
             self.completion = nil
         }
     }
 
+    /// Public retry entry point. Clears cached error and starts fresh.
+    func retry(completion: ((WeatherData?) -> Void)? = nil) {
+        errorMessage = nil
+        fetchCurrentWeather(completion: completion)
+    }
+
     // MARK: - CLLocationManagerDelegate
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         Task { @MainActor in
-            if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            if status == .authorizedWhenInUse || status == .authorizedAlways {
                 if isFetching {
                     manager.requestLocation()
                 }
-            } else if manager.authorizationStatus == .denied {
+            } else if status == .denied {
                 isFetching = false
-                errorMessage = "Weather unavailable"
+                errorMessage = "Location permission denied"
                 completion?(nil)
                 completion = nil
             }
@@ -111,9 +119,10 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        let errDesc = error.localizedDescription
         Task { @MainActor in
             isFetching = false
-            errorMessage = "Weather unavailable"
+            errorMessage = "Location error: \(errDesc)"
             completion?(nil)
             completion = nil
         }
@@ -140,7 +149,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             completion?(data)
         } catch {
             isFetching = false
-            errorMessage = "Weather unavailable"
+            errorMessage = "WeatherKit: \(error.localizedDescription)"
             completion?(nil)
         }
         completion = nil

@@ -2,8 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  Declares the required-reason APIs the app binary calls directly.
+	  Third-party SDKs (Firebase) ship their own PrivacyInfo.xcprivacy
+	  bundled inside their xcframeworks, so we don't re-declare those here.
+	  Reason codes come from
+	  https://developer.apple.com/documentation/bundleresources/privacy_manifest_files/describing_use_of_required_reason_api
+	-->
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
+		<!-- UserDefaults: entitlement cache, trial counter, admin flags. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
@@ -12,6 +20,8 @@
 				<string>CA92.1</string>
 			</array>
 		</dict>
+		<!-- File timestamps: we read/write modification dates on inspection
+		     artifacts (photos, USDZ scans, reports) for ordering & cleanup. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
@@ -20,22 +30,123 @@
 				<string>C617.1</string>
 			</array>
 		</dict>
+		<!-- Disk space: FileManager queries before large writes (PDFs, USDZ)
+		     so we can surface a clear error if the device is full. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+		<!-- System boot time: used by system frameworks we depend on
+		     (Firebase, CoreLocation telemetry) — declared for the app
+		     binary since the indirect use still requires disclosure. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
 	</array>
+
+	<!--
+	  Data the app collects. Crash data is collected by Firebase/Apple for
+	  app functionality. Nothing is used for tracking.
+	-->
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
+		<!-- Crash logs (Firebase Crashlytics if enabled, Apple defaults otherwise). -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
-			<string>Crash data</string>
+			<string>NSPrivacyCollectedDataTypeCrashData</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
-				<string>App functionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Email address: Firebase Auth account identifier — linked to
+		     the user, used for app functionality (sign-in) only. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeAuthentication</string>
+			</array>
+		</dict>
+		<!-- Coarse location: WeatherKit fetch for the inspection weather
+		     stamp. Not linked to a persistent identity. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Photos: captured + imported images attached to inspection
+		     reports. Stay on device; only leave when the inspector
+		     explicitly exports or emails a report. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePhotosOrVideos</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Audio data: microphone capture for voice commands. Processed
+		     on-device by SFSpeechRecognizer; not persisted or uploaded. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeAudioData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Other user content: inspection notes, defect descriptions,
+		     client names/addresses entered by the inspector. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
 	</array>
+
+	<!-- We do not track users across apps/websites owned by other parties. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 </dict>

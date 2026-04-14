@@ -85,6 +85,17 @@ enum FilePaths {
         signaturesFolder(jobId: jobId).appendingPathComponent("\(signatureId.uuidString).png", isDirectory: false)
     }
 
+    /// Cover photo lives at the inspection root (not under photos/) so it
+    /// can't be confused with item photos and so a single fixed filename
+    /// is enough to find it. Always JPEG.
+    static func coverPhotoFile(jobId: UUID, fileName: String) -> URL {
+        inspectionFolder(jobId: jobId).appendingPathComponent(fileName, isDirectory: false)
+    }
+
+    /// Conventional default cover photo filename. Stored in
+    /// `Inspection.coverPhotoFileName` so the model can detect "no cover" by nil.
+    static let defaultCoverPhotoFileName = "cover.jpg"
+
     static func ensureAppStructure(jobId: UUID) throws {
         try FileSecurity.ensureProtectedDirectory(appRoot)
         let folder = inspectionFolder(jobId: jobId)

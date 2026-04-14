@@ -89,11 +89,15 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
                         error: Error?) {
         guard error == nil else { return }
         guard let builder = self.roomBuilder else { return }
-        Task { [weak self] in
+        // Capture `pending` strongly into the Task so we don't have to touch
+        // `self` from the concurrent context (Swift 6 rejects that). The
+        // strong hold only lasts for the single RoomBuilder call, which is
+        // exactly as long as we need the pending state alive.
+        guard let pending = self.pending else { return }
+        Task {
             do {
                 let room = try await builder.capturedRoom(from: data)
                 await MainActor.run {
-                    guard let pending = self?.pending else { return }
                     guard !pending.isReady else { return }   // primary path already won
                     pending.capturedRoom = room
                     pending.isReady = true

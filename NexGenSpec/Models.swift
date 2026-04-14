@@ -158,6 +158,34 @@ public struct InspectionSection: Identifiable, Codable, Equatable {
     public var minorCount: Int { items.filter { $0.defectSeverity == .minor }.count }
 }
 
+// MARK: - Real Estate Agent
+
+/// Real estate agent associated with an inspection. Both buyer's and listing
+/// agent are independently optional; an inspection may have one, both, or
+/// neither. Empty strings are treated as "not provided".
+public struct RealEstateAgent: Codable, Equatable, Hashable {
+    public var name: String
+    public var brokerage: String
+    public var phone: String
+    public var email: String
+
+    public init(name: String = "", brokerage: String = "", phone: String = "", email: String = "") {
+        self.name = name
+        self.brokerage = brokerage
+        self.phone = phone
+        self.email = email
+    }
+
+    /// True if any field has content. Used to decide whether to render this
+    /// agent on the report and in summary views.
+    public var hasContent: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        || !brokerage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        || !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        || !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 // MARK: - Inspection
 
 public struct Inspection: Identifiable, Codable, Equatable {
@@ -182,6 +210,13 @@ public struct Inspection: Identifiable, Codable, Equatable {
     public var timerStartDate: Date?
     /// Timer: total elapsed seconds (accumulated across sessions).
     public var timerElapsedSeconds: Double
+    /// Filename (relative to inspection folder) of the cover photo of the
+    /// property. Stored as `<jobId>/cover.jpg`. Nil until the user picks one.
+    public var coverPhotoFileName: String?
+    /// Buyer's-side real estate agent. Optional.
+    public var buyersAgent: RealEstateAgent?
+    /// Listing-side (seller's) real estate agent. Optional.
+    public var listingAgent: RealEstateAgent?
 
     public var id: String { inspectionId }
 
@@ -203,7 +238,10 @@ public struct Inspection: Identifiable, Codable, Equatable {
         videos: [InspectionVideo] = [],
         weather: WeatherData? = nil,
         timerStartDate: Date? = nil,
-        timerElapsedSeconds: Double = 0
+        timerElapsedSeconds: Double = 0,
+        coverPhotoFileName: String? = nil,
+        buyersAgent: RealEstateAgent? = nil,
+        listingAgent: RealEstateAgent? = nil
     ) {
         self.inspectionId = id.uuidString
         self.inspectionNumber = inspectionNumber
@@ -223,6 +261,9 @@ public struct Inspection: Identifiable, Codable, Equatable {
         self.weather = weather
         self.timerStartDate = timerStartDate
         self.timerElapsedSeconds = timerElapsedSeconds
+        self.coverPhotoFileName = coverPhotoFileName
+        self.buyersAgent = buyersAgent
+        self.listingAgent = listingAgent
     }
 }
 
@@ -233,6 +274,7 @@ extension Inspection {
         case clientName, clientEmail, clientPhone, propertyAddress, inspectionDate
         case inspectorName, sections, signatures, inspectorConfirmed, videos
         case weather, timerStartDate, timerElapsedSeconds
+        case coverPhotoFileName, buyersAgent, listingAgent
     }
 
     public init(from decoder: Decoder) throws {
@@ -255,6 +297,9 @@ extension Inspection {
         weather = try c.decodeIfPresent(WeatherData.self, forKey: .weather)
         timerStartDate = try c.decodeIfPresent(Date.self, forKey: .timerStartDate)
         timerElapsedSeconds = try c.decodeIfPresent(Double.self, forKey: .timerElapsedSeconds) ?? 0
+        coverPhotoFileName = try c.decodeIfPresent(String.self, forKey: .coverPhotoFileName)
+        buyersAgent = try c.decodeIfPresent(RealEstateAgent.self, forKey: .buyersAgent)
+        listingAgent = try c.decodeIfPresent(RealEstateAgent.self, forKey: .listingAgent)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -277,6 +322,9 @@ extension Inspection {
         try c.encodeIfPresent(weather, forKey: .weather)
         try c.encodeIfPresent(timerStartDate, forKey: .timerStartDate)
         try c.encode(timerElapsedSeconds, forKey: .timerElapsedSeconds)
+        try c.encodeIfPresent(coverPhotoFileName, forKey: .coverPhotoFileName)
+        try c.encodeIfPresent(buyersAgent, forKey: .buyersAgent)
+        try c.encodeIfPresent(listingAgent, forKey: .listingAgent)
     }
 }
 

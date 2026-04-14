@@ -201,21 +201,22 @@ final class VoiceCommandManager: NSObject, ObservableObject {
         recognitionRequest.shouldReportPartialResults = true
         
         let inputNode = audioEngine.inputNode
-        
-        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
-            guard let self = self else { return }
 
+        // Capture a reference to this specific task so the callback can
+        // tell whether it's been superseded by `restartRecognition()`.
+        // Without this guard, the old task's cancellation error fires
+        // `stopListening()`, tearing down the audio engine right after
+        // we restart — which is why only the first voice command worked.
+        var task: SFSpeechRecognitionTask?
+        task = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            guard let self = self else { return }
             Task { @MainActor in
+                // Stale callback from a task that's already been replaced.
+                guard self.recognitionTask === task else { return }
+
                 if let result = result {
                     self.transcript = result.bestTranscription.formattedString
-
-                    // Parse on every partial — `isFinal` only fires after several
-                    // seconds of silence, which is too slow for interactive
-                    // commands. We debounce by remembering the last transcript
-                    // that matched a command so we don't re-fire as the
-                    // recognizer keeps emitting partials with the same text.
                     self.tryHandlePartialTranscript(self.transcript)
-
                     if result.isFinal {
                         self.handleFinalTranscript(self.transcript)
                     }
@@ -228,6 +229,7 @@ final class VoiceCommandManager: NSObject, ObservableObject {
                 }
             }
         }
+        recognitionTask = task
         
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -258,26 +260,45 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     /// Called on every partial result. Tries to match a command; if one matches
     /// and hasn't been fired for this utterance yet, fires it and restarts the
     /// recognition session to clear the buffer for the next command.
+    ///
+    /// Parametrized commands ("add note …", "defect …") are NOT fired from
+    /// partials — we wait for `isFinal` so we capture the full parameter
+    /// instead of firing on "add note crac…" before the user finishes saying
+    /// "cracked foundation".
     private func tryHandlePartialTranscript(_ transcript: String) {
-        let normalized = transcript
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Normalize consistently with parseCommand so "next room" and
+        // "next room." debounce to the same key.
+        let normalized = normalizeForDebounce(transcript)
         guard !normalized.isEmpty, normalized != lastFiredTranscript else { return }
 
         let commandResult = parseCommand(transcript: transcript, fireAction: false)
-        guard commandResult.command != nil else { return }
+        guard let cmd = commandResult.command else { return }
 
-        // Matched — debounce this transcript, log, fire the action once, then
-        // restart recognition so the next spoken command starts fresh.
+        // Parametrized commands need the full phrase; wait for isFinal.
+        if cmd == "Add note" || cmd == "Defect" { return }
+
+        // Zero-parameter command matched — fire once, then restart recognition
+        // so the accumulating transcript doesn't get in the way of the next
+        // spoken command.
         lastFiredTranscript = normalized
         logAudit(transcript: transcript, command: commandResult.command, result: commandResult.result)
         _ = parseCommand(transcript: transcript, fireAction: true)
         restartRecognition()
     }
 
+    private func normalizeForDebounce(_ s: String) -> String {
+        let set = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+        return s.lowercased().trimmingCharacters(in: set)
+    }
+
     /// Tears down the current recognition task/request and starts a fresh one
     /// so the recognizer's internal transcript buffer is cleared. The audio
     /// engine keeps running so the user doesn't perceive any gap.
+    ///
+    /// Critical: the new task is captured by-reference in its callback so it
+    /// can detect if it's been superseded. The cancelled old task will fire
+    /// its callback with an error, but that callback uses the same identity
+    /// guard and will no-op, so we never accidentally tear down the engine.
     private func restartRecognition() {
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
@@ -291,9 +312,13 @@ final class VoiceCommandManager: NSObject, ObservableObject {
         newRequest.shouldReportPartialResults = true
         recognitionRequest = newRequest
 
-        recognitionTask = speechRecognizer?.recognitionTask(with: newRequest) { [weak self] result, error in
+        var task: SFSpeechRecognitionTask?
+        task = speechRecognizer?.recognitionTask(with: newRequest) { [weak self] result, error in
             guard let self = self else { return }
             Task { @MainActor in
+                // Stale callback from a task that's already been replaced.
+                guard self.recognitionTask === task else { return }
+
                 if let result = result {
                     self.transcript = result.bestTranscription.formattedString
                     self.tryHandlePartialTranscript(self.transcript)
@@ -308,6 +333,7 @@ final class VoiceCommandManager: NSObject, ObservableObject {
                 }
             }
         }
+        recognitionTask = task
     }
     
     /// Parses transcript and returns recognized command and processing result.

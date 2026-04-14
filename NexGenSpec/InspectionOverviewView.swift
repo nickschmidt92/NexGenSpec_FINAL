@@ -20,9 +20,12 @@ struct InspectionOverviewView: View {
     @State private var shareItems: [Any] = []
     @State private var showLiDARCapture = false
     @State private var selectedVideoItems: [PhotosPickerItem] = []
+    @State private var selectedCoverItems: [PhotosPickerItem] = []
     @State private var showExportError = false
     @State private var showTextExportError = false
     @State private var showPaywall = false
+    @State private var showAgentsSection: Bool = false
+    @State private var coverPhotoTick: Int = 0   // bumps to invalidate cached preview after change
     @StateObject private var exportService = ReportExportService()
     @EnvironmentObject private var subscriptions: SubscriptionManager
 
@@ -39,6 +42,17 @@ struct InspectionOverviewView: View {
                     } else {
                         overviewReadOnlySection
                     }
+
+                    // Cover photo: only meaningful once basic property
+                    // metadata exists. Picker stays hidden until then so
+                    // the workflow feels sequential (fill in client +
+                    // address first, then attach a photo).
+                    if hasCoreMetadata {
+                        coverPhotoSection
+                    }
+
+                    // Real estate agents (buyer's + listing). Both optional.
+                    realEstateAgentSection
                     
                     // Status badge (from strict state)
                     HStack {
@@ -94,6 +108,12 @@ struct InspectionOverviewView: View {
                 guard let item = newItems.first else { return }
                 Task {
                     await addVideoFromPickerItem(item)
+                }
+            }
+            .onChange(of: selectedCoverItems) { _, newItems in
+                guard let item = newItems.first else { return }
+                Task {
+                    await setCoverPhotoFromPickerItem(item)
                 }
             }
             .navigationTitle("Overview")
@@ -299,6 +319,243 @@ struct InspectionOverviewView: View {
             set: { newValue in
                 var insp = version.inspection
                 insp[keyPath: keyPath] = newValue
+                var v = version
+                v.inspection = insp
+                version = v
+            }
+        )
+    }
+
+    // MARK: - Cover photo
+
+    /// Gate for showing the cover-photo picker. We require a client name and
+    /// property address first so the inspector fills out identifying info
+    /// before attaching a photo (and so the dashboard row shows something
+    /// meaningful next to the thumbnail).
+    private var hasCoreMetadata: Bool {
+        !version.inspection.clientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && !version.inspection.propertyAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @ViewBuilder
+    private var coverPhotoSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Cover Photo")
+                    .font(.headline)
+                Spacer()
+                if isEditable {
+                    PhotosPicker(
+                        selection: $selectedCoverItems,
+                        maxSelectionCount: 1, matching: .images
+                    ) {
+                        Label(version.inspection.coverPhotoFileName == nil ? "Add" : "Change",
+                              systemImage: "photo.badge.plus")
+                    }
+                    if version.inspection.coverPhotoFileName != nil {
+                        Button(role: .destructive) {
+                            removeCoverPhoto()
+                        } label: {
+                            Label("Remove", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            if let img = loadCoverPhotoPreview() {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityLabel("Cover photo of the property")
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.systemGray6))
+                        .frame(height: 120)
+                    VStack(spacing: 4) {
+                        Image(systemName: "house.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("No cover photo")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Re-reads the cover photo from disk on each render; cheap because the
+    /// JPEG is downscaled at write time. `coverPhotoTick` is used to
+    /// invalidate any UI cache after a change so SwiftUI re-renders.
+    private func loadCoverPhotoPreview() -> UIImage? {
+        guard let name = version.inspection.coverPhotoFileName else { return nil }
+        _ = coverPhotoTick   // dependency for re-render
+        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    private func setCoverPhotoFromPickerItem(_ item: PhotosPickerItem) async {
+        defer { Task { @MainActor in selectedCoverItems = [] } }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let originalImage = UIImage(data: data) else {
+            return
+        }
+        // Downscale to a sane upper bound so we don't write a 12 MP HEIC
+        // straight to disk. 1600px max side keeps it crisp on the report
+        // header but tiny on disk.
+        let resized = originalImage.resizedKeepingAspect(maxSide: 1600)
+        guard let jpegData = resized.jpegData(compressionQuality: 0.82) else { return }
+
+        let fileName = FilePaths.defaultCoverPhotoFileName
+        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
+        do {
+            try FileSecurity.ensureProtectedDirectory(FilePaths.inspectionFolder(jobId: jobId))
+            try FileSecurity.writeProtected(jpegData, to: url)
+            await MainActor.run {
+                var insp = version.inspection
+                insp.coverPhotoFileName = fileName
+                var v = version
+                v.inspection = insp
+                version = v
+                coverPhotoTick &+= 1
+                NotificationCenter.default.post(
+                    name: .coverPhotoDidUpdate,
+                    object: nil,
+                    userInfo: ["jobId": jobId]
+                )
+            }
+        } catch {
+            Diagnostics.logError(context: "setCoverPhotoFromPickerItem failed", error: error)
+        }
+    }
+
+    private func removeCoverPhoto() {
+        if let name = version.inspection.coverPhotoFileName {
+            let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
+            try? FileManager.default.removeItem(at: url)
+        }
+        var insp = version.inspection
+        insp.coverPhotoFileName = nil
+        var v = version
+        v.inspection = insp
+        version = v
+        coverPhotoTick &+= 1
+        NotificationCenter.default.post(
+            name: .coverPhotoDidUpdate,
+            object: nil,
+            userInfo: ["jobId": jobId]
+        )
+    }
+
+    // MARK: - Real estate agents
+
+    @ViewBuilder
+    private var realEstateAgentSection: some View {
+        let buyerHas = version.inspection.buyersAgent?.hasContent ?? false
+        let listingHas = version.inspection.listingAgent?.hasContent ?? false
+        let anyExpanded = showAgentsSection || buyerHas || listingHas
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Real Estate Agents")
+                    .font(.headline)
+                Spacer()
+                if isEditable {
+                    Button {
+                        withAnimation { showAgentsSection.toggle() }
+                    } label: {
+                        Image(systemName: anyExpanded ? "chevron.down" : "chevron.right")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel(anyExpanded ? "Collapse agents section" : "Expand agents section")
+                }
+            }
+            if !isEditable {
+                // Read-only: show only agents that have content.
+                if let b = version.inspection.buyersAgent, b.hasContent {
+                    agentReadOnlyCard(title: "Buyer's Agent", agent: b)
+                }
+                if let l = version.inspection.listingAgent, l.hasContent {
+                    agentReadOnlyCard(title: "Listing Agent", agent: l)
+                }
+                if !buyerHas && !listingHas {
+                    Text("No agents recorded for this inspection.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else if anyExpanded {
+                agentEditCard(title: "Buyer's Agent", keyPath: \.buyersAgent)
+                agentEditCard(title: "Listing Agent", keyPath: \.listingAgent)
+            } else {
+                Text("Tap to add buyer's or listing agent details.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func agentReadOnlyCard(title: String, agent: RealEstateAgent) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.subheadline.weight(.semibold))
+            if !agent.name.isEmpty { Text(agent.name) }
+            if !agent.brokerage.isEmpty {
+                Text(agent.brokerage).font(.caption).foregroundStyle(.secondary)
+            }
+            if !agent.phone.isEmpty {
+                Text(agent.phone).font(.caption).foregroundStyle(.secondary)
+            }
+            if !agent.email.isEmpty {
+                Text(agent.email).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private func agentEditCard(title: String, keyPath: WritableKeyPath<Inspection, RealEstateAgent?>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.subheadline.weight(.semibold))
+            TextField("Name", text: agentBinding(keyPath, field: \.name))
+                .textContentType(.name)
+            TextField("Brokerage", text: agentBinding(keyPath, field: \.brokerage))
+                .textContentType(.organizationName)
+            TextField("Phone", text: agentBinding(keyPath, field: \.phone))
+                .textContentType(.telephoneNumber)
+                .keyboardType(.phonePad)
+                .phoneFormatted(agentBinding(keyPath, field: \.phone))
+            TextField("Email", text: agentBinding(keyPath, field: \.email))
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .autocapitalization(.none)
+        }
+        .padding(10)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+    }
+
+    /// Bridges an optional `RealEstateAgent` field through to a `String`
+    /// TextField binding. Auto-instantiates the agent on first edit so the
+    /// inspector doesn't have to "create" it explicitly.
+    private func agentBinding(
+        _ agentKeyPath: WritableKeyPath<Inspection, RealEstateAgent?>,
+        field: WritableKeyPath<RealEstateAgent, String>
+    ) -> Binding<String> {
+        Binding(
+            get: { version.inspection[keyPath: agentKeyPath]?[keyPath: field] ?? "" },
+            set: { newValue in
+                var insp = version.inspection
+                var agent = insp[keyPath: agentKeyPath] ?? RealEstateAgent()
+                agent[keyPath: field] = newValue
+                // Keep the agent if it has any content; otherwise drop back
+                // to nil so we don't litter empty agents in the JSON.
+                insp[keyPath: agentKeyPath] = agent.hasContent ? agent : nil
                 var v = version
                 v.inspection = insp
                 version = v

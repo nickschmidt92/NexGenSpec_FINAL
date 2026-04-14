@@ -343,14 +343,7 @@ private struct VersionRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.md) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(metadata.status.badgeColor.opacity(0.14))
-                    .frame(width: 50, height: 50)
-
-                Image(systemName: metadata.status == .draft ? "square.and.pencil" : "checkmark.seal.fill")
-                    .foregroundStyle(metadata.status.badgeColor)
-            }
+            VersionRowLeading(metadata: metadata)
 
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 HStack(alignment: .top, spacing: Spacing.sm) {
@@ -399,6 +392,129 @@ private struct VersionRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(metadata.clientName), \(metadata.propertyAddress), \(metadata.status.rawValue)")
         .accessibilityHint("Opens this inspection")
+    }
+}
+
+// MARK: - Cover thumbnail (with in-memory cache)
+
+/// Process-wide cache for decoded cover thumbnails. Keyed by the
+/// inspection's `inspectionId` (UUID string). Invalidated entries are
+/// removed when `Notification.Name.coverPhotoDidUpdate` fires.
+private final class CoverThumbnailCache {
+    static let shared = CoverThumbnailCache()
+    private let cache = NSCache<NSString, UIImage>()
+
+    private init() {
+        cache.countLimit = 64
+        // Coalesce to the main actor — the notification carries a `jobId` UUID
+        // in userInfo and can be posted from any context.
+        NotificationCenter.default.addObserver(
+            forName: .coverPhotoDidUpdate,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let id = note.userInfo?["jobId"] as? UUID else { return }
+            self?.invalidate(jobId: id)
+        }
+    }
+
+    func image(for jobId: UUID) -> UIImage? {
+        cache.object(forKey: jobId.uuidString as NSString)
+    }
+
+    func store(_ image: UIImage, for jobId: UUID) {
+        cache.setObject(image, forKey: jobId.uuidString as NSString)
+    }
+
+    func invalidate(jobId: UUID) {
+        cache.removeObject(forKey: jobId.uuidString as NSString)
+    }
+}
+
+/// Leading visual for a dashboard row: either the inspection's cover
+/// photo thumbnail (when present) or the status badge fallback.
+private struct VersionRowLeading: View {
+    let metadata: VersionMetadata
+
+    var body: some View {
+        if let fileName = metadata.coverPhotoFileName {
+            CoverThumbnailView(
+                jobId: metadata.inspectionId,
+                fileName: fileName,
+                badgeColor: metadata.status.badgeColor
+            )
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(metadata.status.badgeColor.opacity(0.14))
+                    .frame(width: 50, height: 50)
+
+                Image(systemName: metadata.status == .draft ? "square.and.pencil" : "checkmark.seal.fill")
+                    .foregroundStyle(metadata.status.badgeColor)
+            }
+        }
+    }
+}
+
+/// Async-loading thumbnail for a single inspection's cover photo.
+/// Reads from disk on background queue, caches in
+/// `CoverThumbnailCache.shared`, and listens for invalidation
+/// notifications so the picker → row update is immediate.
+private struct CoverThumbnailView: View {
+    let jobId: UUID
+    let fileName: String
+    let badgeColor: Color
+
+    @State private var image: UIImage?
+    @State private var tick: Int = 0
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(badgeColor.opacity(0.14))
+                .frame(width: 50, height: 50)
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 50, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else {
+                Image(systemName: "house.fill")
+                    .foregroundStyle(badgeColor)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(badgeColor.opacity(0.25), lineWidth: 1)
+        )
+        .task(id: tick) { await loadIfNeeded() }
+        .onReceive(NotificationCenter.default.publisher(for: .coverPhotoDidUpdate)) { note in
+            guard let updatedId = note.userInfo?["jobId"] as? UUID,
+                  updatedId == jobId else { return }
+            // Invalidate ourselves so we don't race the global cache
+            // observer's ordering relative to ours.
+            CoverThumbnailCache.shared.invalidate(jobId: jobId)
+            image = nil
+            tick &+= 1
+        }
+    }
+
+    private func loadIfNeeded() async {
+        if let cached = CoverThumbnailCache.shared.image(for: jobId) {
+            await MainActor.run { self.image = cached }
+            return
+        }
+        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
+        let loaded: UIImage? = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }.value
+        if let loaded {
+            CoverThumbnailCache.shared.store(loaded, for: jobId)
+        }
+        await MainActor.run { self.image = loaded }
     }
 }
 
