@@ -1,4 +1,6 @@
 import SwiftUI
+import MessageUI
+import UIKit
 
 struct AppSettingsView: View {
     @EnvironmentObject private var authManager: AuthManager
@@ -18,6 +20,10 @@ struct AppSettingsView: View {
 
     // Logo picker
     @State private var showLogoPicker = false
+
+    // Support / Report an Issue
+    @State private var showReportMailer = false
+    @State private var showMailUnavailable = false
 
     // Delete Account flow
     @State private var showDeleteConfirm = false
@@ -188,6 +194,26 @@ struct AppSettingsView: View {
 
                     }
 
+                    SettingsSectionCard(
+                        title: "Support",
+                        subtitle: "Report a bug or send feedback to the NexGenSpec team."
+                    ) {
+                        Button {
+                            if MFMailComposeViewController.canSendMail() {
+                                showReportMailer = true
+                            } else {
+                                showMailUnavailable = true
+                            }
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Report an Issue",
+                                subtitle: "Opens an email to contact@nexgenspec.com with your device details pre-filled.",
+                                systemImage: "exclamationmark.bubble.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     if authManager.isAdmin {
                         SettingsSectionCard(
                             title: "Admin Backup",
@@ -310,6 +336,38 @@ struct AppSettingsView: View {
                 }
             }
         }
+        .sheet(isPresented: $showReportMailer) {
+            MailComposeView(
+                toRecipients: ["contact@nexgenspec.com"],
+                subject: "NexGenSpec — Report an Issue",
+                body: reportIssueBody(),
+                isHTML: false,
+                onDismiss: { showReportMailer = false }
+            )
+            .ignoresSafeArea()
+        }
+        .alert("Mail Not Configured", isPresented: $showMailUnavailable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Set up the Mail app, or email contact@nexgenspec.com directly from any mail client.")
+        }
+    }
+
+    private func reportIssueBody() -> String {
+        let device = UIDevice.current
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return """
+
+
+        —
+        Please describe the issue above. The details below help us diagnose faster.
+
+        App: NexGenSpec \(appVersion) (\(build))
+        Device: \(device.model) · iOS \(device.systemVersion)
+        User: \(authManager.currentUsername ?? "unknown")
+        Subscription: \(subscriptions.isPro ? "Pro" : "Free")
+        """
     }
 
     @MainActor

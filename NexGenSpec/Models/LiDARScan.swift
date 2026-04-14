@@ -13,16 +13,28 @@ public struct LiDARScan: Identifiable, Codable, Equatable {
     public var versionId: UUID
     public var usdzFileName: String
     public var floorplanPNGFileName: String?
+    /// User-entered label (e.g. "Living Room"). Optional for backwards compatibility
+    /// with scans saved before naming was added.
+    public var name: String?
     public var measurements: [Measurement]
     public var capturedAt: Date
 
-    public init(id: UUID = UUID(), versionId: UUID, usdzFileName: String, floorplanPNGFileName: String? = nil, measurements: [Measurement] = [], capturedAt: Date = Date()) {
+    public init(id: UUID = UUID(), versionId: UUID, usdzFileName: String, floorplanPNGFileName: String? = nil, name: String? = nil, measurements: [Measurement] = [], capturedAt: Date = Date()) {
         self.id = id
         self.versionId = versionId
         self.usdzFileName = usdzFileName
         self.floorplanPNGFileName = floorplanPNGFileName
+        self.name = name
         self.measurements = measurements
         self.capturedAt = capturedAt
+    }
+
+    /// Label to show in UI / reports. Falls back to the USDZ filename for legacy scans.
+    public var displayName: String {
+        if let n = name?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty {
+            return n
+        }
+        return usdzFileName
     }
 }
 

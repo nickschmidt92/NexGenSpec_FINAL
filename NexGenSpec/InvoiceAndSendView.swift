@@ -135,9 +135,20 @@ struct InvoiceAndSendView: View {
                 body: invoiceEmailHTML,
                 isHTML: true,
                 attachmentURL: exportedPDFURL,
+                extraAttachmentURLs: lidarUSDZAttachmentURLs(),
                 onDismiss: { showMailCompose = false }
             )
         }
+    }
+
+    /// Collect USDZ files from any LiDAR scans saved for this inspection so
+    /// they ride along with the emailed PDF.
+    private func lidarUSDZAttachmentURLs() -> [URL] {
+        let jobId = UUID(uuidString: version.inspection.inspectionId) ?? version.id
+        let lidarDir = FilePaths.lidarFolder(jobId: jobId)
+        return LiDARScanStore.loadScans(jobId: jobId)
+            .map { lidarDir.appendingPathComponent($0.usdzFileName) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     private var invoiceEmailHTML: String {

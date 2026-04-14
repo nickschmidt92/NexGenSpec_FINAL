@@ -2,10 +2,13 @@
 //  LiDARCaptureView.swift
 //  NexGenSpec
 //
-//  RoomPlan LiDAR capture: real capture on iOS 16+ with RoomPlan; lists saved scans; fallback on older or non-LiDAR.
+//  RoomPlan LiDAR capture: real capture on iOS 16+ with RoomPlan; lists saved
+//  scans; fallback on older or non-LiDAR. After a scan completes, prompts the
+//  user for a name before writing to disk.
 //
 
 import SwiftUI
+import Combine
 
 struct LiDARCaptureView: View {
     var jobId: UUID
@@ -14,6 +17,18 @@ struct LiDARCaptureView: View {
     @State private var savedScans: [LiDARScan] = []
     @State private var showRoomPlanCapture = false
     @State private var lastSavedScan: LiDARScan?
+
+    #if canImport(RoomPlan)
+    @StateObject private var pending = pendingHolder()
+
+    // Wrapped factory so the @available class isn't referenced at type-resolution time.
+    private static func pendingHolder() -> LiDARCapturePendingBox {
+        LiDARCapturePendingBox()
+    }
+    #endif
+
+    @State private var pendingName: String = ""
+    @State private var showNamingSheet = false
 
     var body: some View {
         NavigationStack {
@@ -40,45 +55,120 @@ struct LiDARCaptureView: View {
             .fullScreenCover(isPresented: $showRoomPlanCapture) {
                 roomPlanCaptureSheet
             }
+            .sheet(isPresented: $showNamingSheet) {
+                namingSheet
+            }
+            #if canImport(RoomPlan)
+            .onChange(of: pending.isReady) { _, ready in
+                if #available(iOS 16.0, *), ready {
+                    // Scan finished processing — dismiss capture UI and ask for a name.
+                    showRoomPlanCapture = false
+                    pendingName = ""
+                    // Small delay so the fullScreenCover has time to dismiss before
+                    // the naming sheet is presented.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        showNamingSheet = true
+                    }
+                }
+            }
+            #endif
         }
     }
+
+    // MARK: - RoomPlan capture sheet
 
     @ViewBuilder
     private var roomPlanCaptureSheet: some View {
         if #available(iOS 16.0, *) {
             #if canImport(RoomPlan)
-            RoomPlanCaptureViewControllerRepresentable(jobId: jobId) { scan, shouldDismiss in
-                if let scan = scan {
-                    lastSavedScan = scan
-                    onScanSaved?(scan)
-                }
-                showRoomPlanCapture = false
-            }
-            .ignoresSafeArea()
-            .overlay(alignment: .topTrailing) {
-                Button("Cancel") {
+            RoomPlanCaptureViewControllerRepresentable(
+                pending: pending.inner,
+                onCancel: {
+                    pending.inner.reset()
                     showRoomPlanCapture = false
                 }
-                .padding()
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .padding()
-            }
+            )
+            .ignoresSafeArea()
             #else
-            Text("RoomPlan is not linked. Add RoomPlan.framework in Xcode.")
-                .padding()
-            Button("Close") { showRoomPlanCapture = false }
+            VStack(spacing: 16) {
+                Text("RoomPlan is not linked. Add RoomPlan.framework in Xcode.")
+                    .multilineTextAlignment(.center)
+                    .padding()
+                Button("Close") { showRoomPlanCapture = false }
+            }
             #endif
         } else {
-            Text("Room capture requires iOS 16 or later.")
-            Button("Close") { showRoomPlanCapture = false }
+            VStack(spacing: 16) {
+                Text("Room capture requires iOS 16 or later.")
+                Button("Close") { showRoomPlanCapture = false }
+            }
         }
     }
+
+    // MARK: - Naming sheet
+
+    @ViewBuilder
+    private var namingSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("e.g. Living Room", text: $pendingName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(false)
+                        .submitLabel(.done)
+                } header: {
+                    Text("Name this scan")
+                } footer: {
+                    Text("Optional. A label helps you identify rooms later in reports.")
+                }
+            }
+            .navigationTitle("Save Scan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Discard", role: .destructive) {
+                        #if canImport(RoomPlan)
+                        pending.inner.reset()
+                        #endif
+                        showNamingSheet = false
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        persistPendingScan()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func persistPendingScan() {
+        #if canImport(RoomPlan)
+        if #available(iOS 16.0, *) {
+            let name = pendingName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let room = pending.inner.takeRoom(),
+               let scan = LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name) {
+                lastSavedScan = scan
+                onScanSaved?(scan)
+            }
+            pending.inner.reset()
+        }
+        #endif
+        showNamingSheet = false
+    }
+
+    // MARK: - Content
 
     private var lidarSupportedContent: some View {
         List {
             Section {
                 Button {
+                    #if canImport(RoomPlan)
+                    if #available(iOS 16.0, *) {
+                        pending.inner.reset()
+                    }
+                    #endif
                     showRoomPlanCapture = true
                 } label: {
                     Label("Capture room with LiDAR", systemImage: "square.viewfinder")
@@ -99,7 +189,7 @@ struct LiDARCaptureView: View {
                             Image(systemName: "cube.transparent")
                                 .foregroundColor(.secondary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(scan.usdzFileName)
+                                Text(scan.displayName)
                                     .font(.subheadline)
                                     .lineLimit(1)
                                 Text(scan.capturedAt, style: .date)
@@ -137,3 +227,28 @@ struct LiDARCaptureView: View {
     }
 }
 
+#if canImport(RoomPlan)
+/// Non-generic box so SwiftUI's @StateObject can reference it from a view that
+/// doesn't carry @available(iOS 16.0, *). The inner pending holder is created
+/// on-demand at iOS 16+ and exposed via `inner`.
+@MainActor
+final class LiDARCapturePendingBox: ObservableObject {
+    @Published private(set) var isReady: Bool = false
+    private var _inner: AnyObject?
+    private var cancellable: Any?
+
+    @available(iOS 16.0, *)
+    var inner: LiDARCapturePending {
+        if let existing = _inner as? LiDARCapturePending { return existing }
+        let holder = LiDARCapturePending()
+        _inner = holder
+        // Mirror `holder.isReady` onto our @Published so the parent view can observe it.
+        let sub = holder.$isReady.sink { [weak self] value in
+            self?.isReady = value
+        }
+        cancellable = sub
+        return holder
+    }
+}
+
+#endif

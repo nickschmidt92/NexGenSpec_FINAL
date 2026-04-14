@@ -387,7 +387,7 @@ enum ReportExporter {
         let jobId = UUID(uuidString: inspection.inspectionId) ?? version.id
         let lidarScans = LiDARScanStore.loadScans(jobId: jobId)
         if !lidarScans.isEmpty {
-            report += "Room scans (LiDAR): \(lidarScans.map(\.usdzFileName).joined(separator: ", "))\n\n"
+            report += "Room scans (LiDAR): \(lidarScans.map(\.displayName).joined(separator: ", "))\n\n"
         }
         if !inspection.videos.isEmpty {
             report += "Videos: \(inspection.videos.map { $0.caption.isEmpty ? $0.fileName : $0.caption }.joined(separator: ", "))\n\n"

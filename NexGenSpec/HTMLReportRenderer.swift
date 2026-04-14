@@ -193,11 +193,21 @@ enum HTMLReportRenderer {
         // Room scans (LiDAR)
         let lidarScans = LiDARScanStore.loadScans(jobId: jobId)
         if !lidarScans.isEmpty {
-            html += "<div class=\"card\"><h2 class=\"section-title\">Room scans (LiDAR)</h2><ul class=\"meta\">"
+            let lidarDir = FilePaths.lidarFolder(jobId: jobId)
+            html += "<div class=\"card\"><h2 class=\"section-title\">Room scans (LiDAR)</h2>"
             for scan in lidarScans {
-                html += "<li>\(escapeHTML(scan.usdzFileName)) — \(htmlDateFormatter.string(from: scan.capturedAt))</li>"
+                html += "<div style=\"margin-bottom:18px;\">"
+                html += "<p class=\"meta\"><strong>\(escapeHTML(scan.displayName))</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
+                if let pngName = scan.floorplanPNGFileName {
+                    let pngURL = lidarDir.appendingPathComponent(pngName)
+                    if let pngData = try? Data(contentsOf: pngURL) {
+                        let b64 = pngData.base64EncodedString()
+                        html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;height:auto;border:1px solid #ccc;border-radius:6px;\" />"
+                    }
+                }
+                html += "</div>"
             }
-            html += "</ul><p class=\"meta\">3D models (USDZ) are saved with this inspection.</p></div>"
+            html += "<p class=\"meta\">3D models (USDZ) are saved with this inspection.</p></div>"
         }
 
         // Videos (drone / footage)
