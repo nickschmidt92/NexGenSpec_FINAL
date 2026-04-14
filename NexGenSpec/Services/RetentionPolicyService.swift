@@ -11,6 +11,22 @@ public enum RetentionPolicyService {
         }
     }
 
+    /// Returns the set of version IDs that would be deleted by
+    /// `purgeExpiredInspections` with the given parameters. Exposed so
+    /// callers can perform side-effects (e.g. deleting mirrored
+    /// EventKit events) before the inspection folders are removed.
+    public static func expiredVersionIDs(
+        metadata: [VersionMetadata],
+        now: Date = Date(),
+        retentionYears: Int = 5
+    ) -> [UUID] {
+        let cutoff = Calendar.current.date(byAdding: .year, value: -retentionYears, to: now) ?? now
+        return metadata.compactMap { m in
+            guard let finalizedAt = m.finalizedAt, finalizedAt < cutoff else { return nil }
+            return m.id
+        }
+    }
+
     public static func purgeExpiredInspections(
         metadata: [VersionMetadata],
         now: Date = Date(),

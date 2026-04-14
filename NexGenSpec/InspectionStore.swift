@@ -283,6 +283,13 @@ public extension InspectionStore {
         case .success:
             var copy = current.inspection
             copy.signatures = []
+            // Detach calendar linkage from the parent finalized version: a
+            // revision is a new draft and if the inspector wants a calendar
+            // entry for it they'll opt in again via SchedulingCard. Without
+            // this, deleting the revision's draft would cascade-delete the
+            // EK event that still belongs to the finalized parent.
+            copy.calendarEventIdentifier = nil
+            copy.calendarIdentifier = nil
             let revision = InspectionVersion(
                 id: UUID(),
                 versionNumber: (metadataList.map(\.versionNumber).max() ?? 0) + 1,
@@ -404,6 +411,18 @@ public extension InspectionStore {
     /// Admin-only purge of finalized inspections older than retention policy.
     @discardableResult
     func purgeExpiredInspections(isAdmin: Bool, actorId: String?) -> RetentionPolicyService.PurgeResult {
+        // RetentionPolicyService removes the inspection folders but has
+        // no knowledge of EventKit. Before we lose access to the version
+        // JSON, walk the candidates and delete any mirrored calendar
+        // events so we don't orphan them.
+        if isAdmin {
+            let candidateIds = RetentionPolicyService.expiredVersionIDs(metadata: metadataList)
+            for versionId in candidateIds {
+                guard let full = loadFullVersion(id: versionId),
+                      let eventIdentifier = full.inspection.calendarEventIdentifier else { continue }
+                try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
+            }
+        }
         let result = RetentionPolicyService.purgeExpiredInspections(
             metadata: metadataList,
             isAdmin: isAdmin,

@@ -6,6 +6,7 @@
 import XCTest
 import PDFKit
 import UIKit
+import Combine
 @testable import NexGenSpec
 
 final class FilePathsTests: XCTestCase {
@@ -729,5 +730,137 @@ final class VoiceCommandCalendarTests: XCTestCase {
 
         let r3 = mgr.parseCommand(transcript: "calendar", fireAction: false)
         XCTAssertEqual(r3.command, "Go to calendar")
+    }
+}
+
+// MARK: - Calendar alarm DST / timezone correctness
+
+/// `CalendarService.dayBeforeAt8AM` produces the absolute alarm date for
+/// the day-before-8am reminder. The computation uses the user's local
+/// calendar, so it must stay stable across DST transitions and must
+/// not return dates in the past.
+final class CalendarAlarmDSTTests: XCTestCase {
+
+    /// US spring-forward: 8 AM on the day before a post-transition
+    /// inspection must still land on the previous calendar day at
+    /// 08:00 local time, not shift by an hour.
+    @MainActor
+    func testDayBeforeAt8AMAcrossUSSpringForward() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/New_York")!
+        // US 2026 spring-forward is 2026-03-08 02:00 -> 03:00.
+        // Inspection scheduled for noon on 2026-03-08 (the DST day).
+        var inspectionComps = DateComponents()
+        inspectionComps.year = 2026; inspectionComps.month = 3; inspectionComps.day = 8
+        inspectionComps.hour = 12; inspectionComps.minute = 0
+        inspectionComps.timeZone = cal.timeZone
+        let inspection = try XCTUnwrap(cal.date(from: inspectionComps))
+
+        // Treat "now" as well before the inspection so the method
+        // doesn't return nil for an in-the-past alarm.
+        let now = try XCTUnwrap(cal.date(from: DateComponents(
+            timeZone: cal.timeZone, year: 2026, month: 3, day: 1, hour: 0
+        )))
+
+        let alarm = try XCTUnwrap(CalendarService.dayBeforeAt8AM(
+            relativeTo: inspection, calendar: cal, now: now
+        ))
+        let parts = cal.dateComponents([.year, .month, .day, .hour, .minute], from: alarm)
+        XCTAssertEqual(parts.year, 2026)
+        XCTAssertEqual(parts.month, 3)
+        XCTAssertEqual(parts.day, 7)      // day before inspection
+        XCTAssertEqual(parts.hour, 8)     // 8 AM local, despite DST next day
+        XCTAssertEqual(parts.minute, 0)
+    }
+
+    /// US fall-back: same invariants on the other DST edge.
+    @MainActor
+    func testDayBeforeAt8AMAcrossUSFallBack() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/New_York")!
+        // US 2026 fall-back is 2026-11-01 02:00 -> 01:00.
+        var inspectionComps = DateComponents()
+        inspectionComps.year = 2026; inspectionComps.month = 11; inspectionComps.day = 1
+        inspectionComps.hour = 14; inspectionComps.minute = 30
+        inspectionComps.timeZone = cal.timeZone
+        let inspection = try XCTUnwrap(cal.date(from: inspectionComps))
+        let now = try XCTUnwrap(cal.date(from: DateComponents(
+            timeZone: cal.timeZone, year: 2026, month: 10, day: 25, hour: 0
+        )))
+
+        let alarm = try XCTUnwrap(CalendarService.dayBeforeAt8AM(
+            relativeTo: inspection, calendar: cal, now: now
+        ))
+        let parts = cal.dateComponents([.year, .month, .day, .hour, .minute], from: alarm)
+        XCTAssertEqual(parts.day, 31)
+        XCTAssertEqual(parts.month, 10)
+        XCTAssertEqual(parts.hour, 8)
+    }
+
+    /// If the computed alarm is already in the past the method returns
+    /// nil — EventKit rejects absolute alarms for past dates.
+    @MainActor
+    func testDayBeforeAt8AMReturnsNilWhenInThePast() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let inspection = try XCTUnwrap(cal.date(from: DateComponents(
+            timeZone: cal.timeZone, year: 2020, month: 6, day: 15, hour: 10
+        )))
+        let now = try XCTUnwrap(cal.date(from: DateComponents(
+            timeZone: cal.timeZone, year: 2026, month: 1, day: 1, hour: 0
+        )))
+
+        let alarm = CalendarService.dayBeforeAt8AM(
+            relativeTo: inspection, calendar: cal, now: now
+        )
+        XCTAssertNil(alarm)
+    }
+
+    /// Year-boundary crossover: an inspection on Jan 1 should produce a
+    /// day-before alarm on Dec 31 of the previous year.
+    @MainActor
+    func testDayBeforeAt8AMCrossesYearBoundary() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Denver")!
+        let inspection = try XCTUnwrap(cal.date(from: DateComponents(
+            timeZone: cal.timeZone, year: 2027, month: 1, day: 1, hour: 9
+        )))
+        let now = try XCTUnwrap(cal.date(from: DateComponents(
+            timeZone: cal.timeZone, year: 2026, month: 12, day: 15, hour: 0
+        )))
+
+        let alarm = try XCTUnwrap(CalendarService.dayBeforeAt8AM(
+            relativeTo: inspection, calendar: cal, now: now
+        ))
+        let parts = cal.dateComponents([.year, .month, .day, .hour], from: alarm)
+        XCTAssertEqual(parts.year, 2026)
+        XCTAssertEqual(parts.month, 12)
+        XCTAssertEqual(parts.day, 31)
+        XCTAssertEqual(parts.hour, 8)
+    }
+}
+
+// MARK: - Tab router notification bridge
+
+/// The voice-command deep-link "go to calendar" posts a notification
+/// that `MainTabView` observes to switch the active tab. This test
+/// validates the observer wiring without mounting the view hierarchy.
+final class TabRouterNotificationTests: XCTestCase {
+
+    @MainActor
+    func testRouterSwitchesToCalendarOnNotification() async {
+        let router = TabRouter(initial: .workspace)
+        // Mirror the observer `MainTabView` installs.
+        let cancellable = NotificationCenter.default
+            .publisher(for: .nexGenSpecRequestCalendarTab)
+            .sink { _ in router.show(.calendar) }
+        defer { cancellable.cancel() }
+
+        XCTAssertEqual(router.selected, .workspace)
+        NotificationCenter.default.post(name: .nexGenSpecRequestCalendarTab, object: nil)
+        // Publisher is synchronous on the main run loop, but yield to
+        // flush any pending Combine delivery.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(router.selected, .calendar)
     }
 }

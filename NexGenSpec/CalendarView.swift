@@ -283,7 +283,7 @@ struct CalendarView: View {
         let endExclusive = calendar.date(byAdding: .day, value: 1, to: last) ?? last
         // Skip NexGenSpec-authored events — they show as NexGenSpec dots via metadataList.
         let linked = Set(store.metadataList.compactMap { $0.calendarEventIdentifierForConflicts })
-        let events = calendarService.events(from: first, to: endExclusive)
+        let events = await calendarService.events(from: first, to: endExclusive)
             .filter { !linked.contains($0.id) }
         await MainActor.run { conflicts = events }
     }

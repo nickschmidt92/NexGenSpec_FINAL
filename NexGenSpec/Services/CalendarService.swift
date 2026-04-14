@@ -101,7 +101,11 @@ public final class CalendarService: ObservableObject {
     /// time. Updated on each request.
     @Published public private(set) var authorizationState: CalendarAuthorizationState
 
-    private let store = EKEventStore()
+    /// `EKEventStore` is documented as thread-safe for concurrent calls;
+    /// we mark it `nonisolated(unsafe)` so the conflict-fetch path can
+    /// run the blocking predicate query on a background executor
+    /// without hopping back through the main actor.
+    nonisolated(unsafe) private let store = EKEventStore()
 
     /// Default alarm offsets (seconds). Two alarms per event:
     ///   - 60 min before start
@@ -252,23 +256,30 @@ public final class CalendarService: ObservableObject {
     /// events are not displayed individually, only as "has-events"
     /// dots for non-NexGenSpec events on days that also hold an
     /// inspection slot.
-    public func events(from start: Date, to end: Date) -> [CalendarConflictEvent] {
+    ///
+    /// `EKEventStore.events(matching:)` is a blocking call that can
+    /// take >100 ms on devices syncing large iCloud/Google calendars,
+    /// so we run it on a detached task instead of the main actor.
+    public func events(from start: Date, to end: Date) async -> [CalendarConflictEvent] {
         guard authorizationState.canReadOtherEvents else { return [] }
-        let predicate = store.predicateForEvents(
-            withStart: start,
-            end: end,
-            calendars: nil
-        )
-        return store.events(matching: predicate).map { ek in
-            CalendarConflictEvent(
-                id: ek.eventIdentifier ?? UUID().uuidString,
-                title: ek.title ?? "",
-                start: ek.startDate,
-                end: ek.endDate ?? ek.startDate,
-                isAllDay: ek.isAllDay,
-                calendarTitle: ek.calendar?.title ?? ""
+        let store = self.store
+        return await Task.detached(priority: .userInitiated) { () -> [CalendarConflictEvent] in
+            let predicate = store.predicateForEvents(
+                withStart: start,
+                end: end,
+                calendars: nil
             )
-        }
+            return store.events(matching: predicate).map { ek in
+                CalendarConflictEvent(
+                    id: ek.eventIdentifier ?? UUID().uuidString,
+                    title: ek.title ?? "",
+                    start: ek.startDate,
+                    end: ek.endDate ?? ek.startDate,
+                    isAllDay: ek.isAllDay,
+                    calendarTitle: ek.calendar?.title ?? ""
+                )
+            }
+        }.value
     }
 
     // MARK: - Private
@@ -339,16 +350,20 @@ public final class CalendarService: ObservableObject {
 
     /// 8:00 local time on the day before `start`. Returns `nil` if the
     /// computed absolute alarm would be in the past (so EventKit does
-    /// not reject the save).
-    private static func dayBeforeAt8AM(relativeTo start: Date) -> Date? {
-        let cal = Calendar.current
-        guard let dayBefore = cal.date(byAdding: .day, value: -1, to: start) else { return nil }
-        var comps = cal.dateComponents([.year, .month, .day], from: dayBefore)
+    /// not reject the save). `calendar` and `now` are injectable for
+    /// unit testing DST transitions and timezone behavior.
+    static func dayBeforeAt8AM(
+        relativeTo start: Date,
+        calendar: Calendar = .current,
+        now: Date = Date()
+    ) -> Date? {
+        guard let dayBefore = calendar.date(byAdding: .day, value: -1, to: start) else { return nil }
+        var comps = calendar.dateComponents([.year, .month, .day], from: dayBefore)
         comps.hour = 8
         comps.minute = 0
         comps.second = 0
-        guard let eightAM = cal.date(from: comps) else { return nil }
-        if eightAM <= Date() { return nil }
+        guard let eightAM = calendar.date(from: comps) else { return nil }
+        if eightAM <= now { return nil }
         return eightAM
     }
 }
