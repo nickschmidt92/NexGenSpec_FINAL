@@ -25,6 +25,10 @@
 	<string>NexGenSpec uses your location to auto-fill the property address when creating a new inspection.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Used for secure authentication if enabled (optional).</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>NexGenSpec adds inspection appointments to the calendar you choose and reads your other events to flag scheduling conflicts. Calendar access is optional.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>PrivacyPolicyURL</key>

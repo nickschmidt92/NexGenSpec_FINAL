@@ -232,6 +232,9 @@ public struct TermsAndConditionsView: View {
                             Divider()
                             highlightedText("DATA SAFETY SUMMARY", id: "datasafety", font: .title3.bold(), isHeader: true)
                             highlightedText("We take data safety seriously. All personal and inspection data is encrypted at rest and in transit. Access controls and audit logs protect against unauthorized access. Our app does not share your data with third parties except as required by law or with your explicit consent.", font: .body)
+
+                            highlightedText("Calendar Integration (Optional)", font: .headline, isHeader: true)
+                            highlightedText("If you grant Calendar access, NexGenSpec writes an event to the calendar you choose for each inspection you schedule. The event includes the property address, client name, client phone, client email, real estate agent contact details (when provided), and the NexGenSpec job ID. This information is written only to your local calendar database and to any calendar accounts you have enabled on your device (e.g. iCloud, Google). NexGenSpec does not send this data to its own servers as part of the calendar feature. You can remove a calendar event from NexGenSpec at any time, and deleting an inspection in NexGenSpec also deletes its mirrored calendar event. Calendar access is entirely optional — all other app features work without it.", font: .body)
                             
                             Button(action: {
                                 showDataSafetyPDF = true

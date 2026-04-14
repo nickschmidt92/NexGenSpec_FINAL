@@ -180,6 +180,10 @@ struct InspectionView: View {
             // Navigate to camera — for now, ensure we're in a section view
             // The actual camera trigger happens from ItemDetailView
             break
+        case .goToCalendar:
+            // Cross-tab navigation from deep inside an inspection. Post
+            // a notification; MainTabView observes and switches the tab.
+            NotificationCenter.default.post(name: .nexGenSpecRequestCalendarTab, object: nil)
         }
     }
 

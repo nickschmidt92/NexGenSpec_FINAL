@@ -217,6 +217,18 @@ public struct Inspection: Identifiable, Codable, Equatable {
     public var buyersAgent: RealEstateAgent?
     /// Listing-side (seller's) real estate agent. Optional.
     public var listingAgent: RealEstateAgent?
+    /// Planned duration of the inspection in minutes. When `nil`, the
+    /// calendar layer treats it as the default (4 hours / 240 min). The
+    /// inspector may override at schedule time.
+    public var scheduledDurationMinutes: Int?
+    /// Identifier (`EKEvent.eventIdentifier`) of the mirrored OS-calendar
+    /// event, when the inspection has been added to the user's calendar.
+    /// Nil until the inspector taps "Add to Calendar".
+    public var calendarEventIdentifier: String?
+    /// Identifier (`EKCalendar.calendarIdentifier`) of the calendar the
+    /// mirrored event was written to. Stored so the app can refetch /
+    /// update / delete the event later.
+    public var calendarIdentifier: String?
 
     public var id: String { inspectionId }
 
@@ -241,7 +253,10 @@ public struct Inspection: Identifiable, Codable, Equatable {
         timerElapsedSeconds: Double = 0,
         coverPhotoFileName: String? = nil,
         buyersAgent: RealEstateAgent? = nil,
-        listingAgent: RealEstateAgent? = nil
+        listingAgent: RealEstateAgent? = nil,
+        scheduledDurationMinutes: Int? = nil,
+        calendarEventIdentifier: String? = nil,
+        calendarIdentifier: String? = nil
     ) {
         self.inspectionId = id.uuidString
         self.inspectionNumber = inspectionNumber
@@ -264,6 +279,9 @@ public struct Inspection: Identifiable, Codable, Equatable {
         self.coverPhotoFileName = coverPhotoFileName
         self.buyersAgent = buyersAgent
         self.listingAgent = listingAgent
+        self.scheduledDurationMinutes = scheduledDurationMinutes
+        self.calendarEventIdentifier = calendarEventIdentifier
+        self.calendarIdentifier = calendarIdentifier
     }
 }
 
@@ -275,6 +293,7 @@ extension Inspection {
         case inspectorName, sections, signatures, inspectorConfirmed, videos
         case weather, timerStartDate, timerElapsedSeconds
         case coverPhotoFileName, buyersAgent, listingAgent
+        case scheduledDurationMinutes, calendarEventIdentifier, calendarIdentifier
     }
 
     public init(from decoder: Decoder) throws {
@@ -300,6 +319,9 @@ extension Inspection {
         coverPhotoFileName = try c.decodeIfPresent(String.self, forKey: .coverPhotoFileName)
         buyersAgent = try c.decodeIfPresent(RealEstateAgent.self, forKey: .buyersAgent)
         listingAgent = try c.decodeIfPresent(RealEstateAgent.self, forKey: .listingAgent)
+        scheduledDurationMinutes = try c.decodeIfPresent(Int.self, forKey: .scheduledDurationMinutes)
+        calendarEventIdentifier = try c.decodeIfPresent(String.self, forKey: .calendarEventIdentifier)
+        calendarIdentifier = try c.decodeIfPresent(String.self, forKey: .calendarIdentifier)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -325,6 +347,43 @@ extension Inspection {
         try c.encodeIfPresent(coverPhotoFileName, forKey: .coverPhotoFileName)
         try c.encodeIfPresent(buyersAgent, forKey: .buyersAgent)
         try c.encodeIfPresent(listingAgent, forKey: .listingAgent)
+        try c.encodeIfPresent(scheduledDurationMinutes, forKey: .scheduledDurationMinutes)
+        try c.encodeIfPresent(calendarEventIdentifier, forKey: .calendarEventIdentifier)
+        try c.encodeIfPresent(calendarIdentifier, forKey: .calendarIdentifier)
+    }
+}
+
+// MARK: - Schedule helpers
+
+public extension Inspection {
+    /// The default inspection length used when `scheduledDurationMinutes`
+    /// is `nil`. The user can override per-inspection at scheduling time.
+    static let defaultScheduledDurationMinutes: Int = 240
+
+    /// Effective duration (minutes) for calendar events.
+    var effectiveDurationMinutes: Int {
+        scheduledDurationMinutes ?? Inspection.defaultScheduledDurationMinutes
+    }
+
+    /// `inspectionDate` stored from a date-only picker lands on local
+    /// midnight. Treat exactly-midnight (local) values as "unscheduled"
+    /// — i.e. the inspector has not yet picked a specific start time.
+    /// Calendar-event creation should prompt for a real time first.
+    var hasScheduledStartTime: Bool {
+        let comps = Calendar.current.dateComponents(
+            [.hour, .minute, .second, .nanosecond],
+            from: inspectionDate
+        )
+        let h = comps.hour ?? 0
+        let m = comps.minute ?? 0
+        let s = comps.second ?? 0
+        let ns = comps.nanosecond ?? 0
+        return !(h == 0 && m == 0 && s == 0 && ns == 0)
+    }
+
+    /// End datetime derived from `inspectionDate` + effective duration.
+    var scheduledEndDate: Date {
+        inspectionDate.addingTimeInterval(TimeInterval(effectiveDurationMinutes * 60))
     }
 }
 

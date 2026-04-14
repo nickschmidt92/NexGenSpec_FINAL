@@ -187,7 +187,7 @@ public final class InspectionStore: ObservableObject {
 
 public extension InspectionStore {
 
-    func createNewInspection(clientName: String, clientEmail: String, clientPhone: String, propertyAddress: String, inspectorName: String, inspectorConfirmed: Bool, customTemplateId: String? = nil) {
+    func createNewInspection(clientName: String, clientEmail: String, clientPhone: String, propertyAddress: String, inspectorName: String, inspectorConfirmed: Bool, inspectionDate: Date = Date(), customTemplateId: String? = nil) {
         let template: HeavyTemplate
         if let customId = customTemplateId,
            let custom = CustomTemplateStore.shared.template(for: customId) {
@@ -211,7 +211,7 @@ public extension InspectionStore {
             clientEmail: clientEmail,
             clientPhone: clientPhone,
             propertyAddress: propertyAddress,
-            inspectionDate: Date(),
+            inspectionDate: inspectionDate,
             inspectorName: inspectorName,
             sections: template.sections.map { src in
                 InspectionSection(
@@ -374,6 +374,15 @@ public extension InspectionStore {
 
         let hasRemainingInspectionReferences = metadataList.enumerated().contains { offset, other in
             offset != idx && other.inspectionId == metadata.inspectionId
+        }
+
+        // Cascade: if this inspection has a mirrored calendar event, try to
+        // delete it before we lose the identifier. We load the full version
+        // to read the `calendarEventIdentifier` — the metadata list only
+        // carries the lightweight fields.
+        if let full = loadFullVersion(id: id),
+           let eventIdentifier = full.inspection.calendarEventIdentifier {
+            try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
         }
 
         do {

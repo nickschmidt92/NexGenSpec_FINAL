@@ -9,6 +9,7 @@ import SwiftUI
 import Foundation
 import PhotosUI
 import UniformTypeIdentifiers
+import EventKit
 
 /// Shows the cover page for an inspection. Displays metadata and summary counts. Editable client/property/inspector when draft.
 @available(iOS 16.0, *)
@@ -53,7 +54,10 @@ struct InspectionOverviewView: View {
 
                     // Real estate agents (buyer's + listing). Both optional.
                     realEstateAgentSection
-                    
+
+                    // Scheduling (duration + add-to-calendar)
+                    schedulingSection
+
                     // Status badge (from strict state)
                     HStack {
                         Text(version.state.displayName)
@@ -234,7 +238,9 @@ struct InspectionOverviewView: View {
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
                 .phoneFormatted(binding(\.clientPhone))
-            DatePicker("Inspection Date", selection: binding(\.inspectionDate), displayedComponents: .date)
+            DatePicker("Inspection Date & Time",
+                       selection: binding(\.inspectionDate),
+                       displayedComponents: [.date, .hourAndMinute])
             TextField("Inspector Name", text: binding(\.inspectorName))
         }
         .padding()
@@ -563,6 +569,16 @@ struct InspectionOverviewView: View {
         )
     }
 
+    // MARK: - Scheduling + Calendar
+
+    @ViewBuilder
+    private var schedulingSection: some View {
+        SchedulingCard(
+            version: $version,
+            isEditable: isEditable
+        )
+    }
+
     @ViewBuilder
     private var exportOverlay: some View {
         if exportService.isExporting || exportService.errorMessage != nil {
@@ -676,6 +692,270 @@ enum ReportExporter {
         } catch {
             Diagnostics.logError(context: "exportPlainText failed", error: error)
             return nil
+        }
+    }
+}
+
+// MARK: - SchedulingCard
+
+/// Scheduling UI for an individual inspection:
+///   - duration picker (default 4h, override allowed)
+///   - Add / Update / Remove-from-Calendar actions
+///   - Permission banner when EventKit access is insufficient
+///
+/// Lives next to the inspector's client/property/date edits so the whole
+/// scheduling workflow is in one place. The month-grid view is for
+/// visualizing; this card is for acting.
+private struct SchedulingCard: View {
+    @Binding var version: InspectionVersion
+    let isEditable: Bool
+
+    @ObservedObject private var calendarService = CalendarService.shared
+    @EnvironmentObject private var authManager: AuthManager
+
+    @State private var errorBanner: String?
+    @State private var showSuccessCheck: Bool = false
+
+    /// Picker values: 1, 2, 3, 4, 6, 8 hours. `nil` row = "Use default (4h)".
+    private let durationOptions: [Int?] = [nil, 60, 120, 180, 240, 360, 480]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Scheduling")
+                .font(.headline)
+
+            if isEditable {
+                durationPicker
+            } else {
+                durationReadonly
+            }
+
+            calendarActionBar
+
+            if let msg = errorBanner {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            permissionFootnote
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+        .onAppear {
+            calendarService.refreshAuthorizationState()
+        }
+    }
+
+    // MARK: Duration
+
+    private var durationPicker: some View {
+        Picker("Duration", selection: durationBinding) {
+            ForEach(durationOptions, id: \.self) { opt in
+                Text(label(for: opt)).tag(opt)
+            }
+        }
+    }
+
+    private var durationReadonly: some View {
+        HStack {
+            Text("Duration")
+            Spacer()
+            Text(label(for: version.inspection.scheduledDurationMinutes))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var durationBinding: Binding<Int?> {
+        Binding(
+            get: { version.inspection.scheduledDurationMinutes },
+            set: { newValue in
+                var insp = version.inspection
+                insp.scheduledDurationMinutes = newValue
+                var v = version
+                v.inspection = insp
+                version = v
+            }
+        )
+    }
+
+    private func label(for option: Int?) -> String {
+        guard let option else { return "Default (4 h)" }
+        let hours = Double(option) / 60.0
+        if hours == floor(hours) {
+            return "\(Int(hours)) h"
+        }
+        return String(format: "%.1f h", hours)
+    }
+
+    // MARK: Action bar
+
+    @ViewBuilder
+    private var calendarActionBar: some View {
+        if version.inspection.calendarEventIdentifier != nil {
+            HStack(spacing: 10) {
+                Button {
+                    Task { await updateEvent() }
+                } label: {
+                    Label("Update Calendar Event", systemImage: "calendar.badge.clock")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!isEditable)
+
+                Button(role: .destructive) {
+                    Task { await removeEvent() }
+                } label: {
+                    Label("Remove", systemImage: "calendar.badge.minus")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!isEditable)
+
+                if showSuccessCheck {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+        } else {
+            HStack {
+                Button {
+                    Task { await addEvent() }
+                } label: {
+                    Label("Add to Calendar", systemImage: "calendar.badge.plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!isEditable || !calendarService.authorizationState.canCreateEvents)
+
+                if showSuccessCheck {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+    }
+
+    // MARK: Permission footnote
+
+    @ViewBuilder
+    private var permissionFootnote: some View {
+        switch calendarService.authorizationState {
+        case .notDetermined:
+            Button("Allow Calendar Access") {
+                Task { await calendarService.requestAccess() }
+            }
+            .font(.caption)
+        case .denied, .restricted:
+            Text("Calendar access is disabled. Enable it in Settings → NexGenSpec → Calendar.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .writeOnly:
+            Text("Write-Only access is on; full access recommended for conflict views.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: Actions
+
+    private func addEvent() async {
+        errorBanner = nil
+        // Prompt for access if necessary.
+        if calendarService.authorizationState == .notDetermined {
+            _ = await calendarService.requestAccess()
+        }
+        guard calendarService.authorizationState.canCreateEvents else {
+            errorBanner = "Calendar access is required. Enable it in Settings."
+            return
+        }
+        guard version.inspection.hasScheduledStartTime else {
+            errorBanner = "Pick a start time (not midnight) before adding to Calendar."
+            return
+        }
+        guard let cal = resolveCalendar() else {
+            errorBanner = "No writable calendar is available on this device."
+            return
+        }
+        do {
+            let identifier = try calendarService.createEvent(
+                for: version.inspection,
+                in: cal
+            )
+            var insp = version.inspection
+            insp.calendarEventIdentifier = identifier
+            insp.calendarIdentifier = cal.calendarIdentifier
+            var v = version
+            v.inspection = insp
+            version = v
+            flashSuccess()
+        } catch {
+            errorBanner = error.localizedDescription
+        }
+    }
+
+    private func updateEvent() async {
+        errorBanner = nil
+        guard let id = version.inspection.calendarEventIdentifier else { return }
+        guard calendarService.authorizationState.canCreateEvents else {
+            errorBanner = "Calendar access is required."
+            return
+        }
+        guard version.inspection.hasScheduledStartTime else {
+            errorBanner = "Pick a start time (not midnight) before updating."
+            return
+        }
+        do {
+            try calendarService.updateEvent(eventIdentifier: id, for: version.inspection)
+            flashSuccess()
+        } catch CalendarServiceError.eventNotFound {
+            // External deletion: forget the stored identifier, re-prompt.
+            var insp = version.inspection
+            insp.calendarEventIdentifier = nil
+            insp.calendarIdentifier = nil
+            var v = version
+            v.inspection = insp
+            version = v
+            errorBanner = "This calendar event was removed outside NexGenSpec. Tap Add to Calendar to recreate it."
+        } catch {
+            errorBanner = error.localizedDescription
+        }
+    }
+
+    private func removeEvent() async {
+        errorBanner = nil
+        guard let id = version.inspection.calendarEventIdentifier else { return }
+        do {
+            try calendarService.deleteEvent(eventIdentifier: id)
+            var insp = version.inspection
+            insp.calendarEventIdentifier = nil
+            insp.calendarIdentifier = nil
+            var v = version
+            v.inspection = insp
+            version = v
+            flashSuccess()
+        } catch {
+            errorBanner = error.localizedDescription
+        }
+    }
+
+    private func resolveCalendar() -> EKCalendar? {
+        let email = authManager.currentUsername
+        if let id = CalendarPreferences.defaultCalendarIdentifier(for: email),
+           let cal = calendarService.calendar(withIdentifier: id),
+           cal.allowsContentModifications {
+            return cal
+        }
+        return calendarService.fallbackDefaultCalendar()
+    }
+
+    private func flashSuccess() {
+        withAnimation { showSuccessCheck = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            withAnimation { showSuccessCheck = false }
         }
     }
 }

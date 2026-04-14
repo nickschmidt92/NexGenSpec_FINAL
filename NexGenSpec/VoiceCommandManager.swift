@@ -33,6 +33,7 @@ final class VoiceCommandManager: NSObject, ObservableObject {
     - "Defect: ..." (e.g., "Defect: broken window")
     - "Go to summary"
     - "Go to finalize"
+    - "Go to calendar" / "Open calendar"
     """
 
     /// Recognized command actions the host view should handle.
@@ -44,6 +45,7 @@ final class VoiceCommandManager: NSObject, ObservableObject {
         case defect(String)
         case goToSummary
         case goToFinalize
+        case goToCalendar
     }
 
     /// Callback for recognized commands. Set by the hosting view.
@@ -401,6 +403,11 @@ final class VoiceCommandManager: NSObject, ObservableObject {
             command = "Go to finalize"
             result = "Navigating to finalize"
             action = .goToFinalize
+        } else if lower == "go to calendar" || lower == "open calendar" || lower == "calendar"
+                    || lower.hasSuffix(" go to calendar") || lower.hasSuffix(" open calendar") {
+            command = "Go to calendar"
+            result = "Navigating to calendar"
+            action = .goToCalendar
         } else {
             command = nil
             result = "Unrecognized command"

@@ -1,6 +1,7 @@
 import SwiftUI
 import MessageUI
 import UIKit
+import EventKit
 
 struct AppSettingsView: View {
     @EnvironmentObject private var authManager: AuthManager
@@ -197,6 +198,14 @@ struct AppSettingsView: View {
                     }
 
                     SettingsSectionCard(
+                        title: "Calendar",
+                        subtitle: "Choose where NexGenSpec writes inspection events and manage OS-level access."
+                    ) {
+                        CalendarSettingsSection()
+                            .environmentObject(authManager)
+                    }
+
+                    SettingsSectionCard(
                         title: "Support",
                         subtitle: "Report a bug or send feedback to the NexGenSpec team."
                     ) {
@@ -264,13 +273,6 @@ struct AppSettingsView: View {
             }
             .scrollIndicators(.hidden)
             .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
         }
         .alert("Status", isPresented: $showStatus) {
             Button("OK", role: .cancel) {}
@@ -721,6 +723,121 @@ private struct LogoImagePicker: UIViewControllerRepresentable {
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             onPick(nil)
             picker.dismiss(animated: true)
+        }
+    }
+}
+
+// MARK: - Calendar settings
+
+/// Settings block for choosing which OS calendar NexGenSpec writes to
+/// and surfacing grant status / deep link to system Settings.app.
+/// Pulled out into its own view so the parent `SettingsSectionCard`
+/// composition stays declarative.
+private struct CalendarSettingsSection: View {
+    @EnvironmentObject private var authManager: AuthManager
+    @ObservedObject private var calendarService = CalendarService.shared
+
+    @State private var selectedIdentifier: String = ""
+    @State private var calendars: [EKCalendar] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            statusRow
+
+            switch calendarService.authorizationState {
+            case .notDetermined:
+                Button("Allow Calendar Access") {
+                    Task { await calendarService.requestAccess(); refreshCalendars() }
+                }
+                .buttonStyle(AppPrimaryButtonStyle())
+            case .denied, .restricted:
+                Button("Open System Settings") {
+                    openAppSettings()
+                }
+                .buttonStyle(AppSecondaryButtonStyle())
+            case .writeOnly:
+                Button("Enable Full Access in Settings") {
+                    openAppSettings()
+                }
+                .buttonStyle(AppSecondaryButtonStyle())
+                calendarPicker
+            case .fullAccess:
+                calendarPicker
+            case .unknown:
+                EmptyView()
+            }
+
+            Text("NexGenSpec writes events titled “NexGenSpec: <address>” and stores the client name, phone, email, and agent contact info in the event notes so you can see the full context at a glance. Deleting an inspection in NexGenSpec also deletes its calendar event.")
+                .font(AppFont.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear {
+            calendarService.refreshAuthorizationState()
+            refreshCalendars()
+            selectedIdentifier = CalendarPreferences.defaultCalendarIdentifier(for: authManager.currentUsername) ?? ""
+        }
+    }
+
+    private var statusRow: some View {
+        HStack {
+            Text("Access")
+                .font(AppFont.subheadline)
+            Spacer()
+            Text(authLabel)
+                .font(AppFont.subheadline.weight(.semibold))
+                .foregroundStyle(authColor)
+        }
+    }
+
+    @ViewBuilder
+    private var calendarPicker: some View {
+        if calendars.isEmpty {
+            Text("No writable calendars available.")
+                .font(AppFont.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Picker("Default Calendar", selection: $selectedIdentifier) {
+                Text("Device Default").tag("")
+                ForEach(calendars, id: \.calendarIdentifier) { cal in
+                    Text(cal.title).tag(cal.calendarIdentifier)
+                }
+            }
+            .onChange(of: selectedIdentifier) { _, newValue in
+                CalendarPreferences.setDefaultCalendarIdentifier(
+                    newValue.isEmpty ? nil : newValue,
+                    for: authManager.currentUsername
+                )
+            }
+        }
+    }
+
+    private func refreshCalendars() {
+        calendars = calendarService.writableCalendars()
+    }
+
+    private var authLabel: String {
+        switch calendarService.authorizationState {
+        case .notDetermined: return "Not Asked"
+        case .denied: return "Denied"
+        case .restricted: return "Restricted"
+        case .writeOnly: return "Write-Only"
+        case .fullAccess: return "Full"
+        case .unknown: return "Unknown"
+        }
+    }
+
+    private var authColor: Color {
+        switch calendarService.authorizationState {
+        case .fullAccess: return .green
+        case .writeOnly: return .orange
+        case .denied, .restricted: return .red
+        default: return .secondary
+        }
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
     }
 }

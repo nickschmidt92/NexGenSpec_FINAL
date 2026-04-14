@@ -24,17 +24,17 @@ struct DashboardView: View {
     @State private var newClientPhone     = ""
     @State private var newPropertyAddress = ""
     @State private var newInspectorName   = ""
+    @State private var newInspectionDate: Date = Self.defaultInspectionDate()
     @State private var versionToDeleteID: UUID?
     @State private var showTemplateError = false
     @StateObject private var locationService = LocationService()
-    @State private var showSettings = false
     @State private var showTemplatePicker = false
     @State private var selectedTemplateId: String?
+    @EnvironmentObject private var router: TabRouter
 
     // MARK: - View
     var body: some View {
-        NavigationStack {
-            AppScreenBackground {
+        AppScreenBackground {
                 List {
                     // Offline banner
                     if !networkMonitor.isConnected {
@@ -75,7 +75,7 @@ struct DashboardView: View {
                     Section {
                         DashboardActionDeck(
                             newInspectionAction: prepareForNewInspection,
-                            settingsAction: { showSettings = true }
+                            calendarAction: { router.show(.calendar) }
                         )
                     }
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.md, bottom: Spacing.sm, trailing: Spacing.md))
@@ -134,12 +134,6 @@ struct DashboardView: View {
                 }
                 .navigationTitle("Workspace")
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Settings") {
-                            showSettings = true
-                        }
-                        .accessibilityLabel("Settings")
-                    }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
                             prepareForNewInspection()
@@ -161,13 +155,6 @@ struct DashboardView: View {
                         } onCancel: {
                             showTemplatePicker = false
                         }
-                    }
-                }
-                .sheet(isPresented: $showSettings) {
-                    NavigationStack {
-                        AppSettingsView()
-                            .environmentObject(store)
-                            .environmentObject(authManager)
                     }
                 }
                 .alert("Save failed", isPresented: Binding(
@@ -213,7 +200,6 @@ struct DashboardView: View {
                 } message: {
                     Text("The inspection template could not be loaded. Please restart the app or reinstall.")
                 }
-            }
         }
     }
 
@@ -235,6 +221,7 @@ struct DashboardView: View {
         newClientPhone = ""
         newPropertyAddress = ""
         newInspectorName = InspectorProfile.shared.inspectorName
+        newInspectionDate = Self.defaultInspectionDate()
         inspectorConfirmed = false
         selectedTemplateId = nil
 
@@ -293,6 +280,13 @@ struct DashboardView: View {
                     }
                     TextField("Inspector Name",     text: $newInspectorName)
                 }
+                Section("Schedule") {
+                    DatePicker(
+                        "Start Date & Time",
+                        selection: $newInspectionDate,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
                 Section {
                     Toggle(isOn: $inspectorConfirmed) {
                         Text("I confirm I am a licensed or authorized inspector and responsible for this report.")
@@ -321,6 +315,7 @@ struct DashboardView: View {
                                 propertyAddress: newPropertyAddress,
                                 inspectorName:   newInspectorName,
                                 inspectorConfirmed: inspectorConfirmed,
+                                inspectionDate:  newInspectionDate,
                                 customTemplateId: selectedTemplateId
                             )
                             subscriptions.recordInspectionCreated()
@@ -334,6 +329,21 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    /// Default start time for a freshly-opened new-inspection sheet:
+    /// today at the next top-of-hour, clamped to 9am if earlier.
+    /// Using a real time (instead of local midnight) means the
+    /// scheduled inspection shows in the calendar grid as a scheduled
+    /// event rather than an "all-day" placeholder.
+    private static func defaultInspectionDate() -> Date {
+        let now = Date()
+        let cal = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day, .hour], from: now)
+        comps.hour = max(9, (comps.hour ?? 9) + 1)
+        comps.minute = 0
+        comps.second = 0
+        return cal.date(from: comps) ?? now
     }
 }
 
@@ -572,7 +582,7 @@ private struct DashboardHero: View {
 
 private struct DashboardActionDeck: View {
     let newInspectionAction: () -> Void
-    let settingsAction: () -> Void
+    let calendarAction: () -> Void
 
     var body: some View {
         HStack(spacing: Spacing.md) {
@@ -584,10 +594,10 @@ private struct DashboardActionDeck: View {
             )
 
             DashboardActionButton(
-                title: "Open Settings",
-                subtitle: "Legal text, backup, and account controls",
-                systemImage: "slider.horizontal.3",
-                action: settingsAction
+                title: "Open Calendar",
+                subtitle: "Schedule inspections and check conflicts",
+                systemImage: "calendar",
+                action: calendarAction
             )
         }
     }

@@ -67,7 +67,7 @@ struct RootView: View {
                         removal: .opacity.combined(with: .move(edge: .leading))
                     ))
             } else {
-                DashboardView()
+                MainTabView()
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.96)),
                         removal: .opacity

@@ -525,3 +525,209 @@ final class IndexMigrationFixtureTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
     }
 }
+
+// MARK: - Calendar / scheduling
+
+final class InspectionSchedulingFieldsTests: XCTestCase {
+
+    /// Verifies the new calendar fields round-trip cleanly through
+    /// JSON. Backward compatibility relies on `decodeIfPresent`, so
+    /// also check a decode from JSON that omits the new keys.
+    func testSchedulingFieldsRoundTripThroughJSON() throws {
+        let jobId = UUID()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var inspection = Inspection(
+            id: jobId,
+            clientName: "Client",
+            propertyAddress: "1 Test Ln",
+            inspectionDate: start,
+            inspectorName: "Inspector",
+            sections: [],
+            inspectorConfirmed: false
+        )
+        inspection.scheduledDurationMinutes = 180
+        inspection.calendarEventIdentifier = "ek-event-123"
+        inspection.calendarIdentifier = "ek-cal-abc"
+
+        let encoded = try JSONEncoder().encode(inspection)
+        let decoded = try JSONDecoder().decode(Inspection.self, from: encoded)
+
+        XCTAssertEqual(decoded.scheduledDurationMinutes, 180)
+        XCTAssertEqual(decoded.calendarEventIdentifier, "ek-event-123")
+        XCTAssertEqual(decoded.calendarIdentifier, "ek-cal-abc")
+        XCTAssertEqual(decoded.inspectionDate, start)
+    }
+
+    func testDecodeFromLegacyJSONWithoutSchedulingFieldsDefaultsToNil() throws {
+        let jobId = UUID()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        // Hand-construct legacy JSON (no scheduling keys).
+        let legacy: [String: Any] = [
+            "inspectionId": jobId.uuidString,
+            "inspectionNumber": 1,
+            "title": "",
+            "description": "",
+            "creationDate": 0,
+            "clientName": "Legacy",
+            "propertyAddress": "Old Home",
+            "inspectionDate": start.timeIntervalSinceReferenceDate,
+            "inspectorName": "Inspector",
+            "sections": [],
+            "signatures": [],
+            "inspectorConfirmed": true,
+            "timerElapsedSeconds": 0
+        ]
+        let data = try JSONSerialization.data(withJSONObject: legacy)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .deferredToDate
+        let decoded = try decoder.decode(Inspection.self, from: data)
+
+        XCTAssertNil(decoded.scheduledDurationMinutes)
+        XCTAssertNil(decoded.calendarEventIdentifier)
+        XCTAssertNil(decoded.calendarIdentifier)
+    }
+
+    func testHasScheduledStartTimeTreatsLocalMidnightAsUnscheduled() {
+        let cal = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day], from: Date())
+        comps.hour = 0
+        comps.minute = 0
+        comps.second = 0
+        let midnight = cal.date(from: comps)!
+        let atNoon = cal.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
+
+        let midnightInspection = Inspection(
+            clientName: "c", propertyAddress: "a",
+            inspectionDate: midnight, inspectorName: "i",
+            sections: [], inspectorConfirmed: false
+        )
+        let noonInspection = Inspection(
+            clientName: "c", propertyAddress: "a",
+            inspectionDate: atNoon, inspectorName: "i",
+            sections: [], inspectorConfirmed: false
+        )
+
+        XCTAssertFalse(midnightInspection.hasScheduledStartTime)
+        XCTAssertTrue(noonInspection.hasScheduledStartTime)
+    }
+
+    func testEffectiveDurationDefaultsToFourHours() {
+        let inspection = Inspection(
+            clientName: "c", propertyAddress: "a",
+            inspectionDate: Date(), inspectorName: "i",
+            sections: [], inspectorConfirmed: false
+        )
+        XCTAssertEqual(inspection.effectiveDurationMinutes, 240)
+        var overridden = inspection
+        overridden.scheduledDurationMinutes = 90
+        XCTAssertEqual(overridden.effectiveDurationMinutes, 90)
+    }
+
+    func testScheduledEndDateAddsDuration() {
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        var inspection = Inspection(
+            clientName: "c", propertyAddress: "a",
+            inspectionDate: start, inspectorName: "i",
+            sections: [], inspectorConfirmed: false
+        )
+        inspection.scheduledDurationMinutes = 120
+        XCTAssertEqual(
+            inspection.scheduledEndDate.timeIntervalSince(start),
+            120 * 60,
+            accuracy: 0.1
+        )
+    }
+
+    @MainActor
+    func testCalendarEventTitleUsesAddress() {
+        let inspection = Inspection(
+            clientName: "c", propertyAddress: "42 Oak Street",
+            inspectionDate: Date(), inspectorName: "i",
+            sections: [], inspectorConfirmed: false
+        )
+        XCTAssertEqual(
+            CalendarService.eventTitle(for: inspection),
+            "NexGenSpec: 42 Oak Street"
+        )
+    }
+
+    @MainActor
+    func testCalendarEventNotesIncludeClientAndAgentContacts() {
+        var inspection = Inspection(
+            clientName: "Jane Buyer",
+            clientEmail: "jane@example.com",
+            clientPhone: "555-0100",
+            propertyAddress: "42 Oak Street",
+            inspectionDate: Date(),
+            inspectorName: "Inspector",
+            sections: [],
+            inspectorConfirmed: false
+        )
+        inspection.buyersAgent = RealEstateAgent(
+            name: "Agent Smith",
+            brokerage: "ACME Realty",
+            phone: "555-0123",
+            email: "agent@example.com"
+        )
+        let notes = CalendarService.eventNotes(for: inspection)
+        XCTAssertTrue(notes.contains("Jane Buyer"))
+        XCTAssertTrue(notes.contains("jane@example.com"))
+        XCTAssertTrue(notes.contains("555-0100"))
+        XCTAssertTrue(notes.contains("Buyer's Agent"))
+        XCTAssertTrue(notes.contains("ACME Realty"))
+        XCTAssertTrue(notes.contains(inspection.inspectionId))
+    }
+}
+
+// MARK: - Calendar preferences
+
+final class CalendarPreferencesTests: XCTestCase {
+
+    func testDefaultCalendarIdentifierIsNilWhenUnset() {
+        CalendarPreferences.setDefaultCalendarIdentifier(nil, for: "newuser@example.com")
+        XCTAssertNil(CalendarPreferences.defaultCalendarIdentifier(for: "newuser@example.com"))
+    }
+
+    func testSetAndGetDefaultCalendarIdentifier() {
+        let email = "pref-test-\(UUID().uuidString)@example.com"
+        CalendarPreferences.setDefaultCalendarIdentifier("cal-42", for: email)
+        XCTAssertEqual(
+            CalendarPreferences.defaultCalendarIdentifier(for: email),
+            "cal-42"
+        )
+        // Normalization: same email with different case returns same value.
+        XCTAssertEqual(
+            CalendarPreferences.defaultCalendarIdentifier(for: email.uppercased()),
+            "cal-42"
+        )
+        CalendarPreferences.setDefaultCalendarIdentifier(nil, for: email)
+        XCTAssertNil(CalendarPreferences.defaultCalendarIdentifier(for: email))
+    }
+
+    func testAutoAddNewInspectionsDefaultsToFalse() {
+        let email = "auto-test-\(UUID().uuidString)@example.com"
+        XCTAssertFalse(CalendarPreferences.autoAddNewInspections(for: email))
+        CalendarPreferences.setAutoAddNewInspections(true, for: email)
+        XCTAssertTrue(CalendarPreferences.autoAddNewInspections(for: email))
+        CalendarPreferences.setAutoAddNewInspections(false, for: email)
+        XCTAssertFalse(CalendarPreferences.autoAddNewInspections(for: email))
+    }
+}
+
+// MARK: - Voice command
+
+final class VoiceCommandCalendarTests: XCTestCase {
+
+    @MainActor
+    func testGoToCalendarRecognized() {
+        let mgr = VoiceCommandManager()
+        let r1 = mgr.parseCommand(transcript: "go to calendar", fireAction: false)
+        XCTAssertEqual(r1.command, "Go to calendar")
+
+        let r2 = mgr.parseCommand(transcript: "open calendar", fireAction: false)
+        XCTAssertEqual(r2.command, "Go to calendar")
+
+        let r3 = mgr.parseCommand(transcript: "calendar", fireAction: false)
+        XCTAssertEqual(r3.command, "Go to calendar")
+    }
+}
