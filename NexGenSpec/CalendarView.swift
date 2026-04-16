@@ -19,6 +19,11 @@ struct CalendarView: View {
     @State private var visibleMonth: Date = Self.firstOfMonth(for: Date())
     @State private var selectedDay: Date?
     @State private var conflicts: [CalendarConflictEvent] = []
+    /// Presented when the user taps the "N other" pill in the selected-day
+    /// detail card. Shows the title/time/source of each external event so
+    /// the inspector can tell at a glance what the conflict actually is
+    /// without leaving NexGenSpec to check Calendar.app.
+    @State private var showOtherEventsSheet: Bool = false
 
     private let calendar: Calendar = {
         var cal = Calendar(identifier: .gregorian)
@@ -54,6 +59,14 @@ struct CalendarView: View {
             // Prompt once; users can always deny / revisit later.
             if calendarService.authorizationState == .notDetermined {
                 Task { await calendarService.requestAccess() }
+            }
+        }
+        .sheet(isPresented: $showOtherEventsSheet) {
+            if let day = selectedDay {
+                OtherEventsSheet(
+                    day: day,
+                    events: externalEvents(on: day)
+                )
             }
         }
     }
@@ -193,10 +206,29 @@ struct CalendarView: View {
                         .font(AppFont.headline)
                     Spacer()
                     if externalCount > 0 {
-                        Label("\(externalCount) other", systemImage: "circle.fill")
-                            .labelStyle(.titleAndIcon)
+                        // Tappable pill: reveals the titles/times of
+                        // external events so a count alone isn't a dead end.
+                        // Privacy-conscious by design — titles are never
+                        // shown on the grid, only after an explicit tap.
+                        Button {
+                            showOtherEventsSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "circle.fill")
+                                Text("\(externalCount) other")
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.bold))
+                            }
                             .font(AppFont.caption.weight(.semibold))
                             .foregroundStyle(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule().fill(Color.orange.opacity(0.12))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Show \(externalCount) other calendar events")
                     }
                 }
 
@@ -443,6 +475,83 @@ private struct DayRow: View {
             return "All day"
         }
         return Self.timeFormatter.string(from: metadata.inspectionDate)
+    }
+}
+
+// MARK: - OtherEventsSheet
+
+/// Sheet shown when the user taps the "N other" pill on a selected day.
+/// Lists every non-NexGenSpec event for that day so the inspector can
+/// see what the conflict actually is. Deliberately minimal: title,
+/// time window, source calendar — no body/location/attendees, since
+/// that's what Calendar.app is for. All-day events are sorted first,
+/// then by start time.
+private struct OtherEventsSheet: View {
+    let day: Date
+    let events: [CalendarConflictEvent]
+    @Environment(\.dismiss) private var dismiss
+
+    private static let dayFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .full
+        return df
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.timeStyle = .short
+        df.dateStyle = .none
+        return df
+    }()
+
+    private var sortedEvents: [CalendarConflictEvent] {
+        events.sorted { a, b in
+            if a.isAllDay != b.isAllDay { return a.isAllDay && !b.isAllDay }
+            return a.start < b.start
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(sortedEvents) { event in
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text(event.title.isEmpty ? "Untitled event" : event.title)
+                                .font(AppFont.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(timeLabel(for: event))
+                                .font(AppFont.caption)
+                                .foregroundStyle(.secondary)
+                            if !event.calendarTitle.isEmpty {
+                                Text(event.calendarTitle)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.vertical, Spacing.xxs)
+                    }
+                } footer: {
+                    Text("Events from other calendars are read-only inside NexGenSpec. Open Calendar to edit.")
+                        .font(AppFont.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle(Self.dayFormatter.string(from: day))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func timeLabel(for event: CalendarConflictEvent) -> String {
+        if event.isAllDay { return "All-day" }
+        let start = Self.timeFormatter.string(from: event.start)
+        let end = Self.timeFormatter.string(from: event.end)
+        return "\(start) – \(end)"
     }
 }
 
