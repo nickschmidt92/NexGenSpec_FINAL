@@ -864,3 +864,284 @@ final class TabRouterNotificationTests: XCTestCase {
         XCTAssertEqual(router.selected, .calendar)
     }
 }
+
+// MARK: - End-to-end calendar integration flows
+//
+// These tests exercise the InspectionStore-level orchestration for
+// the scheduling / Add-to-Calendar / Update / cascade-delete flows
+// that would otherwise require a real device + EventKit grant to
+// verify manually. EKEventStore access is gracefully rejected in
+// the test environment (authorization state is .notDetermined), so
+// any code that guards behind `authorizationState.canCreateEvents`
+// no-ops; the value here is proving the surrounding InspectionStore
+// logic is correct and doesn't crash when EventKit is unavailable.
+
+@MainActor
+final class CalendarIntegrationFlowsTests: XCTestCase {
+
+    // MARK: - Helpers
+
+    private func makeInspection(
+        id: UUID = UUID(),
+        start: Date = Date(timeIntervalSince1970: 1_750_000_000),
+        calendarEventIdentifier: String? = nil,
+        calendarIdentifier: String? = nil,
+        durationMinutes: Int? = nil
+    ) -> Inspection {
+        var insp = Inspection(
+            id: id,
+            clientName: "Test Client",
+            clientEmail: "",
+            clientPhone: "",
+            propertyAddress: "100 Integration Rd",
+            inspectionDate: start,
+            inspectorName: "Tester",
+            sections: [],
+            inspectorConfirmed: false
+        )
+        insp.scheduledDurationMinutes = durationMinutes
+        insp.calendarEventIdentifier = calendarEventIdentifier
+        insp.calendarIdentifier = calendarIdentifier
+        return insp
+    }
+
+    private func makeFinalizedVersion(inspection: Inspection) -> InspectionVersion {
+        InspectionVersion(
+            id: UUID(),
+            versionNumber: 1,
+            status: .final,
+            finalizedAt: Date(),
+            locked: true,
+            inspection: inspection
+        )
+    }
+
+    private func makeDraftVersion(inspection: Inspection) -> InspectionVersion {
+        InspectionVersion(
+            id: UUID(),
+            versionNumber: 1,
+            status: .draft,
+            finalizedAt: nil,
+            locked: false,
+            inspection: inspection
+        )
+    }
+
+    // MARK: - "New inspection with scheduling" flow
+
+    /// When an inspector schedules a new inspection (sets duration +
+    /// start time), those fields must survive the disk round-trip
+    /// that happens inside `insert(version:)` → `loadFullVersion(id:)`.
+    /// This is the path exercised when the user creates an inspection
+    /// on one launch and reopens it on the next.
+    func testNewInspectionPreservesSchedulingFieldsThroughStoreRoundTrip() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        let inspection = makeInspection(
+            id: jobId,
+            start: start,
+            calendarEventIdentifier: "ek-evt-xyz",
+            calendarIdentifier: "ek-cal-abc",
+            durationMinutes: 150
+        )
+        let version = makeDraftVersion(inspection: inspection)
+
+        let store = InspectionStore()
+        store.insert(version: version)
+
+        guard let reloaded = store.loadFullVersion(id: version.id) else {
+            return XCTFail("Could not reload inserted version")
+        }
+        XCTAssertEqual(reloaded.inspection.scheduledDurationMinutes, 150)
+        XCTAssertEqual(reloaded.inspection.calendarEventIdentifier, "ek-evt-xyz")
+        XCTAssertEqual(reloaded.inspection.calendarIdentifier, "ek-cal-abc")
+        XCTAssertEqual(reloaded.inspection.inspectionDate, start)
+
+        // Cleanup — otherwise subsequent tests see a lingering version.
+        _ = store.deleteVersion(id: version.id)
+    }
+
+    // MARK: - "Update flow"
+
+    /// After calling `update(version:)` on a draft whose inspector
+    /// changed the scheduled start time, the reloaded copy must
+    /// reflect the new start time AND retain the previously-set
+    /// calendar event identifier (the UI is expected to call
+    /// CalendarService.updateEvent separately for that).
+    func testUpdateVersionPersistsNewStartAndKeepsCalendarIdentifier() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let initialStart = Date(timeIntervalSince1970: 1_750_000_000)
+        let inspection = makeInspection(
+            id: jobId,
+            start: initialStart,
+            calendarEventIdentifier: "ek-evt-keep",
+            calendarIdentifier: "ek-cal-keep",
+            durationMinutes: 90
+        )
+        let version = makeDraftVersion(inspection: inspection)
+
+        let store = InspectionStore()
+        store.insert(version: version)
+
+        // Mutate start and duration; re-save.
+        var edited = version
+        let newStart = initialStart.addingTimeInterval(3600)
+        edited.inspection.inspectionDate = newStart
+        edited.inspection.scheduledDurationMinutes = 180
+        store.update(version: edited)
+
+        guard let reloaded = store.loadFullVersion(id: version.id) else {
+            return XCTFail("Could not reload updated version")
+        }
+        XCTAssertEqual(reloaded.inspection.inspectionDate, newStart)
+        XCTAssertEqual(reloaded.inspection.scheduledDurationMinutes, 180)
+        XCTAssertEqual(reloaded.inspection.calendarEventIdentifier, "ek-evt-keep")
+        XCTAssertEqual(reloaded.inspection.calendarIdentifier, "ek-cal-keep")
+
+        _ = store.deleteVersion(id: version.id)
+    }
+
+    // MARK: - Cascade delete
+
+    /// `deleteVersion` must also try to remove any mirrored EKEvent.
+    /// In a test context EventKit access is not granted, so
+    /// `CalendarService.deleteEvent` throws `.notAuthorized`; the
+    /// InspectionStore path wraps that in `try?` so the version
+    /// removal still succeeds. This test proves the cascade path
+    /// does not crash and the local metadata + files are still
+    /// cleaned up even when EventKit is unavailable.
+    func testDeleteVersionWithCalendarIDCleanlyRemovesLocalArtifactsWithoutEventKit() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let inspection = makeInspection(
+            id: jobId,
+            calendarEventIdentifier: "ek-evt-nuke",
+            calendarIdentifier: "ek-cal-nuke"
+        )
+        let version = makeDraftVersion(inspection: inspection)
+
+        // Seed an artifact on disk inside the inspection folder so
+        // we can assert the folder is actually nuked, not just the
+        // metadata entry.
+        let artifact = FilePaths.photosFolder(jobId: jobId).appendingPathComponent("seed.txt")
+        try FileSecurity.writeProtected(Data("seed".utf8), to: artifact)
+
+        let store = InspectionStore()
+        store.insert(version: version)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: artifact.path))
+
+        XCTAssertTrue(store.deleteVersion(id: version.id))
+        XCTAssertNil(store.loadFullVersion(id: version.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath:
+            FilePaths.inspectionFolder(jobId: jobId).path))
+    }
+
+    // MARK: - Revision-created from finalized version (audit-fix regression)
+
+    /// When the inspector hits "Create Revision" on a finalized
+    /// version that was linked to a calendar event, the new DRAFT
+    /// must NOT inherit the parent's `calendarEventIdentifier` /
+    /// `calendarIdentifier`. Otherwise deleting the draft would
+    /// cascade-delete the parent's calendar event — a silent data
+    /// loss bug caught in the 2026-04-15 audit.
+    func testCreateRevisionFromFinalizedClearsCalendarLink() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let inspection = makeInspection(
+            id: jobId,
+            calendarEventIdentifier: "ek-evt-finalized",
+            calendarIdentifier: "ek-cal-finalized"
+        )
+        let finalized = makeFinalizedVersion(inspection: inspection)
+
+        let store = InspectionStore()
+        store.insert(version: finalized)
+
+        guard let newDraftId = store.createRevision(from: finalized.id) else {
+            return XCTFail("createRevision should succeed from a finalized version")
+        }
+        guard let draft = store.loadFullVersion(id: newDraftId) else {
+            return XCTFail("Could not reload newly-created revision draft")
+        }
+
+        XCTAssertNil(draft.inspection.calendarEventIdentifier,
+                     "Revision draft must not inherit parent EKEvent identifier")
+        XCTAssertNil(draft.inspection.calendarIdentifier,
+                     "Revision draft must not inherit parent EKCalendar identifier")
+        // Parent remains untouched.
+        let parent = store.loadFullVersion(id: finalized.id)
+        XCTAssertEqual(parent?.inspection.calendarEventIdentifier, "ek-evt-finalized")
+        XCTAssertEqual(parent?.inspection.calendarIdentifier, "ek-cal-finalized")
+
+        _ = store.deleteVersion(id: newDraftId)
+        // Finalized parent cannot be deleted via deleteVersion; cleanup
+        // by removing the folder directly.
+        try? FileManager.default.removeItem(at: FilePaths.inspectionFolder(jobId: jobId))
+    }
+
+    // MARK: - Purge cascade
+
+    /// Parallel to the deleteVersion cascade: purging finalized
+    /// inspections older than the retention window must also try to
+    /// delete mirrored EKEvents. With no EventKit access the EK side
+    /// quietly fails; the InspectionStore purge must still remove
+    /// the inspection folder and return the version ID in the
+    /// deleted set.
+    func testPurgeExpiredCascadesWithoutEventKitAccess() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let oldFinalizedAt = Calendar.current.date(byAdding: .year, value: -6, to: Date())!
+        let inspection = makeInspection(
+            id: jobId,
+            calendarEventIdentifier: "ek-evt-expired",
+            calendarIdentifier: "ek-cal-expired"
+        )
+        let expired = InspectionVersion(
+            id: UUID(),
+            versionNumber: 1,
+            status: .final,
+            finalizedAt: oldFinalizedAt,
+            locked: true,
+            inspection: inspection
+        )
+
+        let store = InspectionStore()
+        store.insert(version: expired)
+
+        let result = store.purgeExpiredInspections(isAdmin: true, actorId: "tester@example.com")
+        XCTAssertTrue(result.deletedInspectionIDs.contains(expired.id),
+                      "Expired finalized version should be purged")
+        XCTAssertFalse(FileManager.default.fileExists(atPath:
+            FilePaths.inspectionFolder(jobId: jobId).path))
+    }
+
+    // MARK: - Legacy inspection load
+
+    /// When opening an inspection created BEFORE the scheduling
+    /// fields existed (pre-2026-04 build), loading must succeed and
+    /// leave the new fields as nil rather than corrupting decoding
+    /// or forcing a user-visible default. This is the primary
+    /// backward-compat guarantee we ship.
+    func testLegacyInspectionLoadsCleanlyWithNilCalendarFields() throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let legacy = makeInspection(id: jobId) // no calendar fields, no duration
+        let version = makeDraftVersion(inspection: legacy)
+
+        let store = InspectionStore()
+        store.insert(version: version)
+
+        guard let reloaded = store.loadFullVersion(id: version.id) else {
+            return XCTFail("Legacy inspection failed to reload")
+        }
+        XCTAssertNil(reloaded.inspection.scheduledDurationMinutes)
+        XCTAssertNil(reloaded.inspection.calendarEventIdentifier)
+        XCTAssertNil(reloaded.inspection.calendarIdentifier)
+        // Default-duration accessor still returns the 4-hour fallback.
+        XCTAssertEqual(reloaded.inspection.effectiveDurationMinutes, 240)
+
+        _ = store.deleteVersion(id: version.id)
+    }
+}
