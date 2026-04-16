@@ -2,6 +2,9 @@ import SwiftUI
 import MessageUI
 import UIKit
 import EventKit
+#if DEBUG
+import FirebaseCrashlytics
+#endif
 
 struct AppSettingsView: View {
     @EnvironmentObject private var authManager: AuthManager
@@ -265,6 +268,23 @@ struct AppSettingsView: View {
                             .buttonStyle(AppSecondaryButtonStyle())
                         }
                     }
+
+                    // Diagnostics: DEBUG-only, shown to every signed-in user so
+                    // developers can exercise the Crashlytics pipeline without
+                    // depending on Firebase custom-claim admin role (which is
+                    // not yet wired up for the email-whitelisted admin account).
+                    // `#if DEBUG` keeps this out of App Store builds.
+                    #if DEBUG
+                    SettingsSectionCard(
+                        title: "Diagnostics (Debug only)",
+                        subtitle: "Force a crash to verify the Crashlytics pipeline. Must be run WITHOUT the Xcode debugger attached — launch the app from the Home Screen, then tap the button. Relaunch the app afterwards so Crashlytics can upload the report."
+                    ) {
+                        Button("Force Test Crash", role: .destructive) {
+                            triggerTestCrash()
+                        }
+                        .buttonStyle(AppSecondaryButtonStyle())
+                    }
+                    #endif
                 }
                 .frame(maxWidth: 860)
                 .padding(.horizontal, Spacing.md)
@@ -481,6 +501,20 @@ struct AppSettingsView: View {
         purgeSummary = "Deleted: \(result.deletedInspectionIDs.count)\nSkipped: \(result.skippedInspectionIDs.count)"
         showPurgeResult = true
     }
+
+    #if DEBUG
+    /// Forces an unrecoverable crash so we can verify Crashlytics is
+    /// reporting and the email-alert pipeline is wired up. Logs a marker
+    /// first so the crash is easy to identify in the Firebase console.
+    /// Only compiled into DEBUG builds so it can never reach production.
+    private func triggerTestCrash() {
+        Crashlytics.crashlytics().log("Manual test crash from Settings (DEBUG build)")
+        Crashlytics.crashlytics().setCustomValue("debug_settings_button", forKey: "test_crash_source")
+        // Firebase's recommended test crash. `fatalError` produces a
+        // signal that Crashlytics captures on next launch.
+        fatalError("NexGenSpec test crash — triggered from Settings")
+    }
+    #endif
 
     private func backupDirectory() -> URL {
         let dir = FilePaths.appRoot.appendingPathComponent("Backups", isDirectory: true)
