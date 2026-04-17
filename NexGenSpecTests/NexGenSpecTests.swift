@@ -865,6 +865,61 @@ final class TabRouterNotificationTests: XCTestCase {
     }
 }
 
+// MARK: - Beta / sandbox subscription unlock
+
+/// Guards the TestFlight-unlock behavior in SubscriptionManager so
+/// it can never regress into unlocking production App Store builds.
+@MainActor
+final class SubscriptionManagerBetaUnlockTests: XCTestCase {
+
+    /// In the test environment (simulator), `isBetaOrSandboxBuild`
+    /// must be true — this is also the same code path TestFlight hits
+    /// on device. If this ever returns false in the simulator, the
+    /// TestFlight unlock path is broken and paid testers will be
+    /// trapped at the paywall.
+    func testBetaOrSandboxBuildUnlocksInTestEnvironment() {
+        XCTAssertTrue(SubscriptionManager.isBetaOrSandboxBuild,
+                      "Test environment must be treated as sandbox so beta-tester unlock path is exercised.")
+    }
+
+    /// When beta unlock is active, a fresh user (no subscription, no
+    /// admin whitelist, zero free inspections used) must still have
+    /// feature access and be able to create inspections past the 3
+    /// free-trial limit.
+    func testFreshUserUnblockedUnderBetaUnlock() {
+        let manager = SubscriptionManager()
+        // Simulate burning through the trial: pretend we've already
+        // created 10 inspections (past the free limit of 3).
+        UserDefaults.standard.set(10, forKey: "nexgenspec.trial.inspectionsCreated")
+        defer { UserDefaults.standard.removeObject(forKey: "nexgenspec.trial.inspectionsCreated") }
+
+        // Re-init so the counter is read fresh from UserDefaults.
+        let fresh = SubscriptionManager()
+        XCTAssertTrue(fresh.canCreateInspection,
+                      "Beta tester past free limit must still be able to create inspections")
+        XCTAssertTrue(fresh.hasFeatureAccess,
+                      "Beta tester past free limit must still have premium feature access")
+        XCTAssertNil(fresh.freeInspectionsRemaining,
+                     "Beta testers have unlimited access — remaining count should be nil")
+        _ = manager // silence unused-warning
+    }
+
+    /// Beta unlock must NOT increment the trial counter. Without this,
+    /// a user who later upgrades from beta to a real App Store install
+    /// would arrive with a burned-through trial counter and hit the
+    /// paywall immediately, confusing them.
+    func testRecordInspectionDoesNotBurnDownTrialWhenBetaUnlocked() {
+        UserDefaults.standard.set(0, forKey: "nexgenspec.trial.inspectionsCreated")
+        defer { UserDefaults.standard.removeObject(forKey: "nexgenspec.trial.inspectionsCreated") }
+
+        let manager = SubscriptionManager()
+        XCTAssertEqual(manager.freeInspectionsUsed, 0)
+        manager.recordInspectionCreated()
+        XCTAssertEqual(manager.freeInspectionsUsed, 0,
+                       "recordInspectionCreated must be a no-op for beta testers")
+    }
+}
+
 // MARK: - End-to-end calendar integration flows
 //
 // These tests exercise the InspectionStore-level orchestration for

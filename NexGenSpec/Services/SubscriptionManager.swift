@@ -48,9 +48,9 @@ public final class SubscriptionManager: ObservableObject {
     /// Number of inspections the user has created (persisted across launches).
     @Published public private(set) var freeInspectionsUsed: Int = 0
 
-    /// True if the user can create a new inspection (subscribed, admin, or under free limit).
+    /// True if the user can create a new inspection (subscribed, admin, beta tester, or under free limit).
     public var canCreateInspection: Bool {
-        isPro || isAdminAccount || freeInspectionsUsed < Self.freeInspectionLimit
+        isPro || isAdminAccount || Self.isBetaOrSandboxBuild || freeInspectionsUsed < Self.freeInspectionLimit
     }
 
     /// True if the user should have access to premium features (voice commands,
@@ -62,21 +62,49 @@ public final class SubscriptionManager: ObservableObject {
     /// Uses `<=` so that while the user is working inside their Nth free
     /// inspection (N == `freeInspectionLimit`), premium features remain available.
     public var hasFeatureAccess: Bool {
-        isPro || isAdminAccount || freeInspectionsUsed <= Self.freeInspectionLimit
+        isPro || isAdminAccount || Self.isBetaOrSandboxBuild || freeInspectionsUsed <= Self.freeInspectionLimit
     }
 
-    /// Remaining free inspections. Returns nil if subscribed or admin.
+    /// Remaining free inspections. Returns nil if subscribed, admin, or beta tester.
     public var freeInspectionsRemaining: Int? {
-        (isPro || isAdminAccount) ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
+        (isPro || isAdminAccount || Self.isBetaOrSandboxBuild) ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
     }
 
     /// Call after a new inspection is successfully created.
     public func recordInspectionCreated() {
-        // Paid subscribers and admins never burn down the trial counter.
-        guard !isPro, !isAdminAccount else { return }
+        // Paid subscribers, admins, and beta testers never burn down the trial counter.
+        guard !isPro, !isAdminAccount, !Self.isBetaOrSandboxBuild else { return }
         freeInspectionsUsed += 1
         UserDefaults.standard.set(freeInspectionsUsed, forKey: TrialKey.inspectionsCreated)
     }
+
+    // MARK: - TestFlight / sandbox unlock
+
+    /// True when the app is running in a TestFlight or StoreKit-sandbox
+    /// context (detected via the App Store receipt URL). While IAP
+    /// products are still being configured in App Store Connect, beta
+    /// testers would otherwise hit the paywall at inspection #4 with
+    /// no way to purchase. Treating sandbox/TestFlight as "Pro" unblocks
+    /// the full feature surface for them.
+    ///
+    /// Returns **false** for real App Store builds — the receipt there
+    /// is `receipt`, not `sandboxReceipt` — so there is no risk this
+    /// accidentally unlocks the production app for paying users.
+    ///
+    /// Returns **true** on the iOS Simulator so local development and
+    /// automated tests aren't blocked by the paywall. Safe because
+    /// simulator builds never reach end users.
+    ///
+    /// Evaluated once at first access and cached; the receipt URL is
+    /// established at process launch and does not change at runtime.
+    public static let isBetaOrSandboxBuild: Bool = {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        guard let url = Bundle.main.appStoreReceiptURL else { return false }
+        return url.lastPathComponent == "sandboxReceipt"
+        #endif
+    }()
 
     // MARK: - Admin override (App Store review, internal testing, comps)
 
