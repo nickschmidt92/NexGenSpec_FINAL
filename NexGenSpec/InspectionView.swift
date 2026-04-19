@@ -33,6 +33,17 @@ struct InspectionView: View {
     @StateObject private var weatherService = WeatherService()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    /// Auto-save debounce task. Cancelled + recreated on every `draft`
+    /// change so rapid edits coalesce into one write ~1.0s after the
+    /// user stops typing. A nil task means no write is pending.
+    ///
+    /// This is the critical primary save path — v1 only saved on
+    /// `onDisappear`, which meant app crashes, force-quits, and
+    /// log-out-mid-edit lost all in-progress work. Bug caught by
+    /// TestFlight cohort 2026-04-19.
+    @State private var autoSaveTask: Task<Void, Never>?
+    private static let autoSaveDebounce: Duration = .seconds(1)
+
     // Timer state
     @State private var timerDisplayString = "00:00:00"
     @State private var timerSessionStart: Date?
@@ -53,6 +64,13 @@ struct InspectionView: View {
         }
         .navigationTitle(draft.inspection.clientName.isEmpty ? "Inspection \(draft.versionNumber)" : draft.inspection.clientName)
         .toolbar {
+            // Save-state indicator. Visible in the toolbar at all times
+            // so inspectors can trust the app isn't silently losing
+            // their work — the #1 complaint from the first TestFlight
+            // cohort.
+            ToolbarItem(placement: .navigation) {
+                saveStatusLabel
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Label("Timer: \(timerDisplayString)", systemImage: "timer")
@@ -134,13 +152,76 @@ struct InspectionView: View {
         }
         .onDisappear {
             pauseTimer()
+            // Cancel any pending debounce; force-save immediately as a
+            // backstop. Covers the normal "user navigates back to
+            // dashboard" flow AND the rare case where the app is torn
+            // down before the debounced save fires.
+            autoSaveTask?.cancel()
+            autoSaveTask = nil
             updated(draft)
+            store.saveNow()
+        }
+        // ---- PRIMARY AUTO-SAVE PATH ----
+        // Fires on every mutation of `draft` (every keystroke, every
+        // photo append, every checkbox tap). We debounce ~1s so rapid
+        // typing coalesces into a single disk write.
+        //
+        // Crucial for iPad inspectors in the field: if the app is
+        // force-quit, battery dies, or crashes mid-inspection, no more
+        // than ~1 second of work is at risk.
+        .onChange(of: draft) { _, newDraft in
+            autoSaveTask?.cancel()
+            autoSaveTask = Task { @MainActor in
+                try? await Task.sleep(for: Self.autoSaveDebounce)
+                guard !Task.isCancelled else { return }
+                updated(newDraft)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             pauseTimer()
+            // App is about to background or be killed. Flush any
+            // pending debounced save immediately — iOS gives us
+            // seconds, not minutes, before suspending.
+            autoSaveTask?.cancel()
+            autoSaveTask = nil
+            updated(draft)
+            store.saveNow()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             startTimer()
+        }
+    }
+
+    /// Compact indicator shown in the navigation toolbar so inspectors
+    /// always know whether their work is on disk. Three states:
+    ///   • Saving spinner + text while a write is in flight
+    ///   • "Unsaved" pill (amber) if a debounced save is pending
+    ///   • "Saved HH:MM" (green) otherwise — empty until first save
+    @ViewBuilder
+    private var saveStatusLabel: some View {
+        if store.isSaving {
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text("Saving…")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        } else if autoSaveTask != nil {
+            HStack(spacing: 4) {
+                Image(systemName: "circle.dotted")
+                Text("Unsaved")
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.orange)
+        } else if let t = store.lastSavedAt {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Saved \(t, style: .time)")
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.green)
+        } else {
+            EmptyView()
         }
     }
 

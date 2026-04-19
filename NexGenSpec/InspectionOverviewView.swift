@@ -10,6 +10,7 @@ import Foundation
 import PhotosUI
 import UniformTypeIdentifiers
 import EventKit
+import AVKit
 
 /// Shows the cover page for an inspection. Displays metadata and summary counts. Editable client/property/inspector when draft.
 @available(iOS 16.0, *)
@@ -22,6 +23,10 @@ struct InspectionOverviewView: View {
     @State private var showLiDARCapture = false
     @State private var selectedVideoItems: [PhotosPickerItem] = []
     @State private var selectedCoverItems: [PhotosPickerItem] = []
+    /// Currently-playing video, drives the AVPlayer sheet. Replaces
+    /// the old tap-does-nothing behavior where an uploaded video row
+    /// was inert — a top complaint from the first TestFlight cohort.
+    @State private var videoToPlay: InspectionVideo?
     @State private var showExportError = false
     @State private var showTextExportError = false
     @State private var showPaywall = false
@@ -182,6 +187,12 @@ struct InspectionOverviewView: View {
             .sheet(isPresented: $showLiDARCapture) {
                 LiDARCaptureView(jobId: UUID(uuidString: version.inspection.inspectionId) ?? version.id)
             }
+            .sheet(item: $videoToPlay) { video in
+                VideoPlayerSheet(
+                    url: FilePaths.videosFolder(jobId: jobId).appendingPathComponent(video.fileName),
+                    caption: video.caption.isEmpty ? video.fileName : video.caption
+                )
+            }
             .overlay(exportOverlay)
         } else {
             // Fallback for iOS 16: minimal placeholder so body is always available
@@ -272,18 +283,51 @@ struct InspectionOverviewView: View {
             } else {
                 ForEach(version.inspection.videos) { video in
                     HStack {
-                        Image(systemName: "video.fill")
-                            .foregroundColor(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(video.caption.isEmpty ? video.fileName : video.caption)
-                                .lineLimit(1)
-                            if let src = video.source, !src.isEmpty {
-                                Text(src)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                        Button {
+                            videoToPlay = video
+                        } label: {
+                            HStack(spacing: 12) {
+                                // Play-badged video icon so the row's
+                                // interactive affordance is obvious.
+                                ZStack {
+                                    Image(systemName: "video.fill")
+                                        .foregroundColor(.secondary)
+                                    Image(systemName: "play.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.white, Color.accentColor)
+                                        .offset(x: 8, y: 8)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(video.caption.isEmpty ? video.fileName : video.caption)
+                                        .lineLimit(1)
+                                        .foregroundStyle(.primary)
+                                    HStack(spacing: 6) {
+                                        Text("Tap to play")
+                                            .font(.caption)
+                                            .foregroundColor(.accentColor)
+                                        if let src = video.source, !src.isEmpty {
+                                            Text("•")
+                                                .foregroundStyle(.tertiary)
+                                            Text(src)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                Spacer()
                             }
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
+                        if isEditable {
+                            Button(role: .destructive) {
+                                removeVideo(video)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Delete video")
+                        }
                     }
                     .padding(8)
                     .background(Color(.systemGray6))
@@ -293,6 +337,18 @@ struct InspectionOverviewView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Drone and video footage")
+    }
+
+    /// Removes a video from both the inspection model and the file
+    /// system. Mirrors the existing photo-delete behavior.
+    private func removeVideo(_ video: InspectionVideo) {
+        let fileURL = FilePaths.videosFolder(jobId: jobId).appendingPathComponent(video.fileName)
+        try? FileManager.default.removeItem(at: fileURL)
+        var insp = version.inspection
+        insp.videos.removeAll { $0.id == video.id }
+        var v = version
+        v.inspection = insp
+        version = v
     }
 
     private func addVideoFromPickerItem(_ item: PhotosPickerItem) async {
@@ -979,5 +1035,41 @@ struct InspectionOverviewView_Previews: PreviewProvider {
             inspection: inspection
         )
         return InspectionOverviewView(version: .constant(version))
+    }
+}
+
+
+// MARK: - VideoPlayerSheet
+
+/// Lightweight full-screen video player used by the Drone / Video
+/// section on the inspection overview. Uses AVKit's VideoPlayer so
+/// the inspector gets the standard scrubber + AirPlay controls for
+/// free. Pauses automatically on dismiss.
+private struct VideoPlayerSheet: View {
+    let url: URL
+    let caption: String
+    @State private var player: AVPlayer
+    @Environment(\.dismiss) private var dismiss
+
+    init(url: URL, caption: String) {
+        self.url = url
+        self.caption = caption
+        _player = State(initialValue: AVPlayer(url: url))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VideoPlayer(player: player)
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle(caption)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+                .onAppear { player.play() }
+                .onDisappear { player.pause() }
+        }
     }
 }

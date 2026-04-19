@@ -170,6 +170,26 @@ struct ItemDetailView: View {
                                 VStack(spacing: 4) {
                                     AsyncThumbnailView(jobId: jobId, photo: photo, size: CGSize(width: 100, height: 100))
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .overlay(alignment: .topTrailing) {
+                                            // Always-visible trash button (not just
+                                            // in the long-press context menu).
+                                            // Original UX hid delete behind a
+                                            // long-press → testers thought it
+                                            // couldn't be done at all.
+                                            if !isLocked {
+                                                Button {
+                                                    photoToDelete = photo
+                                                    showDeleteConfirmation = true
+                                                } label: {
+                                                    Image(systemName: "trash.circle.fill")
+                                                        .font(.title3)
+                                                        .foregroundStyle(.white, .red)
+                                                        .shadow(radius: 1)
+                                                }
+                                                .padding(4)
+                                                .accessibilityLabel("Delete photo")
+                                            }
+                                        }
                                         .onTapGesture {
                                             guard !isLocked else { return }
                                             photoToAnnotate = photo

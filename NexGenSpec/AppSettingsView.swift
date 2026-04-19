@@ -62,6 +62,14 @@ struct AppSettingsView: View {
                         }
 
                         Button("Log Out", role: .destructive) {
+                            // Flush any pending debounced save before we
+                            // tear down the session. Protects against
+                            // the data-loss bug caught in the first
+                            // TestFlight cohort (2026-04-19): editing
+                            // an inspection then hitting Log Out used
+                            // to drop the last unsaved changes on the
+                            // floor.
+                            store.saveNow()
                             authManager.logout()
                             dismiss()
                         }
