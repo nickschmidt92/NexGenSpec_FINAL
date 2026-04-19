@@ -101,11 +101,25 @@ struct DashboardView: View {
                             }
                             .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.md, bottom: Spacing.xs, trailing: Spacing.md))
                             .listRowBackground(Color.clear)
+                            // Disable swipe-to-delete on finalized rows.
+                            // Previously the row would swipe open but the
+                            // deleteVersion call was a silent no-op (state
+                            // machine blocks delete on finalized). Testers
+                            // saw "delete isn't working, keeps popping up".
+                            // Finalized records must be preserved for legal
+                            // retention; an explicit Archive feature is on
+                            // the v1.1 roadmap.
+                            .deleteDisabled(!meta.isEditable)
                             .contextMenu {
                                 if meta.isEditable {
                                     Button("Delete inspection", role: .destructive) {
                                         versionToDeleteID = meta.id
                                     }
+                                } else {
+                                    Button {} label: {
+                                        Label("Finalized — kept for 5-year retention", systemImage: "lock.fill")
+                                    }
+                                    .disabled(true)
                                 }
                             }
                         }
@@ -143,6 +157,30 @@ struct DashboardView: View {
                         .keyboardShortcut("n", modifiers: .command)
                         .accessibilityLabel("New Inspection")
                         .accessibilityHint("Opens a form to create a new inspection")
+                    }
+                    // Log Out action in the Dashboard toolbar — testers
+                    // said the button in Settings wasn't easy enough to
+                    // find. Account menu keeps it one tap away from
+                    // anywhere the inspector lives most of the time.
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Menu {
+                            if let user = authManager.currentUsername {
+                                Text(user).disabled(true)
+                                Divider()
+                            }
+                            Button(role: .destructive) {
+                                // Flush any pending save before tearing
+                                // down the session (same guard as in
+                                // Settings > Log Out).
+                                store.saveNow()
+                                authManager.logout()
+                            } label: {
+                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        } label: {
+                            Image(systemName: "person.crop.circle")
+                                .accessibilityLabel("Account menu")
+                        }
                     }
                 }
                 .sheet(isPresented: $showNewInspectionSheet) { newInspectionSheet }
@@ -286,6 +324,12 @@ struct DashboardView: View {
                         selection: $newInspectionDate,
                         displayedComponents: [.date, .hourAndMinute]
                     )
+                    // .compact style pops a popover on tap instead of
+                    // expanding inline. Inline expansion inside a Form
+                    // on iOS 26 triggers UICollectionView batch-update
+                    // assertion on "Done" — the crash caught by the
+                    // first TestFlight cohort (2026-04-19).
+                    .datePickerStyle(.compact)
                 }
                 Section {
                     Toggle(isOn: $inspectorConfirmed) {

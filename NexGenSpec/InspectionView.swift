@@ -64,16 +64,25 @@ struct InspectionView: View {
                 sectionSidebar
             }
             VoiceCommandOverlay(voiceManager: voiceManager)
+            // Floating save-state indicator at bottom-center. Visible
+            // on every inspection pane (Overview, Section items,
+            // Summary, Finalize, Invoice) so the inspector always
+            // knows whether their work is safely on disk. Moved out
+            // of the toolbar after testers asked for it globally
+            // rather than just on the title bar.
+            VStack {
+                Spacer()
+                saveStatusLabel
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
+                    .padding(.bottom, 12)
+                    .allowsHitTesting(false)
+            }
         }
         .navigationTitle(draft.inspection.clientName.isEmpty ? "Inspection \(draft.versionNumber)" : draft.inspection.clientName)
         .toolbar {
-            // Save-state indicator. Visible in the toolbar at all times
-            // so inspectors can trust the app isn't silently losing
-            // their work — the #1 complaint from the first TestFlight
-            // cohort.
-            ToolbarItem(placement: .navigation) {
-                saveStatusLabel
-            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Label("Timer: \(timerDisplayString)", systemImage: "timer")
@@ -141,6 +150,17 @@ struct InspectionView: View {
             if draft.inspection.sections.isEmpty { selectedPane = .overview }
             voiceManager.onCommand = { action in
                 handleVoiceCommand(action)
+            }
+            // Seed the save indicator from the version file's on-disk
+            // modification time so the inspector sees a real "Saved
+            // HH:MM" the moment they open an inspection, not a blank
+            // indicator until their first edit.
+            if localLastSavedAt == nil {
+                let fileURL = FilePaths.currentVersionFile(jobId: version.id)
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+                   let modified = attrs[.modificationDate] as? Date {
+                    localLastSavedAt = modified
+                }
             }
             // Start timer
             startTimer()

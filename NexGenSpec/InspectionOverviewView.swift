@@ -32,6 +32,9 @@ struct InspectionOverviewView: View {
     /// — testers standing at the property correctly pointed out they
     /// want to shoot directly.
     @State private var showCoverPhotoCamera: Bool = false
+    /// Same story for video: testers wanted to record walk-through
+    /// video directly, not just pick pre-existing clips from Photos.
+    @State private var showVideoRecorder: Bool = false
     @State private var showExportError = false
     @State private var showTextExportError = false
     @State private var showPaywall = false
@@ -210,6 +213,18 @@ struct InspectionOverviewView: View {
                 )
                 .ignoresSafeArea()
             }
+            .sheet(isPresented: $showVideoRecorder) {
+                VideoRecorderView(
+                    onRecorded: { tempURL in
+                        showVideoRecorder = false
+                        addVideoFromRecordedURL(tempURL)
+                    },
+                    onCancel: {
+                        showVideoRecorder = false
+                    }
+                )
+                .ignoresSafeArea()
+            }
             .overlay(exportOverlay)
         } else {
             // Fallback for iOS 16: minimal placeholder so body is always available
@@ -269,6 +284,13 @@ struct InspectionOverviewView: View {
             DatePicker("Inspection Date & Time",
                        selection: binding(\.inspectionDate),
                        displayedComponents: [.date, .hourAndMinute])
+                // See DashboardView's newInspectionSheet — inline
+                // DatePicker in an iOS 26 Form context crashes on
+                // dismissal. Compact style avoids the problem and
+                // also lets the user tap the value pill to re-edit,
+                // which fixes the "can't change date once set" bug
+                // reported by the TestFlight cohort.
+                .datePickerStyle(.compact)
             TextField("Inspector Name", text: binding(\.inspectorName))
         }
         .padding()
@@ -285,10 +307,24 @@ struct InspectionOverviewView: View {
                     .font(.headline)
                 Spacer()
                 if isEditable {
-                    PhotosPicker(
-                        selection: $selectedVideoItems,
-                        maxSelectionCount: 1, matching: .videos
-                    ) {
+                    // Menu: record new OR pick from library. Parallels
+                    // the cover-photo Menu; testers asked for direct
+                    // video capture rather than only upload.
+                    Menu {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button {
+                                showVideoRecorder = true
+                            } label: {
+                                Label("Record Video", systemImage: "video.fill")
+                            }
+                        }
+                        PhotosPicker(
+                            selection: $selectedVideoItems,
+                            maxSelectionCount: 1, matching: .videos
+                        ) {
+                            Label("Choose from Library", systemImage: "photo.on.rectangle")
+                        }
+                    } label: {
                         Label("Add video", systemImage: "video.badge.plus")
                     }
                 }
@@ -354,6 +390,39 @@ struct InspectionOverviewView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Drone and video footage")
+    }
+
+    /// Handles a freshly-recorded video. UIImagePickerController hands
+    /// us a URL to a temp file in the app sandbox; we copy it into
+    /// this inspection's videos folder with a stable filename and
+    /// append an InspectionVideo row to the model. Mirrors the
+    /// library-upload path so both sources land the same way.
+    private func addVideoFromRecordedURL(_ tempURL: URL) {
+        let fileName = "\(UUID().uuidString).mov"
+        let videosDir = FilePaths.videosFolder(jobId: jobId)
+        let destURL = videosDir.appendingPathComponent(fileName)
+        do {
+            try FileSecurity.ensureProtectedDirectory(videosDir)
+            // Use copy then remove so a failure mid-write can't corrupt
+            // anything — temp file is iOS's problem, not ours.
+            if FileManager.default.fileExists(atPath: destURL.path) {
+                try FileManager.default.removeItem(at: destURL)
+            }
+            try FileManager.default.copyItem(at: tempURL, to: destURL)
+            let video = InspectionVideo(
+                fileName: fileName,
+                caption: "",
+                sortOrder: version.inspection.videos.count,
+                source: "walkthrough"
+            )
+            var insp = version.inspection
+            insp.videos.append(video)
+            var v = version
+            v.inspection = insp
+            version = v
+        } catch {
+            Diagnostics.logError(context: "addVideoFromRecordedURL failed", error: error)
+        }
     }
 
     /// Removes a video from both the inspection model and the file
