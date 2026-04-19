@@ -455,7 +455,9 @@ struct InspectionView: View {
                 }
             }
         case .summary:
-            SummaryView(viewModel: InspectionViewModel(version: draft))
+            SummaryView(viewModel: InspectionViewModel(version: draft)) { sectionID in
+                selectedPane = .section(sectionID)
+            }
         case .finalize:
             FinalizeView(version: $draft) { v in
                 store.finalize(version: v)

@@ -11,6 +11,12 @@ import SwiftUI
 struct SummaryView: View {
     @ObservedObject var viewModel: InspectionViewModel
     @State private var searchText: String = ""
+    /// Called when the user taps a row so the parent (InspectionView)
+    /// can navigate to that section's items. Nil means tap is a no-op
+    /// (kept for the Preview provider which doesn't have a pane
+    /// router). TestFlight testers reported Summary rows felt "dead"
+    /// — now they jump straight to the section item.
+    var onNavigateToSection: ((UUID) -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
@@ -29,10 +35,23 @@ struct SummaryView: View {
                 .padding(.horizontal)
                 .onChange(of: searchText) { _, _ in }
             List(filteredDefects()) { record in
-                VStack(alignment: .leading) {
+                Button {
+                    // Tap → jump into the containing section. This
+                    // was broken in v1 (tap handler mutated viewmodel
+                    // state that nothing was observing, so nothing
+                    // happened). Now we dispatch back through a
+                    // parent-provided callback.
+                    onNavigateToSection?(record.section.id)
+                } label: {
                     HStack {
-                        Text(record.item.title)
-                            .font(.headline)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(record.item.title)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text("Section: \(record.section.title)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                         Spacer()
                         if let sev = record.item.defectSeverity {
                             Text(sev.displayName)
@@ -42,17 +61,12 @@ struct SummaryView: View {
                                 .foregroundColor(AppColor.forSeverity(sev))
                                 .clipShape(Capsule())
                         }
-                    Text("Section: \(record.section.title)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
-            }
-                .onTapGesture {
-                    // Navigate to section and item detail
-                    viewModel.selectedSectionID = record.section.id
-                    viewModel.selectedItemID = record.item.id
-                    // set summary filter to none to avoid interfering
-                }
+                .buttonStyle(.plain)
             }
             .listStyle(.insetGrouped)
         }

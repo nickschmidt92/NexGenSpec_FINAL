@@ -27,6 +27,11 @@ struct InspectionOverviewView: View {
     /// the old tap-does-nothing behavior where an uploaded video row
     /// was inert — a top complaint from the first TestFlight cohort.
     @State private var videoToPlay: InspectionVideo?
+    /// Controls presentation of the camera sheet for capturing the
+    /// cover photo. Previously the only option was upload-from-library
+    /// — testers standing at the property correctly pointed out they
+    /// want to shoot directly.
+    @State private var showCoverPhotoCamera: Bool = false
     @State private var showExportError = false
     @State private var showTextExportError = false
     @State private var showPaywall = false
@@ -192,6 +197,18 @@ struct InspectionOverviewView: View {
                     url: FilePaths.videosFolder(jobId: jobId).appendingPathComponent(video.fileName),
                     caption: video.caption.isEmpty ? video.fileName : video.caption
                 )
+            }
+            .sheet(isPresented: $showCoverPhotoCamera) {
+                CameraCaptureView(
+                    onCapture: { image in
+                        showCoverPhotoCamera = false
+                        setCoverPhotoFromCapturedImage(image)
+                    },
+                    onCancel: {
+                        showCoverPhotoCamera = false
+                    }
+                )
+                .ignoresSafeArea()
             }
             .overlay(exportOverlay)
         } else {
@@ -407,19 +424,34 @@ struct InspectionOverviewView: View {
                     .font(.headline)
                 Spacer()
                 if isEditable {
-                    PhotosPicker(
-                        selection: $selectedCoverItems,
-                        maxSelectionCount: 1, matching: .images
-                    ) {
+                    // Menu offers three options — camera capture was
+                    // missing in v1 so inspectors couldn't shoot
+                    // directly while standing at the property.
+                    Menu {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button {
+                                showCoverPhotoCamera = true
+                            } label: {
+                                Label("Take Photo", systemImage: "camera")
+                            }
+                        }
+                        PhotosPicker(
+                            selection: $selectedCoverItems,
+                            maxSelectionCount: 1, matching: .images
+                        ) {
+                            Label("Choose from Library", systemImage: "photo.on.rectangle")
+                        }
+                        if version.inspection.coverPhotoFileName != nil {
+                            Divider()
+                            Button(role: .destructive) {
+                                removeCoverPhoto()
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                        }
+                    } label: {
                         Label(version.inspection.coverPhotoFileName == nil ? "Add" : "Change",
                               systemImage: "photo.badge.plus")
-                    }
-                    if version.inspection.coverPhotoFileName != nil {
-                        Button(role: .destructive) {
-                            removeCoverPhoto()
-                        } label: {
-                            Label("Remove", systemImage: "trash")
-                        }
                     }
                 }
             }
@@ -458,6 +490,36 @@ struct InspectionOverviewView: View {
         let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
         guard let data = try? Data(contentsOf: url) else { return nil }
         return UIImage(data: data)
+    }
+
+    /// Handles camera-captured images for the cover photo. Mirrors
+    /// `setCoverPhotoFromPickerItem` but skips the async Transferable
+    /// loading since UIImagePickerController hands us a UIImage
+    /// directly. Same downscale + JPEG compression as the library
+    /// path so the file size on disk is consistent regardless of
+    /// source.
+    private func setCoverPhotoFromCapturedImage(_ image: UIImage) {
+        let resized = image.resizedKeepingAspect(maxSide: 1600)
+        guard let jpegData = resized.jpegData(compressionQuality: 0.82) else { return }
+        let fileName = FilePaths.defaultCoverPhotoFileName
+        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
+        do {
+            try FileSecurity.ensureProtectedDirectory(FilePaths.inspectionFolder(jobId: jobId))
+            try FileSecurity.writeProtected(jpegData, to: url)
+            var insp = version.inspection
+            insp.coverPhotoFileName = fileName
+            var v = version
+            v.inspection = insp
+            version = v
+            coverPhotoTick &+= 1
+            NotificationCenter.default.post(
+                name: .coverPhotoDidUpdate,
+                object: nil,
+                userInfo: ["jobId": jobId]
+            )
+        } catch {
+            Diagnostics.logError(context: "setCoverPhotoFromCapturedImage failed", error: error)
+        }
     }
 
     private func setCoverPhotoFromPickerItem(_ item: PhotosPickerItem) async {

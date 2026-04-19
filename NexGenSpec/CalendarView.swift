@@ -238,13 +238,34 @@ struct CalendarView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(todays) { meta in
-                        NavigationLink {
-                            InspectionRootView(versionID: meta.id)
-                                .environmentObject(store)
-                        } label: {
-                            DayRow(metadata: meta)
+                        HStack(spacing: Spacing.sm) {
+                            NavigationLink {
+                                InspectionRootView(versionID: meta.id)
+                                    .environmentObject(store)
+                            } label: {
+                                DayRow(metadata: meta)
+                            }
+                            .buttonStyle(.plain)
+                            // Inline "remove from calendar" button.
+                            // TestFlight testers complained there was
+                            // no way to delete an appointment from the
+                            // Calendar tab — the action was buried in
+                            // the inspection detail's scheduling
+                            // section.
+                            Button(role: .destructive) {
+                                Task { await removeEventForInspection(meta.id) }
+                            } label: {
+                                Image(systemName: "calendar.badge.minus")
+                                    .font(.body)
+                                    .foregroundStyle(.red)
+                                    .padding(Spacing.xs)
+                                    .background(
+                                        Circle().fill(Color.red.opacity(0.1))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Remove inspection from calendar")
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -318,6 +339,27 @@ struct CalendarView: View {
         let events = await calendarService.events(from: first, to: endExclusive)
             .filter { !linked.contains($0.id) }
         await MainActor.run { conflicts = events }
+    }
+
+    /// Removes the EKEvent mirror for the given inspection, if any,
+    /// and clears the stored identifier so the UI flips back to
+    /// "Add to Calendar" state. Intentionally does NOT delete the
+    /// inspection itself — testers wanted to remove an appointment
+    /// from their calendar without losing the draft.
+    private func removeEventForInspection(_ versionID: UUID) async {
+        guard let full = store.loadFullVersion(id: versionID),
+              let eventIdentifier = full.inspection.calendarEventIdentifier else { return }
+        do {
+            try calendarService.deleteEvent(eventIdentifier: eventIdentifier)
+        } catch {
+            // Event may have been deleted externally; that's fine —
+            // we still want to clear the local reference.
+        }
+        var updated = full
+        updated.inspection.calendarEventIdentifier = nil
+        updated.inspection.calendarIdentifier = nil
+        store.update(version: updated)
+        await refreshConflictsForVisibleMonth()
     }
 
     private func openAppSettings() {
