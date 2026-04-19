@@ -34,15 +34,18 @@ struct InspectionView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// Auto-save debounce task. Cancelled + recreated on every `draft`
-    /// change so rapid edits coalesce into one write ~1.0s after the
-    /// user stops typing. A nil task means no write is pending.
+    /// change so rapid edits coalesce into one write ~2s after the
+    /// user stops typing.
     ///
-    /// This is the critical primary save path — v1 only saved on
-    /// `onDisappear`, which meant app crashes, force-quits, and
-    /// log-out-mid-edit lost all in-progress work. Bug caught by
-    /// TestFlight cohort 2026-04-19.
+    /// V1 only saved on `.onDisappear` → all in-flight work lost on
+    /// crash/force-quit/log-out. The first auto-save fix published
+    /// `metadataList` on every keystroke, which crashed iOS 26's
+    /// UICollectionView list differ (seen 2026-04-19). This version
+    /// writes just the version JSON to disk without publishing any
+    /// `@Published` changes, avoiding SwiftUI-wide re-renders mid-edit.
     @State private var autoSaveTask: Task<Void, Never>?
-    private static let autoSaveDebounce: Duration = .seconds(1)
+    @State private var localLastSavedAt: Date?
+    private static let autoSaveDebounce: Duration = .seconds(2)
 
     // Timer state
     @State private var timerDisplayString = "00:00:00"
@@ -152,40 +155,45 @@ struct InspectionView: View {
         }
         .onDisappear {
             pauseTimer()
-            // Cancel any pending debounce; force-save immediately as a
-            // backstop. Covers the normal "user navigates back to
-            // dashboard" flow AND the rare case where the app is torn
-            // down before the debounced save fires.
+            // Full flush on view teardown: write version file AND
+            // publish the metadata list update so Dashboard/Calendar
+            // pick up the latest client name, date, etc.
             autoSaveTask?.cancel()
             autoSaveTask = nil
             updated(draft)
             store.saveNow()
         }
         // ---- PRIMARY AUTO-SAVE PATH ----
-        // Fires on every mutation of `draft` (every keystroke, every
-        // photo append, every checkbox tap). We debounce ~1s so rapid
-        // typing coalesces into a single disk write.
+        // Fires on every mutation of `draft` — writes the version
+        // file to disk directly WITHOUT touching `@Published`
+        // metadataList. That avoids cascade re-renders of any view
+        // still alive behind the nav stack (Dashboard List,
+        // Calendar grid) which would otherwise race UIKit batch
+        // updates and crash on iOS 26.
         //
-        // Crucial for iPad inspectors in the field: if the app is
-        // force-quit, battery dies, or crashes mid-inspection, no more
-        // than ~1 second of work is at risk.
+        // The metadata index + @Published mutation still happens on
+        // teardown (onDisappear / willResignActive / Log Out), so
+        // Dashboard always shows fresh info when the user returns.
         .onChange(of: draft) { _, newDraft in
             autoSaveTask?.cancel()
             autoSaveTask = Task { @MainActor in
                 try? await Task.sleep(for: Self.autoSaveDebounce)
                 guard !Task.isCancelled else { return }
-                updated(newDraft)
+                store.writeVersionFileOnlyForAutoSave(newDraft)
+                localLastSavedAt = Date()
+                autoSaveTask = nil
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             pauseTimer()
-            // App is about to background or be killed. Flush any
-            // pending debounced save immediately — iOS gives us
-            // seconds, not minutes, before suspending.
+            // App is about to background or be killed. Full flush
+            // including metadata publish — the user is leaving, so
+            // the UICollectionView diff risk is zero.
             autoSaveTask?.cancel()
             autoSaveTask = nil
             updated(draft)
             store.saveNow()
+            localLastSavedAt = Date()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             startTimer()
@@ -194,26 +202,24 @@ struct InspectionView: View {
 
     /// Compact indicator shown in the navigation toolbar so inspectors
     /// always know whether their work is on disk. Three states:
-    ///   • Saving spinner + text while a write is in flight
-    ///   • "Unsaved" pill (amber) if a debounced save is pending
-    ///   • "Saved HH:MM" (green) otherwise — empty until first save
+    ///   • "Unsaved" pill (amber) while a debounced save is pending
+    ///   • "Saved HH:MM" (green) once the last save landed
+    ///   • Empty until first save of this session
+    ///
+    /// Uses local `@State` timestamp (not `store.lastSavedAt`) so this
+    /// indicator updating does not trigger SwiftUI-wide re-renders of
+    /// every view observing the store — see the UICollectionView
+    /// crash note on the auto-save path.
     @ViewBuilder
     private var saveStatusLabel: some View {
-        if store.isSaving {
-            HStack(spacing: 4) {
-                ProgressView().controlSize(.mini)
-                Text("Saving…")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-        } else if autoSaveTask != nil {
+        if autoSaveTask != nil {
             HStack(spacing: 4) {
                 Image(systemName: "circle.dotted")
                 Text("Unsaved")
             }
             .font(.caption.weight(.medium))
             .foregroundStyle(.orange)
-        } else if let t = store.lastSavedAt {
+        } else if let t = localLastSavedAt {
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill")
                 Text("Saved \(t, style: .time)")

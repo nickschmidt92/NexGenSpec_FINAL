@@ -171,6 +171,23 @@ public final class InspectionStore: ObservableObject {
         save()
     }
 
+    /// Writes just the inspection's version JSON to disk without
+    /// mutating `metadataList` or publishing any change. This is the
+    /// save path used by InspectionView's per-keystroke auto-save —
+    /// publishing `metadataList` on every edit caused a UICollectionView
+    /// batch-update race that crashed on iOS 26 (_Bug_Detected_In_Client_
+    /// Of_UICollectionView_Invalid_Number_Of_Items_In_Section) when the
+    /// Dashboard List behind the nav stack was mid-animation.
+    ///
+    /// The lightweight file write here is enough to prevent data loss;
+    /// the full `update(version:)` path still runs on view disappear,
+    /// app backgrounding, and log out, which is when `metadataList` +
+    /// the on-disk index need to be refreshed for the Dashboard UI.
+    public func writeVersionFileOnlyForAutoSave(_ version: InspectionVersion) {
+        guard InspectionStateMachine.allowsEdit(version.state) else { return }
+        try? writeVersionToFile(version)
+    }
+
     /// Schedules a single save after a short delay. Use for draft updates to avoid hammering disk.
     private func scheduleDebouncedSave() {
         saveWorkItem?.cancel()
