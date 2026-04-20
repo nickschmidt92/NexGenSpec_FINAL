@@ -213,26 +213,42 @@ struct InspectionOverviewView: View {
                     caption: video.caption.isEmpty ? video.fileName : video.caption
                 )
             }
-            .sheet(isPresented: $showCoverPhotoCamera) {
+            // fullScreenCover (not sheet) because UIImagePickerController
+            // with sourceType = .camera wants the entire screen — using
+            // .sheet was causing the sheet-dismissal state machine to
+            // get stuck after the first capture, so subsequent Take
+            // Photo taps silently no-op'd. The async dispatch defers
+            // the isPresented flip to the NEXT run loop tick, giving
+            // SwiftUI time to finish the previous animation before we
+            // mutate model state that triggers a re-render.
+            .fullScreenCover(isPresented: $showCoverPhotoCamera) {
                 CameraCaptureView(
                     onCapture: { image in
-                        showCoverPhotoCamera = false
-                        setCoverPhotoFromCapturedImage(image)
+                        DispatchQueue.main.async {
+                            showCoverPhotoCamera = false
+                            setCoverPhotoFromCapturedImage(image)
+                        }
                     },
                     onCancel: {
-                        showCoverPhotoCamera = false
+                        DispatchQueue.main.async {
+                            showCoverPhotoCamera = false
+                        }
                     }
                 )
                 .ignoresSafeArea()
             }
-            .sheet(isPresented: $showVideoRecorder) {
+            .fullScreenCover(isPresented: $showVideoRecorder) {
                 VideoRecorderView(
                     onRecorded: { tempURL in
-                        showVideoRecorder = false
-                        addVideoFromRecordedURL(tempURL)
+                        DispatchQueue.main.async {
+                            showVideoRecorder = false
+                            addVideoFromRecordedURL(tempURL)
+                        }
                     },
                     onCancel: {
-                        showVideoRecorder = false
+                        DispatchQueue.main.async {
+                            showVideoRecorder = false
+                        }
                     }
                 )
                 .ignoresSafeArea()
@@ -392,7 +408,7 @@ struct InspectionOverviewView: View {
             }
         }
         .padding(12)
-        .background(Color.yellow.opacity(0.06))
+        .background(Color.blue.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
