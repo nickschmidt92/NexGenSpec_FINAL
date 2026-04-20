@@ -32,6 +32,16 @@ struct InspectionOverviewView: View {
     /// — testers standing at the property correctly pointed out they
     /// want to shoot directly.
     @State private var showCoverPhotoCamera: Bool = false
+    /// Drives the cover photo ActionSheet (Take Photo / Choose from
+    /// Library / Remove). Replaces the previous Menu+PhotosPicker
+    /// combo, which intermittently wouldn't re-open after taking a
+    /// first photo — iOS 26 Menu lifecycle bug with nested
+    /// PhotosPicker items.
+    @State private var showCoverPhotoSheet: Bool = false
+    /// Drives the library PhotosPicker presentation. Separated from
+    /// the ActionSheet buttons so we don't need PhotosPicker inside
+    /// a Menu.
+    @State private var showCoverPhotoLibrary: Bool = false
     /// Same story for video: testers wanted to record walk-through
     /// video directly, not just pick pre-existing clips from Photos.
     @State private var showVideoRecorder: Bool = false
@@ -229,6 +239,41 @@ struct InspectionOverviewView: View {
                 )
                 .ignoresSafeArea()
             }
+            // Cover-photo ActionSheet: replaces the old Menu. Shows up
+            // whenever the user taps Add/Change. Camera availability
+            // dictates whether Take Photo appears. Remove appears only
+            // when a cover photo is already set. PhotosPicker is
+            // invoked via the standalone .photosPicker(isPresented:)
+            // modifier below, not embedded here.
+            .confirmationDialog(
+                "Cover Photo",
+                isPresented: $showCoverPhotoSheet,
+                titleVisibility: .visible
+            ) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button {
+                        showCoverPhotoCamera = true
+                    } label: {
+                        Label("Take Photo", systemImage: "camera")
+                    }
+                }
+                Button {
+                    showCoverPhotoLibrary = true
+                } label: {
+                    Label("Choose from Library", systemImage: "photo.on.rectangle")
+                }
+                if version.inspection.coverPhotoFileName != nil {
+                    Button("Remove Cover Photo", role: .destructive) {
+                        removeCoverPhoto()
+                    }
+                }
+            }
+            .photosPicker(
+                isPresented: $showCoverPhotoLibrary,
+                selection: $selectedCoverItems,
+                maxSelectionCount: 1,
+                matching: .images
+            )
             .overlay(exportOverlay)
         } else {
             // Fallback for iOS 16: minimal placeholder so body is always available
@@ -640,31 +685,14 @@ struct InspectionOverviewView: View {
                     .font(.headline)
                 Spacer()
                 if isEditable {
-                    // Menu offers three options — camera capture was
-                    // missing in v1 so inspectors couldn't shoot
-                    // directly while standing at the property.
-                    Menu {
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button {
-                                showCoverPhotoCamera = true
-                            } label: {
-                                Label("Take Photo", systemImage: "camera")
-                            }
-                        }
-                        PhotosPicker(
-                            selection: $selectedCoverItems,
-                            maxSelectionCount: 1, matching: .images
-                        ) {
-                            Label("Choose from Library", systemImage: "photo.on.rectangle")
-                        }
-                        if version.inspection.coverPhotoFileName != nil {
-                            Divider()
-                            Button(role: .destructive) {
-                                removeCoverPhoto()
-                            } label: {
-                                Label("Remove", systemImage: "trash")
-                            }
-                        }
+                    // ActionSheet-style choice (confirmationDialog).
+                    // Replaces the previous Menu+PhotosPicker combo —
+                    // that combo would sometimes fail to re-open the
+                    // menu after a first Take Photo on iOS 26
+                    // ("can't change cover photo after I take it"
+                    // from the TestFlight cohort).
+                    Button {
+                        showCoverPhotoSheet = true
                     } label: {
                         Label(version.inspection.coverPhotoFileName == nil ? "Add" : "Change",
                               systemImage: "photo.badge.plus")
