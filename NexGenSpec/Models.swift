@@ -188,6 +188,39 @@ public struct RealEstateAgent: Codable, Equatable, Hashable {
 
 // MARK: - Inspection
 
+// MARK: - Reminder / To-Do items
+//
+// Both are per-inspection scratchpads that testers asked for. A
+// Reminder optionally carries a due date (surfaced as a dot/badge in
+// the UI); a Todo is a pure checklist item. Kept as separate types
+// so the UI can render them differently without bool-flag gymnastics.
+
+public struct InspectionReminder: Identifiable, Codable, Equatable {
+    public var id: UUID
+    public var text: String
+    public var dueAt: Date?
+    public var isCompleted: Bool
+
+    public init(id: UUID = UUID(), text: String = "", dueAt: Date? = nil, isCompleted: Bool = false) {
+        self.id = id
+        self.text = text
+        self.dueAt = dueAt
+        self.isCompleted = isCompleted
+    }
+}
+
+public struct InspectionTodo: Identifiable, Codable, Equatable {
+    public var id: UUID
+    public var text: String
+    public var isCompleted: Bool
+
+    public init(id: UUID = UUID(), text: String = "", isCompleted: Bool = false) {
+        self.id = id
+        self.text = text
+        self.isCompleted = isCompleted
+    }
+}
+
 public struct Inspection: Identifiable, Codable, Equatable {
     public var inspectionId: String
     public var inspectionNumber: Int
@@ -229,6 +262,14 @@ public struct Inspection: Identifiable, Codable, Equatable {
     /// mirrored event was written to. Stored so the app can refetch /
     /// update / delete the event later.
     public var calendarIdentifier: String?
+    /// Per-inspection reminders. Lightweight scratchpad for the
+    /// inspector ("bring extension ladder", "call client about gate
+    /// code"). Optional due date surfaces as a badge.
+    public var reminders: [InspectionReminder]
+    /// Per-inspection todos. Plain checklist for the inspector,
+    /// separate from section items — these are workflow tasks, not
+    /// defects.
+    public var todos: [InspectionTodo]
 
     public var id: String { inspectionId }
 
@@ -256,7 +297,9 @@ public struct Inspection: Identifiable, Codable, Equatable {
         listingAgent: RealEstateAgent? = nil,
         scheduledDurationMinutes: Int? = nil,
         calendarEventIdentifier: String? = nil,
-        calendarIdentifier: String? = nil
+        calendarIdentifier: String? = nil,
+        reminders: [InspectionReminder] = [],
+        todos: [InspectionTodo] = []
     ) {
         self.inspectionId = id.uuidString
         self.inspectionNumber = inspectionNumber
@@ -282,6 +325,8 @@ public struct Inspection: Identifiable, Codable, Equatable {
         self.scheduledDurationMinutes = scheduledDurationMinutes
         self.calendarEventIdentifier = calendarEventIdentifier
         self.calendarIdentifier = calendarIdentifier
+        self.reminders = reminders
+        self.todos = todos
     }
 }
 
@@ -294,6 +339,7 @@ extension Inspection {
         case weather, timerStartDate, timerElapsedSeconds
         case coverPhotoFileName, buyersAgent, listingAgent
         case scheduledDurationMinutes, calendarEventIdentifier, calendarIdentifier
+        case reminders, todos
     }
 
     public init(from decoder: Decoder) throws {
@@ -322,6 +368,8 @@ extension Inspection {
         scheduledDurationMinutes = try c.decodeIfPresent(Int.self, forKey: .scheduledDurationMinutes)
         calendarEventIdentifier = try c.decodeIfPresent(String.self, forKey: .calendarEventIdentifier)
         calendarIdentifier = try c.decodeIfPresent(String.self, forKey: .calendarIdentifier)
+        reminders = try c.decodeIfPresent([InspectionReminder].self, forKey: .reminders) ?? []
+        todos = try c.decodeIfPresent([InspectionTodo].self, forKey: .todos) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -350,6 +398,8 @@ extension Inspection {
         try c.encodeIfPresent(scheduledDurationMinutes, forKey: .scheduledDurationMinutes)
         try c.encodeIfPresent(calendarEventIdentifier, forKey: .calendarEventIdentifier)
         try c.encodeIfPresent(calendarIdentifier, forKey: .calendarIdentifier)
+        if !reminders.isEmpty { try c.encode(reminders, forKey: .reminders) }
+        if !todos.isEmpty { try c.encode(todos, forKey: .todos) }
     }
 }
 

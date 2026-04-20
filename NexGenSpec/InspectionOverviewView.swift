@@ -116,6 +116,10 @@ struct InspectionOverviewView: View {
                     // Drone / Video
                     droneVideoSection
 
+                    // Reminders + To-Do (per-inspection scratchpads)
+                    remindersSection
+                    todosSection
+
                     Spacer()
                 }
                 .padding()
@@ -297,6 +301,149 @@ struct InspectionOverviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.systemGray6))
         .cornerRadius(8)
+    }
+
+    // MARK: - Reminders
+
+    /// Simple per-inspection reminder list. Each row is one free-text
+    /// note with an optional due date and a checkbox. Added in
+    /// response to TestFlight feedback: testers wanted a scratchpad
+    /// for things like "bring extension ladder" or "call client about
+    /// gate code" without shoehorning them into an inspection item.
+    @ViewBuilder
+    private var remindersSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Reminders")
+                    .font(.headline)
+                Spacer()
+                if isEditable {
+                    Button {
+                        var insp = version.inspection
+                        insp.reminders.append(InspectionReminder())
+                        var v = version
+                        v.inspection = insp
+                        version = v
+                    } label: {
+                        Label("Add", systemImage: "plus.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+            }
+            if version.inspection.reminders.isEmpty {
+                Text("No reminders. Tap Add to jot one down.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(version.inspection.reminders) { reminder in
+                    ReminderRow(
+                        reminder: reminderBinding(reminder.id),
+                        isEditable: isEditable,
+                        onDelete: { deleteReminder(id: reminder.id) }
+                    )
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.yellow.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: - To-Do
+
+    /// Lightweight checklist bound to the inspection. Separate from
+    /// Reminders so the two don't compete — todos are pure checkable
+    /// action items; reminders can have times and lean more toward
+    /// "don't forget" notes.
+    @ViewBuilder
+    private var todosSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("To Do")
+                    .font(.headline)
+                Spacer()
+                if isEditable {
+                    Button {
+                        var insp = version.inspection
+                        insp.todos.append(InspectionTodo())
+                        var v = version
+                        v.inspection = insp
+                        version = v
+                    } label: {
+                        Label("Add", systemImage: "plus.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+            }
+            if version.inspection.todos.isEmpty {
+                Text("No tasks yet. Tap Add to create one.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(version.inspection.todos) { todo in
+                    TodoRow(
+                        todo: todoBinding(todo.id),
+                        isEditable: isEditable,
+                        onDelete: { deleteTodo(id: todo.id) }
+                    )
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func reminderBinding(_ id: UUID) -> Binding<InspectionReminder> {
+        Binding(
+            get: {
+                version.inspection.reminders.first(where: { $0.id == id }) ?? InspectionReminder(id: id)
+            },
+            set: { newValue in
+                var insp = version.inspection
+                if let idx = insp.reminders.firstIndex(where: { $0.id == id }) {
+                    insp.reminders[idx] = newValue
+                }
+                var v = version
+                v.inspection = insp
+                version = v
+            }
+        )
+    }
+
+    private func todoBinding(_ id: UUID) -> Binding<InspectionTodo> {
+        Binding(
+            get: {
+                version.inspection.todos.first(where: { $0.id == id }) ?? InspectionTodo(id: id)
+            },
+            set: { newValue in
+                var insp = version.inspection
+                if let idx = insp.todos.firstIndex(where: { $0.id == id }) {
+                    insp.todos[idx] = newValue
+                }
+                var v = version
+                v.inspection = insp
+                version = v
+            }
+        )
+    }
+
+    private func deleteReminder(id: UUID) {
+        var insp = version.inspection
+        insp.reminders.removeAll { $0.id == id }
+        var v = version
+        v.inspection = insp
+        version = v
+    }
+
+    private func deleteTodo(id: UUID) {
+        var insp = version.inspection
+        insp.todos.removeAll { $0.id == id }
+        var v = version
+        v.inspection = insp
+        version = v
     }
 
     // MARK: - Drone / Video
@@ -1202,5 +1349,149 @@ private struct VideoPlayerSheet: View {
                 .onAppear { player.play() }
                 .onDisappear { player.pause() }
         }
+    }
+}
+
+// MARK: - ReminderRow
+
+private struct ReminderRow: View {
+    @Binding var reminder: InspectionReminder
+    let isEditable: Bool
+    var onDelete: () -> Void
+    @State private var showDatePicker = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button {
+                reminder.isCompleted.toggle()
+            } label: {
+                Image(systemName: reminder.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(reminder.isCompleted ? Color.green : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEditable)
+
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Reminder", text: $reminder.text, axis: .vertical)
+                    .font(.subheadline)
+                    .strikethrough(reminder.isCompleted)
+                    .foregroundStyle(reminder.isCompleted ? .secondary : .primary)
+                    .disabled(!isEditable)
+                HStack(spacing: 8) {
+                    Button {
+                        if reminder.dueAt == nil {
+                            reminder.dueAt = Calendar.current.date(byAdding: .day, value: 1, to: Date())
+                        }
+                        showDatePicker = true
+                    } label: {
+                        if let due = reminder.dueAt {
+                            Label(due.formatted(date: .abbreviated, time: .shortened),
+                                  systemImage: "bell.fill")
+                                .font(.caption)
+                                .foregroundStyle(Color.orange)
+                        } else {
+                            Label("Add due date", systemImage: "bell")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!isEditable)
+                    if reminder.dueAt != nil {
+                        Button {
+                            reminder.dueAt = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!isEditable)
+                        .accessibilityLabel("Clear due date")
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if isEditable {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete reminder")
+            }
+        }
+        .padding(8)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .sheet(isPresented: $showDatePicker) {
+            NavigationStack {
+                Form {
+                    DatePicker("Due",
+                               selection: Binding(
+                                    get: { reminder.dueAt ?? Date() },
+                                    set: { reminder.dueAt = $0 }),
+                               displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.compact)
+                }
+                .navigationTitle("Due Date")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showDatePicker = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
+}
+
+// MARK: - TodoRow
+
+private struct TodoRow: View {
+    @Binding var todo: InspectionTodo
+    let isEditable: Bool
+    var onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                todo.isCompleted.toggle()
+            } label: {
+                Image(systemName: todo.isCompleted ? "checkmark.square.fill" : "square")
+                    .font(.title3)
+                    .foregroundStyle(todo.isCompleted ? Color.accentColor : Color.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEditable)
+
+            TextField("Task", text: $todo.text, axis: .vertical)
+                .font(.subheadline)
+                .strikethrough(todo.isCompleted)
+                .foregroundStyle(todo.isCompleted ? .secondary : .primary)
+                .disabled(!isEditable)
+
+            Spacer(minLength: 0)
+
+            if isEditable {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete task")
+            }
+        }
+        .padding(8)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
