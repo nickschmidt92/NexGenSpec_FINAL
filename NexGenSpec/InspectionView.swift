@@ -29,7 +29,6 @@ struct InspectionView: View {
     @State private var selectedPane: InspectionPane = .overview
     @State private var showShortcutsHelp = false
     @State private var showReportPreview = false
-    @StateObject private var voiceManager = VoiceCommandManager()
     @StateObject private var weatherService = WeatherService()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -63,7 +62,6 @@ struct InspectionView: View {
             } else {
                 sectionSidebar
             }
-            VoiceCommandOverlay(voiceManager: voiceManager)
             // Floating save-state indicator at bottom-center. Visible
             // on every inspection pane (Overview, Section items,
             // Summary, Finalize, Invoice) so the inspector always
@@ -148,9 +146,6 @@ struct InspectionView: View {
         .onAppear {
             draft = version
             if draft.inspection.sections.isEmpty { selectedPane = .overview }
-            voiceManager.onCommand = { action in
-                handleVoiceCommand(action)
-            }
             // Seed the save indicator from the version file's on-disk
             // modification time so the inspector sees a real "Saved
             // HH:MM" the moment they open an inspection, not a blank
@@ -248,49 +243,6 @@ struct InspectionView: View {
             .foregroundStyle(.green)
         } else {
             EmptyView()
-        }
-    }
-
-    private func handleVoiceCommand(_ action: VoiceCommandManager.CommandAction) {
-        switch action {
-        case .nextSection:
-            selectNextSection()
-        case .previousSection:
-            selectPreviousSection()
-        case .goToSummary:
-            selectedPane = .summary
-        case .goToFinalize:
-            selectedPane = .finalize
-        case .addNote(let text):
-            // Add note to the current item's inspector comments if viewing a section
-            if case .section(let sectionID) = selectedPane,
-               let sIdx = draft.inspection.sections.firstIndex(where: { $0.id == sectionID }),
-               !draft.inspection.sections[sIdx].items.isEmpty {
-                let iIdx = draft.inspection.sections[sIdx].items.count - 1
-                let existing = draft.inspection.sections[sIdx].items[iIdx].inspectorComments
-                draft.inspection.sections[sIdx].items[iIdx].inspectorComments = existing.isEmpty ? text : "\(existing)\n\(text)"
-            }
-        case .defect(let description):
-            // Add a new defect item to the current section
-            if case .section(let sectionID) = selectedPane,
-               let sIdx = draft.inspection.sections.firstIndex(where: { $0.id == sectionID }) {
-                let newItem = InspectionItem(
-                    templateItemId: "voice-\(UUID().uuidString)",
-                    title: description,
-                    includeInReport: true,
-                    status: .inspected,
-                    defectSeverity: .minor
-                )
-                draft.inspection.sections[sIdx].items.append(newItem)
-            }
-        case .capturePhoto:
-            // Navigate to camera — for now, ensure we're in a section view
-            // The actual camera trigger happens from ItemDetailView
-            break
-        case .goToCalendar:
-            // Cross-tab navigation from deep inside an inspection. Post
-            // a notification; MainTabView observes and switches the tab.
-            NotificationCenter.default.post(name: .nexGenSpecRequestCalendarTab, object: nil)
         }
     }
 
