@@ -292,10 +292,24 @@ enum HTMLReportRenderer {
             html += "<div class=\"hash-label\">Report ID</div>"
             html += "<span class=\"hash\">\(reportId)</span>"
             html += "</div>"
-            // QR Code
-            let verifyURL = "https://nexgenspec.com/verify/\(reportId)"
-            if let qrBase64 = Self.generateQRCodeBase64(for: verifyURL) {
-                html += "<img src=\"data:image/png;base64,\(qrBase64)\" style=\"width:72px;height:72px;\" alt=\"Verification QR Code\"/>"
+            // QR Code encodes the report's identity + integrity hash
+            // as plain text rather than pointing to a URL. Avoids the
+            // broken-link problem — nexgenspec.com/verify/{id} was
+            // not actually serving verification pages, so scanners
+            // were landing on a 404. Plain-text payload is universally
+            // scannable, legible to any QR reader, and still carries
+            // enough info for a counter-party to cross-reference.
+            let qrPayload = [
+                "NexGenSpec Inspection Report",
+                "Report ID: \(reportId)",
+                "Hash: \(hash.prefix(16))",
+                version.inspection.clientName.isEmpty ? nil : "Client: \(version.inspection.clientName)",
+                version.inspection.propertyAddress.isEmpty ? nil : "Property: \(version.inspection.propertyAddress)"
+            ]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+            if let qrBase64 = Self.generateQRCodeBase64(for: qrPayload) {
+                html += "<img src=\"data:image/png;base64,\(qrBase64)\" style=\"width:72px;height:72px;\" alt=\"Report Verification QR\"/>"
             }
             html += "</div>"
         } else if isDraft {

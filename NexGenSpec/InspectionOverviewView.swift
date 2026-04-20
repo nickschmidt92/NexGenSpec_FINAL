@@ -32,16 +32,14 @@ struct InspectionOverviewView: View {
     /// — testers standing at the property correctly pointed out they
     /// want to shoot directly.
     @State private var showCoverPhotoCamera: Bool = false
-    /// Drives the cover photo ActionSheet (Take Photo / Choose from
-    /// Library / Remove). Replaces the previous Menu+PhotosPicker
-    /// combo, which intermittently wouldn't re-open after taking a
-    /// first photo — iOS 26 Menu lifecycle bug with nested
-    /// PhotosPicker items.
-    @State private var showCoverPhotoSheet: Bool = false
-    /// Drives the library PhotosPicker presentation. Separated from
-    /// the ActionSheet buttons so we don't need PhotosPicker inside
-    /// a Menu.
+    /// Drives the library PhotosPicker presentation from the plain
+    /// "Library" button in the cover photo section.
     @State private var showCoverPhotoLibrary: Bool = false
+    /// Drives the date/time sheet for editing the inspection's
+    /// scheduled start. A plain Button opens this sheet instead of
+    /// an inline DatePicker — iOS 26 inline DatePickers inside an
+    /// edit form had both a crash bug and a "can't re-edit" bug.
+    @State private var showInspectionDateSheet: Bool = false
     /// Same story for video: testers wanted to record walk-through
     /// video directly, not just pick pre-existing clips from Photos.
     @State private var showVideoRecorder: Bool = false
@@ -239,41 +237,36 @@ struct InspectionOverviewView: View {
                 )
                 .ignoresSafeArea()
             }
-            // Cover-photo ActionSheet: replaces the old Menu. Shows up
-            // whenever the user taps Add/Change. Camera availability
-            // dictates whether Take Photo appears. Remove appears only
-            // when a cover photo is already set. PhotosPicker is
-            // invoked via the standalone .photosPicker(isPresented:)
-            // modifier below, not embedded here.
-            .confirmationDialog(
-                "Cover Photo",
-                isPresented: $showCoverPhotoSheet,
-                titleVisibility: .visible
-            ) {
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                    Button {
-                        showCoverPhotoCamera = true
-                    } label: {
-                        Label("Take Photo", systemImage: "camera")
-                    }
-                }
-                Button {
-                    showCoverPhotoLibrary = true
-                } label: {
-                    Label("Choose from Library", systemImage: "photo.on.rectangle")
-                }
-                if version.inspection.coverPhotoFileName != nil {
-                    Button("Remove Cover Photo", role: .destructive) {
-                        removeCoverPhoto()
-                    }
-                }
-            }
+            // Library picker: triggered by the Library plain button
+            // in coverPhotoSection. Uses PhotosPicker's standalone
+            // isPresented modifier which is the most reliable way to
+            // present it on iOS 26.
             .photosPicker(
                 isPresented: $showCoverPhotoLibrary,
                 selection: $selectedCoverItems,
                 maxSelectionCount: 1,
                 matching: .images
             )
+            .sheet(isPresented: $showInspectionDateSheet) {
+                NavigationStack {
+                    Form {
+                        DatePicker(
+                            "Inspection Date & Time",
+                            selection: binding(\.inspectionDate),
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .datePickerStyle(.graphical)
+                    }
+                    .navigationTitle("Inspection Date & Time")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showInspectionDateSheet = false }
+                        }
+                    }
+                }
+                .presentationDetents([.medium, .large])
+            }
             .overlay(exportOverlay)
         } else {
             // Fallback for iOS 16: minimal placeholder so body is always available
@@ -330,16 +323,24 @@ struct InspectionOverviewView: View {
                 .textContentType(.telephoneNumber)
                 .keyboardType(.phonePad)
                 .phoneFormatted(binding(\.clientPhone))
-            DatePicker("Inspection Date & Time",
-                       selection: binding(\.inspectionDate),
-                       displayedComponents: [.date, .hourAndMinute])
-                // See DashboardView's newInspectionSheet — inline
-                // DatePicker in an iOS 26 Form context crashes on
-                // dismissal. Compact style avoids the problem and
-                // also lets the user tap the value pill to re-edit,
-                // which fixes the "can't change date once set" bug
-                // reported by the TestFlight cohort.
-                .datePickerStyle(.compact)
+            // Inline DatePicker had two failed fixes (crash, then
+            // unresponsive-after-set). Switched to a plain Button
+            // that displays the current value and opens a dedicated
+            // sheet with a full DatePicker inside. Rock-solid on
+            // iOS 26 because SwiftUI doesn't have to animate the
+            // picker in and out of the parent form.
+            HStack {
+                Label("Inspection Date & Time", systemImage: "calendar")
+                Spacer()
+                Button {
+                    showInspectionDateSheet = true
+                } label: {
+                    Text(version.inspection.inspectionDate.formatted(date: .abbreviated, time: .shortened))
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            }
             TextField("Inspector Name", text: binding(\.inspectorName))
         }
         .padding()
@@ -685,17 +686,41 @@ struct InspectionOverviewView: View {
                     .font(.headline)
                 Spacer()
                 if isEditable {
-                    // ActionSheet-style choice (confirmationDialog).
-                    // Replaces the previous Menu+PhotosPicker combo —
-                    // that combo would sometimes fail to re-open the
-                    // menu after a first Take Photo on iOS 26
-                    // ("can't change cover photo after I take it"
-                    // from the TestFlight cohort).
-                    Button {
-                        showCoverPhotoSheet = true
-                    } label: {
-                        Label(version.inspection.coverPhotoFileName == nil ? "Add" : "Change",
-                              systemImage: "photo.badge.plus")
+                    // Two plain, always-visible buttons — no menus,
+                    // no action sheets. Two failed attempts at fancier
+                    // UX (Menu+PhotosPicker, then ActionSheet) both
+                    // had iOS 26 quirks that prevented changing the
+                    // cover photo after a first capture. Plain buttons
+                    // avoid every SwiftUI lifecycle gotcha.
+                    HStack(spacing: 8) {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button {
+                                showCoverPhotoCamera = true
+                            } label: {
+                                Label("Take", systemImage: "camera")
+                                    .labelStyle(.titleAndIcon)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                        Button {
+                            showCoverPhotoLibrary = true
+                        } label: {
+                            Label("Library", systemImage: "photo.on.rectangle")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        if version.inspection.coverPhotoFileName != nil {
+                            Button(role: .destructive) {
+                                removeCoverPhoto()
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .tint(.red)
+                        }
                     }
                 }
             }
