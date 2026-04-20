@@ -27,22 +27,27 @@ struct InspectionOverviewView: View {
     /// the old tap-does-nothing behavior where an uploaded video row
     /// was inert — a top complaint from the first TestFlight cohort.
     @State private var videoToPlay: InspectionVideo?
-    /// Controls presentation of the camera sheet for capturing the
-    /// cover photo. Previously the only option was upload-from-library
-    /// — testers standing at the property correctly pointed out they
-    /// want to shoot directly.
-    @State private var showCoverPhotoCamera: Bool = false
-    /// Drives the library PhotosPicker presentation from the plain
-    /// "Library" button in the cover photo section.
+    /// Drives the library PhotosPicker. Kept separate because
+    /// PhotosPicker must be driven by its own .photosPicker modifier;
+    /// it doesn't fit the .sheet(item:) pattern.
     @State private var showCoverPhotoLibrary: Bool = false
-    /// Drives the date/time sheet for editing the inspection's
-    /// scheduled start. A plain Button opens this sheet instead of
-    /// an inline DatePicker — iOS 26 inline DatePickers inside an
-    /// edit form had both a crash bug and a "can't re-edit" bug.
-    @State private var showInspectionDateSheet: Bool = false
-    /// Same story for video: testers wanted to record walk-through
-    /// video directly, not just pick pre-existing clips from Photos.
-    @State private var showVideoRecorder: Bool = false
+    /// Unified sheet router for the three sheet-based actions on
+    /// this view: cover photo camera, video recorder, inspection date.
+    ///
+    /// Consolidating into a single .sheet(item:) is required because
+    /// iOS 26 has a known regression where stacking many
+    /// .sheet(isPresented:) modifiers on the same view makes later
+    /// ones silently no-op — exactly the symptom testers reported
+    /// ("cover photo trash / change photo - still not working",
+    /// "inspection date & time is back to not working").
+    @State private var activeSheet: OverviewSheet?
+
+    enum OverviewSheet: Identifiable {
+        case cameraCoverPhoto
+        case videoRecorder
+        case inspectionDate
+        var id: Int { hashValue }
+    }
     @State private var showExportError = false
     @State private var showTextExportError = false
     @State private var showPaywall = false
@@ -221,67 +226,61 @@ struct InspectionOverviewView: View {
             // the isPresented flip to the NEXT run loop tick, giving
             // SwiftUI time to finish the previous animation before we
             // mutate model state that triggers a re-render.
-            .fullScreenCover(isPresented: $showCoverPhotoCamera) {
-                CameraCaptureView(
-                    onCapture: { image in
-                        DispatchQueue.main.async {
-                            showCoverPhotoCamera = false
-                            setCoverPhotoFromCapturedImage(image)
-                        }
-                    },
-                    onCancel: {
-                        DispatchQueue.main.async {
-                            showCoverPhotoCamera = false
-                        }
-                    }
-                )
-                .ignoresSafeArea()
-            }
-            .fullScreenCover(isPresented: $showVideoRecorder) {
-                VideoRecorderView(
-                    onRecorded: { tempURL in
-                        DispatchQueue.main.async {
-                            showVideoRecorder = false
-                            addVideoFromRecordedURL(tempURL)
-                        }
-                    },
-                    onCancel: {
-                        DispatchQueue.main.async {
-                            showVideoRecorder = false
-                        }
-                    }
-                )
-                .ignoresSafeArea()
-            }
-            // Library picker: triggered by the Library plain button
-            // in coverPhotoSection. Uses PhotosPicker's standalone
-            // isPresented modifier which is the most reliable way to
-            // present it on iOS 26.
+            // Library picker stays on its own modifier because
+            // PhotosPicker requires the dedicated .photosPicker
+            // modifier rather than fitting in .sheet(item:).
             .photosPicker(
                 isPresented: $showCoverPhotoLibrary,
                 selection: $selectedCoverItems,
                 maxSelectionCount: 1,
                 matching: .images
             )
-            .sheet(isPresented: $showInspectionDateSheet) {
-                NavigationStack {
-                    Form {
-                        DatePicker(
-                            "Inspection Date & Time",
-                            selection: binding(\.inspectionDate),
-                            displayedComponents: [.date, .hourAndMinute]
-                        )
-                        .datePickerStyle(.graphical)
-                    }
-                    .navigationTitle("Inspection Date & Time")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { showInspectionDateSheet = false }
+            // ONE sheet modifier handles all three remaining cases.
+            // Previously had three separate .sheet/.fullScreenCover
+            // modifiers on the same view — iOS 26 only reliably
+            // honors one at a time, causing later ones to silently
+            // no-op. Using .sheet(item:) with an enum is Apple's
+            // recommended pattern for this exact scenario.
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .cameraCoverPhoto:
+                    CameraCaptureView(
+                        onCapture: { image in
+                            activeSheet = nil
+                            setCoverPhotoFromCapturedImage(image)
+                        },
+                        onCancel: { activeSheet = nil }
+                    )
+                    .ignoresSafeArea()
+                case .videoRecorder:
+                    VideoRecorderView(
+                        onRecorded: { tempURL in
+                            activeSheet = nil
+                            addVideoFromRecordedURL(tempURL)
+                        },
+                        onCancel: { activeSheet = nil }
+                    )
+                    .ignoresSafeArea()
+                case .inspectionDate:
+                    NavigationStack {
+                        Form {
+                            DatePicker(
+                                "Inspection Date & Time",
+                                selection: binding(\.inspectionDate),
+                                displayedComponents: [.date, .hourAndMinute]
+                            )
+                            .datePickerStyle(.graphical)
+                        }
+                        .navigationTitle("Inspection Date & Time")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { activeSheet = nil }
+                            }
                         }
                     }
+                    .presentationDetents([.medium, .large])
                 }
-                .presentationDetents([.medium, .large])
             }
             .overlay(exportOverlay)
         } else {
@@ -349,7 +348,7 @@ struct InspectionOverviewView: View {
                 Label("Inspection Date & Time", systemImage: "calendar")
                 Spacer()
                 Button {
-                    showInspectionDateSheet = true
+                    activeSheet = .inspectionDate
                 } label: {
                     Text(version.inspection.inspectionDate.formatted(date: .abbreviated, time: .shortened))
                         .font(.body.weight(.semibold))
@@ -522,7 +521,7 @@ struct InspectionOverviewView: View {
                     Menu {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
                             Button {
-                                showVideoRecorder = true
+                                activeSheet = .videoRecorder
                             } label: {
                                 Label("Record Video", systemImage: "video.fill")
                             }
@@ -711,7 +710,7 @@ struct InspectionOverviewView: View {
                     HStack(spacing: 8) {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
                             Button {
-                                showCoverPhotoCamera = true
+                                activeSheet = .cameraCoverPhoto
                             } label: {
                                 Label("Take", systemImage: "camera")
                                     .labelStyle(.titleAndIcon)
