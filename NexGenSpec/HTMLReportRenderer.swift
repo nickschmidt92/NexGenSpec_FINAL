@@ -214,17 +214,21 @@ enum HTMLReportRenderer {
         }
 
         // Videos (drone / footage)
+        //
+        // Rendered as plain-text labels, NOT clickable links — the
+        // PDF might be emailed to a client whose device doesn't have
+        // access to the video file path embedded in the app sandbox.
+        // A clickable link that 404s is worse than no link at all.
+        // (Tester report, 2026-04-20: "it shows a link in the PDF
+        // export but doesn't link to anywhere".)
         if !inspection.videos.isEmpty {
             html += "<div class=\"card\"><h2 class=\"section-title\">Videos (drone / footage)</h2>"
             for video in inspection.videos {
                 let label = escapeHTML(video.caption.isEmpty ? video.fileName : video.caption)
-                if let videosFolderURL {
-                    let fileURL = videosFolderURL.appendingPathComponent(video.fileName)
-                    let videoPath = absoluteAssetFileURLs ? fileURL.absoluteString : "videos/\(escapeHTML(video.fileName))"
-                    html += "<p><a href=\"\(videoPath)\" target=\"_blank\">\(label)</a> \(escapeHTML(video.source ?? ""))</p>"
-                } else {
-                    html += "<p class=\"meta\">\(label) \(escapeHTML(video.source ?? ""))</p>"
-                }
+                let source = escapeHTML(video.source ?? "")
+                html += "<p class=\"meta\">📹 \(label)"
+                if !source.isEmpty { html += " — \(source)" }
+                html += " <em>(video attachment — send separately if sharing)</em></p>"
             }
             html += "</div>"
         }
