@@ -16,6 +16,12 @@ import AVKit
 @available(iOS 16.0, *)
 struct InspectionOverviewView: View {
     @Binding var version: InspectionVersion
+    /// Tapping one of the Safety / Major / Marginal / Minor summary
+    /// badges routes back to the parent InspectionView so it can
+    /// switch to the Summary pane pre-filtered by that severity.
+    /// Nil-safe so the Preview provider still compiles without a
+    /// pane router.
+    var onShowSummary: ((Severity) -> Void)? = nil
     @State private var shareContent: ShareContent?
     // Legacy — kept so other code paths still compile; drive presentation via shareContent.
     @State private var showShareSheet = false
@@ -95,16 +101,38 @@ struct InspectionOverviewView: View {
                             .clipShape(Capsule())
                         Spacer()
                     }
-                    // Summary counts
+                    // Summary counts — each badge is tappable and jumps
+                    // to the Summary pane pre-filtered by severity.
+                    // Requested 2026-04-21: testers wanted a fast path
+                    // from "Overview says 3 Safety items" straight to
+                    // the filtered list without going through the
+                    // sidebar. Same destination as Summary sidebar link,
+                    // just with the filter set on arrival.
                     let counts = version.inspection.summaryCounts()
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Summary")
                             .font(.headline)
                         HStack {
-                            SummaryBadge(color: AppColor.safetyAccessible, label: "Safety", count: counts.safety)
-                            SummaryBadge(color: AppColor.majorAccessible, label: "Major", count: counts.major)
-                            SummaryBadge(color: AppColor.marginalAccessible, label: "Marginal", count: counts.marginal)
-                            SummaryBadge(color: AppColor.minorAccessible, label: "Minor", count: counts.minor)
+                            Button { onShowSummary?(.safety) } label: {
+                                SummaryBadge(color: AppColor.safetyAccessible, label: "Safety", count: counts.safety)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows all safety findings")
+                            Button { onShowSummary?(.major) } label: {
+                                SummaryBadge(color: AppColor.majorAccessible, label: "Major", count: counts.major)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows all major findings")
+                            Button { onShowSummary?(.marginal) } label: {
+                                SummaryBadge(color: AppColor.marginalAccessible, label: "Marginal", count: counts.marginal)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows all marginal findings")
+                            Button { onShowSummary?(.minor) } label: {
+                                SummaryBadge(color: AppColor.minorAccessible, label: "Minor", count: counts.minor)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows all minor findings")
                         }
                     }
                     
@@ -684,42 +712,89 @@ struct InspectionOverviewView: View {
                     .font(.headline)
                 Spacer()
                 if isEditable {
-                    // Two plain, always-visible buttons — no menus,
-                    // no action sheets. Two failed attempts at fancier
-                    // UX (Menu+PhotosPicker, then ActionSheet) both
-                    // had iOS 26 quirks that prevented changing the
-                    // cover photo after a first capture. Plain buttons
-                    // avoid every SwiftUI lifecycle gotcha.
+                    // Attempt 6 — root cause identified.
+                    //
+                    // Attempts 1-5 all chased a SwiftUI presentation-state
+                    // ghost (Menu+PhotosPicker, ActionSheet, fullScreenCover
+                    // with async reset, unified .sheet(item:) router,
+                    // UIImagePickerController wrapper). None of them fixed
+                    // the real problem because the real problem was NOT in
+                    // how we presented the picker.
+                    //
+                    // The decisive clue was that Trash ALSO stopped
+                    // responding after the first capture — and Trash
+                    // calls removeCoverPhoto() directly with no sheet
+                    // involved. So the buttons themselves weren't
+                    // receiving taps.
+                    //
+                    // Root cause: the Image below used
+                    //   .aspectRatio(contentMode: .fill)
+                    //   .frame(height: 180)
+                    //   .clipShape(RoundedRectangle(...))
+                    // without a .clipped() modifier. .aspectRatio(.fill)
+                    // makes the rendered Image overflow the 180pt frame.
+                    // .clipShape only clips the painted pixels — it does
+                    // NOT clip hit testing. The overflow extends upward
+                    // into the HStack of Take/Library/Trash buttons, and
+                    // because the Image is drawn AFTER the buttons in the
+                    // VStack, it sits on top of them in z-order and eats
+                    // every tap on those buttons. This only breaks after
+                    // the first capture because the placeholder ZStack
+                    // (shown when no photo is set) uses a fixed .frame(height: 120)
+                    // with no .aspectRatio and therefore doesn't overflow.
+                    //
+                    // Fixes applied below:
+                    //   1. .clipped() on the Image so hit testing is
+                    //      constrained to the 180pt frame.
+                    //   2. .contentShape(Rectangle()) on the Image to
+                    //      belt-and-suspenders the hit-test boundary.
+                    //   3. .zIndex(1) on this button HStack so even if
+                    //      overflow were to still escape, buttons win.
+                    //   4. .contentShape(Rectangle()) + explicit tap
+                    //      area on each button so hit targets are always
+                    //      the full button bounds.
                     HStack(spacing: 8) {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
                             Button {
+                                Diagnostics.logInfo("CoverPhoto: Take tapped")
                                 coverPhotoSource = .camera
                             } label: {
                                 Label("Take", systemImage: "camera")
                                     .labelStyle(.titleAndIcon)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                         }
                         Button {
+                            Diagnostics.logInfo("CoverPhoto: Library tapped")
                             coverPhotoSource = .library
                         } label: {
                             Label("Library", systemImage: "photo.on.rectangle")
                                 .labelStyle(.titleAndIcon)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         if version.inspection.coverPhotoFileName != nil {
                             Button(role: .destructive) {
+                                Diagnostics.logInfo("CoverPhoto: Trash tapped")
                                 removeCoverPhoto()
                             } label: {
                                 Image(systemName: "trash")
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .tint(.red)
                         }
                     }
+                    .fixedSize(horizontal: true, vertical: false)   // keep the whole button row at natural width so nothing wraps
+                    .zIndex(1)   // ensure buttons always above the image
                 }
             }
             if let img = loadCoverPhotoPreview() {
@@ -728,7 +803,10 @@ struct InspectionOverviewView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(maxWidth: .infinity)
                     .frame(height: 180)
+                    .clipped()   // CRITICAL: clips hit testing, not just paint
+                    .contentShape(Rectangle())   // belt-and-suspenders hit-test boundary
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .allowsHitTesting(false)   // the image itself is not interactive
                     .accessibilityLabel("Cover photo of the property")
             } else {
                 ZStack {
@@ -744,6 +822,7 @@ struct InspectionOverviewView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .allowsHitTesting(false)   // placeholder is not interactive
             }
         }
     }
@@ -1065,6 +1144,13 @@ private struct SchedulingCard: View {
 
     @State private var errorBanner: String?
     @State private var showSuccessCheck: Bool = false
+    /// Debounced auto-sync handle. When the inspector changes date,
+    /// duration, client name, or address on an inspection that already
+    /// has a linked calendar event, we push the update to EventKit
+    /// automatically — no manual "Update Calendar Event" tap. This
+    /// Task is the pending debounce so rapid edits (e.g. scrubbing a
+    /// date picker) collapse into a single EventKit write.
+    @State private var autoSyncTask: Task<Void, Never>?
 
     /// Picker values: 1, 2, 3, 4, 6, 8 hours. `nil` row = "Use default (4h)".
     private let durationOptions: [Int?] = [nil, 60, 120, 180, 240, 360, 480]
@@ -1097,6 +1183,43 @@ private struct SchedulingCard: View {
         .cornerRadius(8)
         .onAppear {
             calendarService.refreshAuthorizationState()
+        }
+        // Auto-sync triggers. We watch the four fields that map into
+        // an EKEvent (start time, duration, event title = client name,
+        // location = property address). Any edit kicks the debounce.
+        .onChange(of: version.inspection.inspectionDate) { _, _ in
+            scheduleAutoSync()
+        }
+        .onChange(of: version.inspection.scheduledDurationMinutes) { _, _ in
+            scheduleAutoSync()
+        }
+        .onChange(of: version.inspection.clientName) { _, _ in
+            scheduleAutoSync()
+        }
+        .onChange(of: version.inspection.propertyAddress) { _, _ in
+            scheduleAutoSync()
+        }
+        .onDisappear {
+            autoSyncTask?.cancel()
+        }
+    }
+
+    /// Debounced push to EventKit. Runs only when an existing event is
+    /// linked — we never create an event automatically (that still
+    /// requires the explicit "Add to Calendar" tap so the user opts in
+    /// to calendar integration per-inspection). 600ms debounce swallows
+    /// date-scrubbing and rapid typing. Errors go to the banner so the
+    /// manual "Update Calendar Event" button can be used as a retry.
+    private func scheduleAutoSync() {
+        autoSyncTask?.cancel()
+        guard isEditable,
+              version.inspection.calendarEventIdentifier != nil,
+              version.inspection.hasScheduledStartTime,
+              calendarService.authorizationState.canCreateEvents else { return }
+        autoSyncTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            if Task.isCancelled { return }
+            await updateEvent()
         }
     }
 
@@ -1146,26 +1269,41 @@ private struct SchedulingCard: View {
     @ViewBuilder
     private var calendarActionBar: some View {
         if version.inspection.calendarEventIdentifier != nil {
-            HStack(spacing: 10) {
-                Button {
-                    Task { await updateEvent() }
-                } label: {
-                    Label("Update Calendar Event", systemImage: "calendar.badge.clock")
-                }
-                .buttonStyle(.bordered)
-                .disabled(!isEditable)
-
-                Button(role: .destructive) {
-                    Task { await removeEvent() }
-                } label: {
-                    Label("Remove", systemImage: "calendar.badge.minus")
-                }
-                .buttonStyle(.bordered)
-                .disabled(!isEditable)
-
-                if showSuccessCheck {
-                    Image(systemName: "checkmark.circle.fill")
+            VStack(alignment: .leading, spacing: 6) {
+                // Status line replaces the old primary-action wording.
+                // Changes to date / duration / client / address now
+                // auto-sync after a short debounce, so the user rarely
+                // needs to tap the manual sync button below.
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.icloud")
                         .foregroundStyle(.green)
+                    Text("Calendar event linked — auto-syncs on edit")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if showSuccessCheck {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .transition(.opacity)
+                    }
+                }
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await updateEvent() }
+                    } label: {
+                        Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!isEditable)
+
+                    Button(role: .destructive) {
+                        Task { await removeEvent() }
+                    } label: {
+                        Label("Remove", systemImage: "calendar.badge.minus")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!isEditable)
                 }
             }
         } else {

@@ -29,6 +29,13 @@ struct InspectionView: View {
     @State private var selectedPane: InspectionPane = .overview
     @State private var showShortcutsHelp = false
     @State private var showReportPreview = false
+    /// Long-lived view model for the Summary pane. Previously this was
+    /// created ad-hoc inside `paneContent(for: .summary)`, which meant
+    /// every parent re-render (e.g. the 2s auto-save tick) installed a
+    /// fresh VM with an empty severityFilter — so filter-chip taps
+    /// looked like they did nothing. Hoisting to a `@StateObject`
+    /// keeps the filter state alive across re-renders.
+    @StateObject private var summaryVM = InspectionViewModel(version: .empty)
     @StateObject private var weatherService = WeatherService()
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -145,6 +152,10 @@ struct InspectionView: View {
         }
         .onAppear {
             draft = version
+            // Seed the long-lived Summary VM with the inspection data
+            // so the first visit to Summary already has the right
+            // sections/items even if no edit has happened yet.
+            summaryVM.version = version
             if draft.inspection.sections.isEmpty { selectedPane = .overview }
             // Seed the save indicator from the version file's on-disk
             // modification time so the inspector sees a real "Saved
@@ -190,6 +201,11 @@ struct InspectionView: View {
         // teardown (onDisappear / willResignActive / Log Out), so
         // Dashboard always shows fresh info when the user returns.
         .onChange(of: draft) { _, newDraft in
+            // Keep the Summary VM's `version` in lockstep with the
+            // draft so Summary always reflects the live edits. Filter
+            // state on the VM is preserved because we only mutate
+            // `.version`, not the whole object.
+            summaryVM.version = newDraft
             autoSaveTask?.cancel()
             autoSaveTask = Task { @MainActor in
                 try? await Task.sleep(for: Self.autoSaveDebounce)
@@ -409,7 +425,12 @@ struct InspectionView: View {
     private func paneContent(for pane: InspectionPane) -> some View {
         switch pane {
         case .overview:
-            InspectionOverviewView(version: $draft)
+            InspectionOverviewView(version: $draft, onShowSummary: { sev in
+                // Mutate the persistent VM directly — no pending
+                // handoff state needed now that it's @StateObject.
+                summaryVM.severityFilter = [sev]
+                selectedPane = .summary
+            })
         case .section(let sectionID):
             if let sectionIndex = draft.inspection.sections.firstIndex(where: { $0.id == sectionID }) {
                 SectionItemsListView(
@@ -433,7 +454,9 @@ struct InspectionView: View {
                 }
             }
         case .summary:
-            SummaryView(viewModel: InspectionViewModel(version: draft)) { sectionID in
+            // Use the long-lived Summary VM so filter-chip taps and
+            // search text persist across auto-save re-renders.
+            SummaryView(viewModel: summaryVM) { sectionID in
                 selectedPane = .section(sectionID)
             }
         case .finalize:
@@ -509,11 +532,15 @@ private struct SectionRowView: View {
                 .lineLimit(1)
             Spacer()
             if section.safetyCount + section.majorCount + section.marginalCount + section.minorCount > 0 {
+                // Neutral "total items" badge — uses the brand blue so
+                // it reads as a count, not a severity signal. The per-
+                // severity red/orange/yellow/blue chips still appear on
+                // each individual item inside the section.
                 Text("\(section.safetyCount + section.majorCount + section.marginalCount + section.minorCount)")
                     .font(.caption2)
                     .padding(4)
-                    .background(AppColor.warning.opacity(0.2))
-                    .foregroundStyle(AppColor.warning)
+                    .background(AppColor.brandBlue.opacity(0.2))
+                    .foregroundStyle(AppColor.brandBlue)
                     .clipShape(Circle())
             }
         }
