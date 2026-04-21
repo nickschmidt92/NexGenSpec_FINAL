@@ -22,28 +22,29 @@ struct InspectionOverviewView: View {
     @State private var shareItems: [Any] = []
     @State private var showLiDARCapture = false
     @State private var selectedVideoItems: [PhotosPickerItem] = []
-    @State private var selectedCoverItems: [PhotosPickerItem] = []
+    /// Drives the cover-photo picker. When non-nil, a fullScreenCover
+    /// presents the appropriate UIImagePickerController. Set to nil
+    /// from inside the onFinish callback to dismiss.
+    ///
+    /// Fresh-start rewrite (branch: feature/cover-photo-rebuild).
+    /// The previous cover-photo stack went through four failed
+    /// attempts — Menu+PhotosPicker, ActionSheet+photosPicker,
+    /// fullScreenCover+async, sheet(item:)+photosPicker — none of
+    /// which survived the "change after first capture" test on iOS 26.
+    /// This single-enum-driven approach uses UIImagePickerController
+    /// directly (pre-SwiftUI, zero iOS 26 lifecycle bugs).
+    @State private var coverPhotoSource: CoverPhotoSource?
     /// Currently-playing video, drives the AVPlayer sheet. Replaces
     /// the old tap-does-nothing behavior where an uploaded video row
     /// was inert — a top complaint from the first TestFlight cohort.
     @State private var videoToPlay: InspectionVideo?
-    /// Drives the library PhotosPicker. Kept separate because
-    /// PhotosPicker must be driven by its own .photosPicker modifier;
-    /// it doesn't fit the .sheet(item:) pattern.
-    @State private var showCoverPhotoLibrary: Bool = false
-    /// Unified sheet router for the three sheet-based actions on
-    /// this view: cover photo camera, video recorder, inspection date.
-    ///
-    /// Consolidating into a single .sheet(item:) is required because
-    /// iOS 26 has a known regression where stacking many
-    /// .sheet(isPresented:) modifiers on the same view makes later
-    /// ones silently no-op — exactly the symptom testers reported
-    /// ("cover photo trash / change photo - still not working",
-    /// "inspection date & time is back to not working").
+    /// Unified sheet router. Cover photo is NOT in this enum — it's
+    /// driven separately by coverPhotoSource (see above) because the
+    /// cover-photo path was rewritten to use UIImagePickerController
+    /// directly, bypassing PhotosPicker entirely.
     @State private var activeSheet: OverviewSheet?
 
     enum OverviewSheet: Identifiable {
-        case cameraCoverPhoto
         case videoRecorder
         case inspectionDate
         var id: Int { hashValue }
@@ -144,12 +145,6 @@ struct InspectionOverviewView: View {
                     await addVideoFromPickerItem(item)
                 }
             }
-            .onChange(of: selectedCoverItems) { _, newItems in
-                guard let item = newItems.first else { return }
-                Task {
-                    await setCoverPhotoFromPickerItem(item)
-                }
-            }
             .navigationTitle("Overview")
             .toolbar {
                 if LiDARCapability.isSupported {
@@ -222,36 +217,24 @@ struct InspectionOverviewView: View {
             // with sourceType = .camera wants the entire screen — using
             // .sheet was causing the sheet-dismissal state machine to
             // get stuck after the first capture, so subsequent Take
-            // Photo taps silently no-op'd. The async dispatch defers
-            // the isPresented flip to the NEXT run loop tick, giving
-            // SwiftUI time to finish the previous animation before we
-            // mutate model state that triggers a re-render.
-            // Library picker stays on its own modifier because
-            // PhotosPicker requires the dedicated .photosPicker
-            // modifier rather than fitting in .sheet(item:).
-            .photosPicker(
-                isPresented: $showCoverPhotoLibrary,
-                selection: $selectedCoverItems,
-                maxSelectionCount: 1,
-                matching: .images
-            )
-            // ONE sheet modifier handles all three remaining cases.
-            // Previously had three separate .sheet/.fullScreenCover
-            // modifiers on the same view — iOS 26 only reliably
-            // honors one at a time, causing later ones to silently
-            // no-op. Using .sheet(item:) with an enum is Apple's
-            // recommended pattern for this exact scenario.
+            // Cover photo picker — single UIImagePickerController
+            // path for both camera and library. Completely separate
+            // from the activeSheet router because the previous
+            // "unified sheet" approach still broke on iOS 26 after
+            // a cover photo was set. Decoupling gives the picker
+            // its own presentation lifecycle.
+            .fullScreenCover(item: $coverPhotoSource) { source in
+                CoverPhotoPicker(source: source) { image in
+                    if let image {
+                        setCoverPhotoFromCapturedImage(image)
+                    }
+                    coverPhotoSource = nil
+                }
+                .ignoresSafeArea()
+            }
+            // Remaining sheet router: video recorder + inspection date.
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
-                case .cameraCoverPhoto:
-                    CameraCaptureView(
-                        onCapture: { image in
-                            activeSheet = nil
-                            setCoverPhotoFromCapturedImage(image)
-                        },
-                        onCancel: { activeSheet = nil }
-                    )
-                    .ignoresSafeArea()
                 case .videoRecorder:
                     VideoRecorderView(
                         onRecorded: { tempURL in
@@ -710,7 +693,7 @@ struct InspectionOverviewView: View {
                     HStack(spacing: 8) {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
                             Button {
-                                activeSheet = .cameraCoverPhoto
+                                coverPhotoSource = .camera
                             } label: {
                                 Label("Take", systemImage: "camera")
                                     .labelStyle(.titleAndIcon)
@@ -719,7 +702,7 @@ struct InspectionOverviewView: View {
                             .controlSize(.small)
                         }
                         Button {
-                            showCoverPhotoLibrary = true
+                            coverPhotoSource = .library
                         } label: {
                             Label("Library", systemImage: "photo.on.rectangle")
                                 .labelStyle(.titleAndIcon)
@@ -803,41 +786,6 @@ struct InspectionOverviewView: View {
             )
         } catch {
             Diagnostics.logError(context: "setCoverPhotoFromCapturedImage failed", error: error)
-        }
-    }
-
-    private func setCoverPhotoFromPickerItem(_ item: PhotosPickerItem) async {
-        defer { Task { @MainActor in selectedCoverItems = [] } }
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let originalImage = UIImage(data: data) else {
-            return
-        }
-        // Downscale to a sane upper bound so we don't write a 12 MP HEIC
-        // straight to disk. 1600px max side keeps it crisp on the report
-        // header but tiny on disk.
-        let resized = originalImage.resizedKeepingAspect(maxSide: 1600)
-        guard let jpegData = resized.jpegData(compressionQuality: 0.82) else { return }
-
-        let fileName = FilePaths.defaultCoverPhotoFileName
-        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
-        do {
-            try FileSecurity.ensureProtectedDirectory(FilePaths.inspectionFolder(jobId: jobId))
-            try FileSecurity.writeProtected(jpegData, to: url)
-            await MainActor.run {
-                var insp = version.inspection
-                insp.coverPhotoFileName = fileName
-                var v = version
-                v.inspection = insp
-                version = v
-                coverPhotoTick &+= 1
-                NotificationCenter.default.post(
-                    name: .coverPhotoDidUpdate,
-                    object: nil,
-                    userInfo: ["jobId": jobId]
-                )
-            }
-        } catch {
-            Diagnostics.logError(context: "setCoverPhotoFromPickerItem failed", error: error)
         }
     }
 
