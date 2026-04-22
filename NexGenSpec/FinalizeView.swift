@@ -31,34 +31,45 @@ struct FinalizeView: View {
                         Text("Minor: \(counts.minor)")
                     }
                 }
-                Section(header: Text("Signatures")) {
+                Section(
+                    header: Text("Signatures"),
+                    footer: signaturesFooter
+                ) {
                     ForEach(version.inspection.signatures) { sig in
-                        HStack {
-                            Text(sig.name)
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(.green)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(sig.name).font(.subheadline.weight(.semibold))
+                                Text("\(sig.date, formatter: DateFormatters.mediumDateTime)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             Spacer()
-                            Text("\(sig.date, formatter: DateFormatters.mediumDateTime)")
+                            Text("LOCKED")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.secondary)
                         }
                     }
                     if version.inspection.signatures.count < 2 {
                         Button {
                             showSignatureSheet = true
                         } label: {
-                            Label("Collect Signatures", systemImage: "signature")
-                                .frame(maxWidth: .infinity, alignment: .center)
+                            Label(
+                                version.inspection.signatures.isEmpty
+                                    ? "Collect Signatures"
+                                    : "Add Remaining Signature",
+                                systemImage: "signature"
+                            )
+                            .frame(maxWidth: .infinity, alignment: .center)
                         }
                         .disabled(!version.state.isEditable)
-                        Text("Inspector and client / real estate agent must sign before finalizing.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Button {
-                            showSignatureSheet = true
-                        } label: {
-                            Label("Update Signatures", systemImage: "signature")
-                        }
                     }
                 }
-                Section {
+                Section(
+                    footer: Text("Once you finalize, the report is locked. Defect entries, photos, notes, and signatures cannot be altered after this point. Make sure everything looks right above before tapping Finalize & Lock.")
+                        .font(.footnote)
+                ) {
                     Button(action: finalize) {
                         Text("Finalize & Lock")
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -81,6 +92,20 @@ struct FinalizeView: View {
                     showSignatureSheet = false
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var signaturesFooter: some View {
+        if version.inspection.signatures.isEmpty {
+            Text("Inspector and client / real estate agent must sign before finalizing. Signatures are locked once saved and become part of the permanent record.")
+                .font(.footnote)
+        } else if version.inspection.signatures.count < 2 {
+            Text("One signature on file. Add the remaining signature to enable Finalize & Lock. Signatures cannot be modified after they are saved.")
+                .font(.footnote)
+        } else {
+            Text("Both signatures captured. They are locked and will appear on the final PDF alongside a SHA-256 verification hash.")
+                .font(.footnote)
         }
     }
 

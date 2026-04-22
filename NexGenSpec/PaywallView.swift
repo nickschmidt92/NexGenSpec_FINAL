@@ -32,17 +32,17 @@ struct PaywallView: View {
                             .accessibilityAddTraits(.isHeader)
 
                         if let remaining = subscriptions.freeInspectionsRemaining, remaining <= 0 {
-                            Text("You've used all \(SubscriptionManager.freeInspectionLimit) free inspections. Subscribe to continue creating inspections with full PDF export, voice input, LiDAR scanning, and more.")
+                            Text("You've used all \(SubscriptionManager.freeInspectionLimit) free inspections. Subscribe to continue creating inspections with full PDF export, LiDAR scanning, the annotation pack, and more.")
                                 .font(.body)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         } else if let remaining = subscriptions.freeInspectionsRemaining {
-                            Text("You have \(remaining) free inspection\(remaining == 1 ? "" : "s") remaining. Subscribe for unlimited inspections, clean PDF export, voice input, LiDAR scanning, and the annotation pack.")
+                            Text("You have \(remaining) free inspection\(remaining == 1 ? "" : "s") remaining. Subscribe for unlimited inspections, clean PDF export, LiDAR scanning, and the annotation pack.")
                                 .font(.body)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         } else {
-                            Text("Unlock unlimited inspections, PDF export, voice input, LiDAR scanning, and the annotation pack. Cancel anytime in Settings.")
+                            Text("Unlock unlimited inspections, PDF export, LiDAR scanning, and the annotation pack. Cancel anytime in Settings.")
                                 .font(.body)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
@@ -108,6 +108,18 @@ struct PaywallView: View {
                 await subscriptions.refresh()
             }
         }
+        .onAppear {
+            // Defensive dismiss: if the paywall was somehow opened while
+            // the user is already Pro (e.g. stale caller state from a
+            // tab that read isPro before it refreshed), bail immediately.
+            // Previously only the .onChange below dismissed, but that
+            // doesn't fire for an already-true value at mount time —
+            // which is exactly the beta-reported "paywall still appears
+            // after I upgraded" bug.
+            if subscriptions.isPro {
+                DispatchQueue.main.async { dismiss() }
+            }
+        }
         .onChange(of: subscriptions.isPro) { _, newValue in
             if newValue { dismiss() }
         }
@@ -119,9 +131,9 @@ struct PaywallView: View {
         VStack(alignment: .leading, spacing: 16) {
             featureRow(title: "Unlimited Inspections", requiresUpgrade: true)
             featureRow(title: "Clean, Branded PDF Reports", requiresUpgrade: true)
-            featureRow(title: "Voice Input", requiresUpgrade: true)
             featureRow(title: "LiDAR Scanning", requiresUpgrade: true)
             featureRow(title: "Annotation Pack", requiresUpgrade: true)
+            featureRow(title: "Priority Support", requiresUpgrade: true)
             featureRow(title: "\(SubscriptionManager.freeInspectionLimit) Free Inspections", requiresUpgrade: false)
         }
         .inspectionCard()

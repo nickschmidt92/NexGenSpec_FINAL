@@ -12,6 +12,7 @@ struct InvoiceAndSendView: View {
     let version: InspectionVersion
     @StateObject private var exportService = ReportExportService()
     @EnvironmentObject private var subscriptions: SubscriptionManager
+    @ObservedObject private var profile = InspectorProfile.shared
 
     @State private var invoicePrice = ""
     @State private var additionalServices = ""
@@ -22,8 +23,19 @@ struct InvoiceAndSendView: View {
     @State private var showExportError = false
     @State private var showPaywall = false
     @State private var showLargePDFWarning = false
+    @State private var ccBuyersAgent: Bool = false
+    @State private var ccListingAgent: Bool = false
+    // Persisted per-inspection via UserDefaults (keyed by inspectionId).
+    // Avoids touching the Inspection model mid-TestFlight, which would
+    // force a JSON migration for every existing draft on disk. These
+    // are soft metadata — safe to lose if reinstalled.
+    @State private var invoiceSentAt: Date?
+    @State private var invoicePaidAt: Date?
 
     private let nexGenSpecEmail = "contact@nexgenspec.com"
+
+    private var sentAtKey: String { "invoice.sentAt.\(version.inspection.inspectionId)" }
+    private var paidAtKey: String { "invoice.paidAt.\(version.inspection.inspectionId)" }
 
     var body: some View {
         Form {
@@ -31,6 +43,39 @@ struct InvoiceAndSendView: View {
                 LabeledContent("Name", value: version.inspection.clientName)
                 LabeledContent("Email", value: version.inspection.clientEmail.isEmpty ? "—" : version.inspection.clientEmail)
                 LabeledContent("Phone", value: version.inspection.clientPhone.isEmpty ? "—" : version.inspection.clientPhone)
+                if !profile.companyName.isEmpty {
+                    LabeledContent("Company", value: profile.companyName)
+                }
+            }
+            // Optional CC recipients — if the inspection has buyer's /
+            // listing agent emails saved, surface toggles so the inspector
+            // can loop them in without having to type the address again.
+            if !buyersAgentEmail.isEmpty || !listingAgentEmail.isEmpty {
+                Section(
+                    header: Text("CC on Invoice (optional)"),
+                    footer: Text("Adds the selected agent(s) as CC on the invoice email.")
+                ) {
+                    if !buyersAgentEmail.isEmpty {
+                        Toggle(isOn: $ccBuyersAgent) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Buyer's Agent")
+                                Text(buyersAgentEmail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    if !listingAgentEmail.isEmpty {
+                        Toggle(isOn: $ccListingAgent) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Listing Agent")
+                                Text(listingAgentEmail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
             Section(header: Text("Report")) {
                 if exportedPDFURL != nil {
@@ -65,15 +110,57 @@ struct InvoiceAndSendView: View {
                         .keyboardType(.decimalPad)
                 }
             }
+            // Legal / liability disclaimer — NexGenSpec is a reporting
+            // tool, not a payment processor. Client pays the inspector
+            // directly via whatever method the two agree on outside
+            // the app. Called out explicitly before the Send button so
+            // the tester can't miss it. Matches the beta feedback
+            // "I don't want to be liable for payments".
+            Section(
+                header: Text("Payment"),
+                footer: Text("NexGenSpec does not process payments. Payment is collected directly by the inspector (check, card, Zelle, cash, etc.) outside the app. This invoice is for recordkeeping only.")
+                    .font(.footnote)
+            ) {
+                if let sentAt = invoiceSentAt {
+                    LabeledContent("Invoice Sent") {
+                        Text(sentAt.formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.green)
+                    }
+                }
+                if let paidAt = invoicePaidAt {
+                    LabeledContent("Marked Paid") {
+                        Text(paidAt.formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
             Section {
                 Button {
                     sendInvoiceTapped()
                 } label: {
-                    Label("Send Invoice to Client & NexGenSpec", systemImage: "envelope.badge")
+                    Label(
+                        invoiceSentAt == nil
+                            ? "Send Invoice to Client"
+                            : "Resend Invoice",
+                        systemImage: invoiceSentAt == nil ? "envelope.badge" : "arrow.triangle.2.circlepath"
+                    )
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+                if invoiceSentAt != nil {
+                    Button {
+                        togglePaid()
+                    } label: {
+                        Label(
+                            invoicePaidAt == nil ? "Mark Invoice as Paid" : "Clear Paid Status",
+                            systemImage: invoicePaidAt == nil ? "checkmark.seal" : "xmark.seal"
+                        )
                         .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .foregroundStyle(invoicePaidAt == nil ? Color.green : Color.orange)
                 }
             }
         }
+        .onAppear(perform: loadPersistedState)
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Invoice & Send")
         .onChange(of: exportService.isExporting) { _, isExporting in
@@ -131,14 +218,62 @@ struct InvoiceAndSendView: View {
         if !recipients.isEmpty {
             MailComposeView(
                 toRecipients: recipients,
-                subject: "Inspection Report & Invoice – \(version.inspection.clientName)",
+                ccRecipients: ccEmails,
+                subject: invoiceSubject,
                 body: invoiceEmailHTML,
                 isHTML: true,
                 attachmentURL: exportedPDFURL,
                 extraAttachmentURLs: lidarUSDZAttachmentURLs(),
-                onDismiss: { showMailCompose = false }
+                onDismiss: { showMailCompose = false },
+                onResult: { result in
+                    if result == .sent {
+                        let now = Date()
+                        invoiceSentAt = now
+                        UserDefaults.standard.set(now, forKey: sentAtKey)
+                    }
+                }
             )
         }
+    }
+
+    /// Auto-populated CC list based on which agent toggles are on.
+    private var ccEmails: [String] {
+        var list: [String] = []
+        if ccBuyersAgent, !buyersAgentEmail.isEmpty { list.append(buyersAgentEmail) }
+        if ccListingAgent, !listingAgentEmail.isEmpty { list.append(listingAgentEmail) }
+        return list
+    }
+
+    private var buyersAgentEmail: String {
+        version.inspection.buyersAgent?.email ?? ""
+    }
+
+    private var listingAgentEmail: String {
+        version.inspection.listingAgent?.email ?? ""
+    }
+
+    /// Subject line prefers the company name over the bare NexGenSpec
+    /// wording so clients see the inspector's brand, not ours.
+    private var invoiceSubject: String {
+        let company = profile.companyName.trimmingCharacters(in: .whitespaces)
+        let prefix = company.isEmpty ? "Inspection Report & Invoice" : "\(company) — Inspection Report & Invoice"
+        return "\(prefix) – \(version.inspection.clientName)"
+    }
+
+    private func togglePaid() {
+        if invoicePaidAt == nil {
+            let now = Date()
+            invoicePaidAt = now
+            UserDefaults.standard.set(now, forKey: paidAtKey)
+        } else {
+            invoicePaidAt = nil
+            UserDefaults.standard.removeObject(forKey: paidAtKey)
+        }
+    }
+
+    private func loadPersistedState() {
+        invoiceSentAt = UserDefaults.standard.object(forKey: sentAtKey) as? Date
+        invoicePaidAt = UserDefaults.standard.object(forKey: paidAtKey) as? Date
     }
 
     /// Collect USDZ files from any LiDAR scans saved for this inspection so

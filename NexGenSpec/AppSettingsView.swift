@@ -55,10 +55,25 @@ struct AppSettingsView: View {
                         SettingsValueRow(title: "Subscription", value: subscriptionLabel)
 
                         if !subscriptions.isAdminAccount {
-                            Button(subscriptions.isPro ? "Manage Subscription" : "Upgrade to Pro") {
-                                showPaywall = true
+                            // Pro users go to iOS Subscriptions directly to
+                            // cancel / change plan; only non-Pro users see
+                            // the in-app paywall. Fixes a beta-reported bug
+                            // where tapping "Manage Subscription" re-opened
+                            // the upgrade paywall instead of taking the user
+                            // somewhere they could actually manage the sub.
+                            if subscriptions.isPro {
+                                Button("Manage Subscription") {
+                                    if let url = URL(string: "itms-apps://apps.apple.com/account/subscriptions") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }
+                                .buttonStyle(AppPrimaryButtonStyle())
+                            } else {
+                                Button("Upgrade to Pro") {
+                                    showPaywall = true
+                                }
+                                .buttonStyle(AppPrimaryButtonStyle())
                             }
-                            .buttonStyle(AppPrimaryButtonStyle())
                         }
 
                         Button("Log Out", role: .destructive) {
