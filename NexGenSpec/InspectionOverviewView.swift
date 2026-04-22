@@ -66,6 +66,18 @@ struct InspectionOverviewView: View {
     private var isEditable: Bool { version.state.isEditable }
     private var jobId: UUID { UUID(uuidString: version.inspection.inspectionId) ?? version.id }
 
+    /// Short, human-friendly job identifier displayed on the Overview.
+    /// Matches the `NGS-YYYYMMDD-XXXX` format used on the PDF cover page
+    /// so the inspector can reference either surface interchangeably.
+    private var shortJobId: String {
+        let datePart: String
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd"
+        datePart = f.string(from: version.inspection.inspectionDate)
+        let shortHash = String(version.inspection.inspectionId.replacingOccurrences(of: "-", with: "").prefix(4)).uppercased()
+        return "NGS-\(datePart)-\(shortHash)"
+    }
+
     var body: some View {
         if #available(iOS 17.0, *) {
             ScrollView {
@@ -325,6 +337,14 @@ struct InspectionOverviewView: View {
             Text("Inspector: \(version.inspection.inspectorName)")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+            // Beta-requested (2026-04-22): surface a short Job ID so the
+            // inspector can cross-reference this inspection with invoices,
+            // emails, and client calls without having to open Finalize.
+            // Format: NGS-YYYYMMDD-XXXX (first 4 hex of inspectionId uppercased).
+            Text("Job ID: \(shortJobId)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

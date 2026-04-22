@@ -193,25 +193,9 @@ enum HTMLReportRenderer {
         // Defect Summary page
         html += Self.renderDefectSummary(inspection: inspection, jobId: jobId, imageFolderURL: imageFolderURL, absoluteAssetFileURLs: absoluteAssetFileURLs)
 
-        // Room scans (LiDAR)
-        let lidarScans = LiDARScanStore.loadScans(jobId: jobId)
-        if !lidarScans.isEmpty {
-            let lidarDir = FilePaths.lidarFolder(jobId: jobId)
-            html += "<div class=\"card\"><h2 class=\"section-title\">Room scans (LiDAR)</h2>"
-            for scan in lidarScans {
-                html += "<div style=\"margin-bottom:18px;\">"
-                html += "<p class=\"meta\"><strong>\(escapeHTML(scan.displayName))</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
-                if let pngName = scan.floorplanPNGFileName {
-                    let pngURL = lidarDir.appendingPathComponent(pngName)
-                    if let pngData = try? Data(contentsOf: pngURL) {
-                        let b64 = pngData.base64EncodedString()
-                        html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;height:auto;border:1px solid #ccc;border-radius:6px;\" />"
-                    }
-                }
-                html += "</div>"
-            }
-            html += "<p class=\"meta\">3D models (USDZ) are saved with this inspection.</p></div>"
-        }
+        // Room scans (LiDAR) — NOTE: rendered at the END of the report
+        // below (after signatures), not here. Kept as a reference for
+        // the reordering done in the beta feedback pass 2026-04-22.
 
         // Videos (drone / footage)
         //
@@ -286,6 +270,31 @@ enum HTMLReportRenderer {
             html += "</div>"
         }
 
+        // Room scans (LiDAR) — moved to end of report per beta feedback.
+        // Floor-plan PDFs read as supporting reference material, not
+        // primary findings, so inspectors wanted them grouped at the
+        // back. A heading + "rough estimate" disclaimer sets the right
+        // expectation for the client reading the report.
+        let lidarScans = LiDARScanStore.loadScans(jobId: jobId)
+        if !lidarScans.isEmpty {
+            let lidarDir = FilePaths.lidarFolder(jobId: jobId)
+            html += "<div class=\"card\" style=\"page-break-before:always;\"><h2 class=\"section-title\">Room Scans (LiDAR) — Reference</h2>"
+            html += "<p class=\"meta\" style=\"font-style:italic;color:#666;\">These floor plans are generated from a device-level LiDAR scan and represent rough estimates of room geometry. They are intended as spatial reference only and should not be used for construction or measurement-critical decisions.</p>"
+            for scan in lidarScans {
+                html += "<div style=\"margin-bottom:18px;\">"
+                html += "<p class=\"meta\"><strong>\(escapeHTML(scan.displayName))</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
+                if let pngName = scan.floorplanPNGFileName {
+                    let pngURL = lidarDir.appendingPathComponent(pngName)
+                    if let pngData = try? Data(contentsOf: pngURL) {
+                        let b64 = pngData.base64EncodedString()
+                        html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;height:auto;border:1px solid #ccc;border-radius:6px;\" />"
+                    }
+                }
+                html += "</div>"
+            }
+            html += "<p class=\"meta\">3D models (USDZ) are saved with this inspection.</p></div>"
+        }
+
         html += "<div class=\"footer\">"
         if let hash = reportHash {
             let datePart = Self.reportIdDateFormatter.string(from: Date())
@@ -344,6 +353,20 @@ enum HTMLReportRenderer {
             let defectTags: [String]
         }
 
+        // Severity sort order — Safety first, Major second, so the high-
+        // priority items are the first thing a client or agent sees on
+        // the Defect Summary page. Beta feedback 2026-04-22:
+        // "highlight the big ones." Within each severity tier, items
+        // keep their original section order.
+        func sortOrder(_ s: Severity) -> Int {
+            switch s {
+            case .safety: return 0
+            case .major: return 1
+            case .marginal: return 2
+            case .minor: return 3
+            }
+        }
+
         var rows: [DefectRow] = []
         for section in inspection.sections {
             for item in section.items where item.isDefect && item.includeInReport {
@@ -383,6 +406,9 @@ enum HTMLReportRenderer {
             }
         }
 
+        // Severity-first ordering so Safety + Major appear at the top.
+        rows.sort { a, b in sortOrder(a.severity) < sortOrder(b.severity) }
+
         // If no defects, show a brief note
         guard !rows.isEmpty else {
             return """
@@ -410,16 +436,28 @@ enum HTMLReportRenderer {
         """
 
         for (index, row) in rows.enumerated() {
-            let bgColor = index % 2 == 0 ? "#f8fafd" : "#ffffff"
+            let bgColor: String
             let sevColor: String
+            let isHighPriority = row.severity == .safety || row.severity == .major
             switch row.severity {
             case .safety:  sevColor = "#dc3545"
             case .major:   sevColor = "#fd7e14"
             case .marginal: sevColor = "#ffc107"
             case .minor:   sevColor = "#198754"
             }
+            // Safety + Major rows get a subtle tinted background and a
+            // thick left border in their severity color. Marginal/Minor
+            // keep the original zebra stripe so the high-priority rows
+            // stand out visually without making the page a circus.
+            if isHighPriority {
+                bgColor = row.severity == .safety ? "#fff5f5" : "#fff9f2"
+            } else {
+                bgColor = index % 2 == 0 ? "#f8fafd" : "#ffffff"
+            }
+            let titleWeight = isHighPriority ? "700" : "600"
+            let leftBorder = isHighPriority ? "border-left:6px solid \(sevColor);" : ""
 
-            var description = escapeHTML(row.title)
+            var description = "<span style=\"font-weight:\(titleWeight);\">\(escapeHTML(row.title))</span>"
             if !row.observed.isEmpty {
                 description += "<br/><span style=\"color:#666;font-size:0.85rem;\">\(escapeHTML(row.observed))</span>"
             }
@@ -431,10 +469,10 @@ enum HTMLReportRenderer {
             }
 
             html += """
-            <tr style="background:\(bgColor);border-bottom:1px solid #eee;">
+            <tr style="background:\(bgColor);border-bottom:1px solid #eee;\(leftBorder)">
             <td style="padding:10px 8px;vertical-align:top;font-weight:600;">\(escapeHTML(row.section))</td>
             <td style="padding:10px 8px;vertical-align:top;">\(description)</td>
-            <td style="padding:10px 8px;vertical-align:top;"><span style="display:inline-block;padding:4px 10px;border-radius:6px;color:#fff;background:\(sevColor);font-weight:600;font-size:0.85rem;">\(row.severity.rawValue)</span></td>
+            <td style="padding:10px 8px;vertical-align:top;"><span style="display:inline-block;padding:4px 10px;border-radius:6px;color:#fff;background:\(sevColor);font-weight:700;font-size:\(isHighPriority ? "0.9rem" : "0.85rem");">\(row.severity.rawValue)</span></td>
             <td style="padding:10px 8px;vertical-align:top;text-align:center;">\(row.photoRef)</td>
             </tr>
             """

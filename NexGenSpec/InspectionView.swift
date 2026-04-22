@@ -54,9 +54,14 @@ struct InspectionView: View {
     private static let autoSaveDebounce: Duration = .seconds(2)
 
     // Timer state
-    @State private var timerDisplayString = "00:00:00"
+    //
+    // Previously used a Timer.scheduledTimer + @State string to drive the
+    // "Timer: HH:MM:SS" label. That invalidated InspectionView's body
+    // every second and caused the ellipsis.circle toolbar icon to blink.
+    // Now the toolbar menu renders the timer via TimelineView, so all we
+    // need here is the session-start marker; display is computed on demand
+    // by `formattedTimer(at:)`.
     @State private var timerSessionStart: Date?
-    @State private var timerTimer: Timer?
 
     private var jobId: UUID {
         UUID(uuidString: draft.inspection.inspectionId) ?? version.id
@@ -88,10 +93,34 @@ struct InspectionView: View {
         }
         .navigationTitle(draft.inspection.clientName.isEmpty ? "Inspection \(draft.versionNumber)" : draft.inspection.clientName)
         .toolbar {
+            // Preview Report surfaced as its own toolbar button so inspectors
+            // don't have to dig into the three-dot menu to see a quick
+            // preview of what the client will get. Beta feedback pass
+            // 2026-04-22: "surface Preview Report."
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showReportPreview = true
+                } label: {
+                    Label("Preview", systemImage: "doc.text.magnifyingglass")
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .accessibilityLabel("Preview report")
+                .accessibilityHint("Opens a full-screen preview of the current inspection report")
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Label("Timer: \(timerDisplayString)", systemImage: "timer")
-                        .disabled(true)
+                    // TimelineView keeps the timer text self-updating at
+                    // 1Hz without re-rendering the entire InspectionView.
+                    // Prior implementation drove an @State string from a
+                    // Timer.scheduledTimer callback, which invalidated the
+                    // whole body every second and caused the ellipsis.circle
+                    // toolbar icon to visibly blink. Beta feedback 2026-04-22:
+                    // "the three dot menu... blinks every second — no need."
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Label("Timer: \(formattedTimer(at: context.date))",
+                              systemImage: "timer")
+                            .disabled(true)
+                    }
                     if let w = draft.inspection.weather {
                         Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
                             .disabled(true)
@@ -295,33 +324,30 @@ struct InspectionView: View {
             draft.inspection.timerStartDate = Date()
         }
         timerSessionStart = Date()
-        updateTimerDisplay()
-        timerTimer?.invalidate()
-        timerTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            Task { @MainActor in
-                updateTimerDisplay()
-            }
-        }
+        // No more scheduledTimer driving @State — the TimelineView in
+        // the toolbar menu now ticks itself at 1Hz without triggering
+        // body re-renders. We just record the session-start marker here
+        // and let `formattedTimer(at:)` compute the display each tick.
     }
 
     private func pauseTimer() {
-        timerTimer?.invalidate()
-        timerTimer = nil
         if let sessionStart = timerSessionStart {
             draft.inspection.timerElapsedSeconds += Date().timeIntervalSince(sessionStart)
             timerSessionStart = nil
         }
     }
 
-    private func updateTimerDisplay() {
+    /// Computes the timer display at a given render date. Called by the
+    /// TimelineView in the toolbar menu so this function owns no state.
+    private func formattedTimer(at date: Date) -> String {
         var total = draft.inspection.timerElapsedSeconds
         if let sessionStart = timerSessionStart {
-            total += Date().timeIntervalSince(sessionStart)
+            total += date.timeIntervalSince(sessionStart)
         }
         let hours = Int(total) / 3600
         let minutes = (Int(total) % 3600) / 60
         let seconds = Int(total) % 60
-        timerDisplayString = String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     private var sectionSidebar: some View {
@@ -494,6 +520,21 @@ private struct SectionItemsListView: View {
                 }
                 .buttonStyle(.plain)
             }
+            // Beta-requested (2026-04-22): let the inspector add a custom
+            // item on the fly rather than only editing the pre-loaded
+            // template list. Keeps the template checklist intact but
+            // removes the friction of "my property has X, which isn't
+            // in the canned list."
+            if draft.state.isEditable {
+                Section {
+                    Button {
+                        addCustomItem()
+                    } label: {
+                        Label("Add Custom Item", systemImage: "plus.circle.fill")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(section.title)
@@ -519,6 +560,27 @@ private struct SectionItemsListView: View {
             jobId: jobId,
             isLocked: !draft.isEditable
         )
+    }
+
+    /// Appends a blank inspector-authored item to the current section and
+    /// immediately opens the detail sheet so the inspector can fill in
+    /// the title + fields. templateItemId is a per-inspection UUID so the
+    /// item stays identifiable without colliding with the template library.
+    private func addCustomItem() {
+        let newItem = InspectionItem(
+            templateItemId: "custom-\(UUID().uuidString)",
+            title: "New Item",
+            status: .notInspected
+        )
+        var updated = draft
+        updated.inspection.sections[sectionIndex].items.append(newItem)
+        draft = updated
+        let newIndex = updated.inspection.sections[sectionIndex].items.count - 1
+        // Slight delay so the List commits the insertion before the sheet
+        // tries to bind into the new index.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            selectedRef = SectionItemRef(sectionIndex: sectionIndex, itemIndex: newIndex)
+        }
     }
 }
 
