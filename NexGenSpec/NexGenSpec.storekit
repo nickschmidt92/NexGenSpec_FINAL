@@ -37,7 +37,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlimited inspections, branded PDFs, voice commands, LiDAR, annotations, invoicing",
+              "description" : "Unlimited inspections, branded PDFs, LiDAR scanning, photo annotations, invoicing",
               "displayName" : "Pro Annual",
               "locale" : "en_US"
             }
@@ -62,7 +62,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlimited inspections, branded PDFs, voice commands, LiDAR, annotations, invoicing",
+              "description" : "Unlimited inspections, branded PDFs, LiDAR scanning, photo annotations, invoicing",
               "displayName" : "Pro Monthly",
               "locale" : "en_US"
             }

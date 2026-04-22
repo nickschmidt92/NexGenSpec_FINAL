@@ -28,9 +28,6 @@ struct OnboardingView: View {
         Feature(title: "Apple Pencil Support",
                 description: "Draw annotations directly on inspection photos with precision.",
                 systemImageName: "pencil.tip"),
-        Feature(title: "Voice Commands",
-                description: "Hands-free commands: \"Next room\", \"Add note\", \"Defect: broken window\".",
-                systemImageName: "mic.fill"),
         Feature(title: "PDF Reports & Invoicing",
                 description: "Generate branded reports, attach to invoices, and email to clients.",
                 systemImageName: "doc.richtext")
@@ -140,7 +137,7 @@ private struct FeaturesScreen: View {
             }
             .listStyle(.plain)
 
-            Text("LiDAR scanning requires iPad Pro or iPhone Pro. Voice commands require a Pro subscription.")
+            Text("LiDAR scanning requires iPad Pro or iPhone Pro.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

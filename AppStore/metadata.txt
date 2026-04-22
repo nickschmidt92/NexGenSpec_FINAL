@@ -23,7 +23,7 @@ Home Inspection Reports
 ───────────────────────────────────────────────────────────────
 KEYWORDS (100 chars max, comma-separated)
 ───────────────────────────────────────────────────────────────
-home inspection,property report,inspector,defect,PDF,real estate,building,checklist,voice,LiDAR
+home inspection,property report,inspector,defect,PDF,real estate,building,checklist,LiDAR,annotation
 
 ───────────────────────────────────────────────────────────────
 PROMOTIONAL TEXT (170 chars max — can be updated without new build)
@@ -44,9 +44,6 @@ Take photos directly in the app and mark them up with arrows, circles, and Penci
 PROFESSIONAL PDF REPORTS
 Generate professional inspection reports with your company logo, name, and license number. Reports include severity badges, photo evidence, signatures, and a SHA-256 verification hash for tamper-proof delivery.
 
-HANDS-FREE VOICE COMMANDS (PRO)
-Use voice commands during inspections: "Next room", "Add note cracked foundation", "Defect: broken window". Stay focused on the inspection while NexGenSpec handles the documentation.
-
 LIDAR ROOM SCANNING
 Capture 3D room scans using your device's LiDAR sensor. USDZ models are saved alongside the inspection for dimensional reference.
 
@@ -64,7 +61,6 @@ SUBSCRIPTION
 NexGenSpec is free to download with 3 full-featured inspections. Upgrade to Pro for:
 - Unlimited inspections
 - PDF reports with your company logo
-- Voice commands
 - LiDAR room scanning
 - Annotation pack
 - Invoicing & client delivery
@@ -79,7 +75,7 @@ Terms of Use: https://nexgenspec.com/terms
 ───────────────────────────────────────────────────────────────
 WHAT'S NEW (for version 1.0)
 ───────────────────────────────────────────────────────────────
-Initial release! Comprehensive home inspection app with PDF reports, photo annotations, voice commands, LiDAR scanning, encrypted backups, and professional invoice delivery.
+Initial release! Comprehensive home inspection app with PDF reports, photo annotations, LiDAR scanning, encrypted backups, and professional invoice delivery.
 
 ───────────────────────────────────────────────────────────────
 APP REVIEW NOTES
@@ -100,7 +96,6 @@ Notes for Reviewer:
 - This is a professional home inspection app for licensed property inspectors.
 - The app requires login to protect inspection data (client PII, property photos).
 - Free users get 3 complete inspections with full PDF export. After 3 inspections, a Pro subscription ($28.99/mo or $289.99/yr) is required to continue creating new inspections.
-- Voice commands require microphone and speech recognition permissions, requested at the time of use (not on launch).
 - LiDAR scanning requires a device with a LiDAR sensor (iPad Pro, iPhone Pro). If no LiDAR sensor is present, the feature is hidden — this is expected behavior.
 - Company logo upload (Settings > Inspector Profile) allows inspectors to brand PDF reports with their own logo. If no logo is uploaded, the NexGenSpec app icon is used as a default.
 - The "Delete Account" option is in Settings > Delete Account, with confirmation and re-authentication. This permanently removes all user data from Firebase and the device.

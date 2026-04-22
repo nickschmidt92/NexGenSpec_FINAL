@@ -53,8 +53,8 @@ public final class SubscriptionManager: ObservableObject {
         isPro || isAdminAccount || Self.isBetaOrSandboxBuild || freeInspectionsUsed < Self.freeInspectionLimit
     }
 
-    /// True if the user should have access to premium features (voice commands,
-    /// LiDAR, full PDF export, etc.). During the free trial window (first
+    /// True if the user should have access to premium features (LiDAR,
+    /// full PDF export, photo annotations, etc.). During the free trial window (first
     /// `freeInspectionLimit` inspections), everything is unlocked so prospective
     /// customers can evaluate the full app before subscribing. After the trial,
     /// a paid subscription (or admin override) is required.

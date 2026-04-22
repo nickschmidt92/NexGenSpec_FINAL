@@ -35,13 +35,13 @@ inspector,property,condo,house,report,PDF,photo,annotate,LiDAR,scan,scheduler,ca
 - No spaces after commas (saves chars)
 - No words that are already in Title ("NexGenSpec") or Subtitle ("home", "inspection", "reports")
 - Singular nouns preferred — Apple auto-pluralizes
-- Mix of high-volume ("property", "PDF") + differentiator ("LiDAR", "voice") + persona ("inspector") + form factor ("iPad") + action verbs ("annotate", "scan")
+- Mix of high-volume ("property", "PDF") + differentiator ("LiDAR") + persona ("inspector") + form factor ("iPad") + action verbs ("annotate", "scan")
 
 ### Promotional Text (170 char limit — updateable WITHOUT review)
 ```
-New: Calendar tab schedules inspections and flags conflicts. LiDAR scans produce floor-plan PDFs. Voice commands keep your hands free on the roof.
+New: Calendar tab schedules inspections and flags conflicts. LiDAR scans produce floor-plan PDFs. Annotate photos directly on the spot.
 ```
-**146 chars.** Use this to spotlight the most recent feature launch. Updateable anytime without resubmitting for review — good place to pre-announce TestFlight cohort feedback or sale pricing later.
+**134 chars.** Use this to spotlight the most recent feature launch. Updateable anytime without resubmitting for review — good place to pre-announce TestFlight cohort feedback or sale pricing later.
 
 ---
 
@@ -57,8 +57,8 @@ Built for working inspectors:
 • FULL INSPECTION TEMPLATE
   Pre-loaded sections cover roof, attic, crawl space, ventilation, exterior, foundation, plumbing, electrical, laundry, heating & cooling, water heater, and ancillary services. Duplicate and customize any section for your own template library.
 
-• PHOTOS, ANNOTATIONS, AND VOICE NOTES
-  Tap to snap. Draw circles and arrows directly on a photo. Dictate observations hands-free while you're on a ladder.
+• PHOTOS AND ANNOTATIONS
+  Tap to snap. Draw circles and arrows directly on a photo. Apple Pencil supported for precise markup.
 
 • LIDAR ROOM SCANNING
   iPad Pro's LiDAR sensor captures room geometry in seconds. NexGenSpec generates a floor plan PDF you can include in the final report — clients love it.
@@ -93,7 +93,7 @@ REQUIREMENTS
 
 SUBSCRIPTION
 
-Create up to 3 inspections free. NexGenSpec Pro unlocks unlimited inspections, LiDAR scanning, PDF export, voice commands, and encrypted backups. Monthly or annual billing via your Apple ID. Cancel anytime in Settings > Subscriptions.
+Create up to 3 inspections free. NexGenSpec Pro unlocks unlimited inspections, LiDAR scanning, PDF export, photo annotations, and encrypted backups. Monthly or annual billing via your Apple ID. Cancel anytime in Settings > Subscriptions.
 
 TERMS
 

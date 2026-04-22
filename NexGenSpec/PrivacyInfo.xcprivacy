@@ -116,8 +116,8 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
-		<!-- Audio data: microphone capture for voice commands. Processed
-		     on-device by SFSpeechRecognizer; not persisted or uploaded. -->
+		<!-- Audio data: microphone capture for audio notes during
+		     inspections. Processed and stored on-device only; not uploaded. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeAudioData</string>
