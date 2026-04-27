@@ -1,13 +1,13 @@
 ═══════════════════════════════════════════════════════════════
   NEXGENSPEC — APP STORE METADATA
-  Last updated: 2026-04-10
+  Last updated: 2026-04-26 (1.0.0 launch prep)
 ═══════════════════════════════════════════════════════════════
 
 CATEGORY:          Business (Primary) / Utilities (Secondary)
 AGE RATING:        4+
 BUNDLE ID:         com.nexgenspec.app
-VERSION:           1.0
-BUILD:             3
+VERSION:           1.0.0
+BUILD:             9
 PRICE:             Free (with in-app subscriptions)
 
 ───────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ CAPTURE & ANNOTATE
 Take photos directly in the app and mark them up with arrows, circles, and PencilKit drawings. Annotations are baked into report images while originals are preserved as untouched evidence.
 
 PROFESSIONAL PDF REPORTS
-Generate professional inspection reports with your company logo, name, and license number. Reports include severity badges, photo evidence, signatures, and a SHA-256 verification hash for tamper-proof delivery.
+Generate professional inspection reports with your company logo, name, and license number. Reports include a defect summary with Safety and Major findings highlighted, photo evidence laid out side-by-side, signatures, and a unique Report ID for cross-referencing.
 
 LIDAR ROOM SCANNING
 Capture 3D room scans using your device's LiDAR sensor. USDZ models are saved alongside the inspection for dimensional reference.
@@ -73,9 +73,23 @@ Privacy Policy: https://nexgenspec.com/privacy
 Terms of Use: https://nexgenspec.com/terms
 
 ───────────────────────────────────────────────────────────────
-WHAT'S NEW (for version 1.0)
+WHAT'S NEW (for version 1.0.0)
 ───────────────────────────────────────────────────────────────
-Initial release! Comprehensive home inspection app with PDF reports, photo annotations, LiDAR scanning, encrypted backups, and professional invoice delivery.
+Welcome to NexGenSpec 1.0!
+
+After an extended TestFlight beta with active home inspectors, we're shipping the first public release. Highlights:
+
+• Professional PDF reports — your company logo on every page, defect summary with Safety and Major findings highlighted, photos laid out for fast review.
+• Inspection workflow — section templates with built-in checklists for Roof, Plumbing, Electrical, HVAC, and more, plus Add Custom Item for anything off-script.
+• Photo annotations — circles, arrows, and Apple Pencil drawings baked directly into report images while originals stay untouched.
+• LiDAR room scanning — capture floor plans on iPad Pro and iPhone Pro for spatial reference.
+• Calendar sync — schedule inspections, sync with iOS Calendar, edits push to the linked event automatically.
+• Invoice & Send — branded invoice email with the PDF attached, optional CC to buyer's or listing agent.
+• Signed and locked — finalized reports include a Report ID and lock all defects, photos, and signatures from further edits.
+
+Free to try with 3 full inspections. Pro unlocks unlimited inspections, branded reports, LiDAR scanning, and the annotation pack.
+
+Built by a licensed home inspector in Denver, Colorado.
 
 ───────────────────────────────────────────────────────────────
 APP REVIEW NOTES
@@ -85,22 +99,27 @@ Demo Account:
   Password: NexGen-Review-2026!
 
   To test the full app flow:
-  1. Log in with the demo account above
-  2. Tap "Create New Inspection" on the Dashboard
-  3. Fill in a property address and add a section (e.g. "Roof")
-  4. Add a defect item, take or select a photo, add an annotation
-  5. Tap "Generate Report" to preview the PDF
-  6. Free users get 3 full inspections; the paywall appears after that
+  1. Log in with the demo account above (or create a new account — both work).
+  2. Accept the Privacy Policy + Terms in the onboarding flow.
+  3. On the Dashboard, tap "+ New Inspection" and fill in a client name + property address.
+  4. In the inspection's left sidebar, tap any section (Roof Structure, Plumbing, etc.) to see the built-in checklist of items.
+  5. Tap an item → mark Status, set Defect Severity, fill in Observed/Implication/Recommendation, add a photo, optionally annotate with the pencil tools.
+  6. Optional: tap "Add Custom Item" at the bottom of any section list to add a bespoke check.
+  7. Tap "Preview" in the top-right toolbar to see the PDF preview anytime.
+  8. To finalize: sidebar → Finalize → Collect Signatures (both inspector and client) → Finalize & Lock. Once locked, defects/photos/signatures cannot be edited.
+  9. After finalizing, the "Invoice & Send" pane appears in the sidebar — fill the invoice and send via the system Mail composer.
 
 Notes for Reviewer:
 - This is a professional home inspection app for licensed property inspectors.
 - The app requires login to protect inspection data (client PII, property photos).
 - Free users get 3 complete inspections with full PDF export. After 3 inspections, a Pro subscription ($28.99/mo or $289.99/yr) is required to continue creating new inspections.
-- LiDAR scanning requires a device with a LiDAR sensor (iPad Pro, iPhone Pro). If no LiDAR sensor is present, the feature is hidden — this is expected behavior.
-- Company logo upload (Settings > Inspector Profile) allows inspectors to brand PDF reports with their own logo. If no logo is uploaded, the NexGenSpec app icon is used as a default.
-- The "Delete Account" option is in Settings > Delete Account, with confirmation and re-authentication. This permanently removes all user data from Firebase and the device.
-- Subscriptions are auto-renewable and managed through the App Store. Users can cancel in iOS Settings > Apple ID > Subscriptions.
-- The app stores all inspection data on-device. No user data is shared with third parties.
+- LiDAR room scanning requires a device with a LiDAR sensor (iPad Pro, iPhone Pro). If the device has no LiDAR sensor the feature is hidden — this is expected.
+- Company logo upload (Settings → Inspector Profile) brands every PDF report. If no logo is uploaded, the NexGenSpec app icon is used as a default.
+- Calendar integration is optional. The first time the inspector taps "Add to Calendar" on an inspection, iOS prompts for Calendar access. Granting the permission lets the app create / update / remove EKEvents linked to that inspection. Declining the permission disables only this feature; the rest of the app works unchanged.
+- The "Mark Invoice as Paid" button on the Invoice & Send screen is purely a record-keeping toggle. NexGenSpec does NOT process payments. The Invoice & Send screen carries an explicit disclaimer: "NexGenSpec does not process payments. Payment is collected directly by the inspector outside the app."
+- The "Delete Account" option is in Settings → Delete Account, with confirmation and re-authentication. It permanently removes all user data from Firebase Auth and the device.
+- Subscriptions are auto-renewable and managed through the App Store. Users can cancel anytime in iOS Settings → Apple ID → Subscriptions.
+- The app stores all inspection data on-device using iOS Data Protection. The only data sent off-device is: (a) Firebase Auth tokens for sign-in, (b) anonymized crash reports via Firebase Crashlytics. Inspection content (photos, defects, client info) never leaves the device unless the inspector chooses to email a PDF report.
 
 ───────────────────────────────────────────────────────────────
 SCREENSHOT REQUIREMENTS
@@ -112,13 +131,15 @@ Required sizes:
 
 Recommended screenshots (in order):
   1. Dashboard with active inspections
-  2. Inspection overview with sections sidebar
-  3. Photo annotation with PencilKit markup
-  4. PDF report preview showing company logo header
-  5. Finalize view with signatures
-  6. Voice command overlay in action
-  7. Settings with inspector profile
-  8. Paywall showing subscription options
+  2. Inspection overview with sections sidebar (showing Job ID + Summary badges)
+  3. Section item detail with photo + annotation (PencilKit markup visible)
+  4. Defect Summary page of PDF — Safety/Major rows highlighted
+  5. PDF report body — photos laid out side-by-side, branded with company logo
+  6. Finalize view showing LOCKED signatures
+  7. Invoice & Send with payment disclaimer + agent CC toggles
+  8. Calendar tab showing scheduled inspections
+  9. Settings with Inspector Profile + Company Logo
+  10. Paywall showing subscription options
 
 ───────────────────────────────────────────────────────────────
 SUPPORT & CONTACT
