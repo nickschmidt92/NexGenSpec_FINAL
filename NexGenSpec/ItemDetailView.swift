@@ -42,6 +42,20 @@ struct ItemDetailView: View {
 
     var body: some View {
         Form {
+            // Editable title — required for custom items (which start as
+            // "New Item") and useful for template items the inspector
+            // wants to rename. Beta feedback 2026-04-24:
+            // "you can't update the title — needs an editable field."
+            // Locked once the inspection is finalized.
+            Section {
+                TextField("Item title", text: bind(\.title))
+                    .font(.headline)
+                    .disabled(isLocked)
+                    .submitLabel(.done)
+            } header: {
+                Text("Title")
+            }
+
             Section {
                 Picker("Status", selection: bind(\.status)) {
                     ForEach(ItemStatus.allCases, id: \.self) { status in

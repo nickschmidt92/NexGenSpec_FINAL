@@ -11,12 +11,42 @@ import PencilKit
 
 enum AnnotationBakeService {
 
-    /// Returns JPEG data of photo with overlay drawn on top. If no overlay, returns original photo data.
+    /// Max longest-side pixel dimension for any photo embedded in a PDF.
+    /// Camera photos default to ~4032×3024 (12 MP). Even at JPEG quality
+    /// 0.6 each one was ~1.2 MB. Scaling the longest side to 1600 drops
+    /// every photo to ~150-300 KB while staying easily readable on a
+    /// printed PDF page (~8 inches at 200 DPI). Beta feedback 2026-04-24:
+    /// "main images are still massive."
+    private static let maxReportSidePixels: CGFloat = 1600
+
+    /// Returns JPEG data of photo with overlay drawn on top, resized for
+    /// report use (long side capped at maxReportSidePixels). If no overlay,
+    /// still resizes/recompresses the original to keep the report PDF
+    /// reasonable. Returns nil only if the input data fails to decode.
     static func bakedImageData(jobId: UUID, photo: InspectionPhoto, photoData: Data?) -> Data? {
         guard let photoData = photoData, let base = UIImage(data: photoData) else { return photoData }
-        guard let overlay = AnnotationStore.load(jobId: jobId, photoId: photo.id) else { return photoData }
-        let composited = composite(overlay: overlay, onto: base, canvasSize: base.size)
-        return composited.jpegData(compressionQuality: 0.6)
+        let overlay = AnnotationStore.load(jobId: jobId, photoId: photo.id)
+        let withOverlay = overlay.map { composite(overlay: $0, onto: base, canvasSize: base.size) } ?? base
+        let resized = resizeForReport(withOverlay)
+        return resized.jpegData(compressionQuality: 0.7)
+    }
+
+    /// Downscales the longest side of `image` to maxReportSidePixels when
+    /// the source is larger; returns the original instance otherwise.
+    private static func resizeForReport(_ image: UIImage) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxReportSidePixels else { return image }
+        let ratio = maxReportSidePixels / longest
+        let target = CGSize(
+            width: floor(image.size.width * ratio),
+            height: floor(image.size.height * ratio)
+        )
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
     }
 
     private static func composite(overlay: AnnotationOverlay, onto image: UIImage, canvasSize: CGSize) -> UIImage {

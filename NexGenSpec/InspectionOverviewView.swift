@@ -388,6 +388,19 @@ struct InspectionOverviewView: View {
                 .buttonStyle(.plain)
             }
             TextField("Inspector Name", text: binding(\.inspectorName))
+            // Job ID also visible in draft mode, not just read-only.
+            // Beta feedback 2026-04-24: clarification that Job ID needs
+            // to be on every inspection regardless of status.
+            HStack {
+                Text("Job ID:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(shortJobId)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Spacer()
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

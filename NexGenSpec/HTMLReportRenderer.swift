@@ -126,7 +126,13 @@ enum HTMLReportRenderer {
         .item-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
         .item-card .badge { display: inline-block; margin-left: 8px; }
         .item-card p { margin: 6px 0; }
-        .item-card .photo { display: block; max-width: 100%; width: 5in; height: auto; border-radius: 8px; margin-top: 8px; page-break-inside: avoid; break-inside: avoid; }
+        /* Photos: side-by-side when there's room, max ~3in wide and 2.5in
+           tall so multiple photos fit on a single PDF page rather than
+           each one consuming its own page. Beta feedback 2026-04-24:
+           "images take up almost a whole page." page-break-inside: avoid
+           keeps a single photo from being split across pages. */
+        .item-card .photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .item-card .photo { display: block; width: 3in; max-width: 100%; max-height: 2.5in; height: auto; object-fit: cover; border-radius: 8px; page-break-inside: avoid; break-inside: avoid; }
         .signatures { margin-top: 24px; }
         .signatures img { max-width: 200px; height: auto; border: 1px solid #dee2e6; border-radius: 8px; }
         .footer { margin-top: 32px; padding: 16px 20px; border-top: 2px solid #dee2e6; font-size: 0.8rem; color: #666; background: #f8f9fa; border-radius: 0 0 var(--radius) var(--radius); }
@@ -247,13 +253,14 @@ enum HTMLReportRenderer {
                 if !item.contractorTag.isEmpty {
                     extraFields += "<p><strong>Contractor:</strong> \(escapeHTML(item.contractorTag))</p>\n"
                 }
+                let photosBlock = imagesHTML.isEmpty ? "" : "<div class=\"photo-grid\">\(imagesHTML)</div>"
                 html += """
                 <div class="card item-card \(severity.rawValue.lowercased())">
                 <h3>\(escapeHTML(item.title)) <span class="badge \(severity.rawValue.lowercased())">\(severity.rawValue)</span></h3>
                 <p><strong>Observed:</strong> \(escapeHTML(item.observed))</p>
                 <p><strong>Implication:</strong> \(escapeHTML(item.implication))</p>
                 <p><strong>Recommendation:</strong> \(escapeHTML(item.recommendation))</p>
-                \(extraFields)\(imagesHTML)
+                \(extraFields)\(photosBlock)
                 </div>
                 """
             }
@@ -300,33 +307,18 @@ enum HTMLReportRenderer {
             let datePart = Self.reportIdDateFormatter.string(from: Date())
             let shortHash = String(hash.prefix(4)).uppercased()
             let reportId = "NGS-\(datePart)-\(shortHash)"
-            html += "<div style=\"display:flex;align-items:center;gap:16px;\">"
+            // Beta feedback 2026-04-24: QR code removed. The QR encoded a
+            // plain-text payload of report ID + truncated hash so a
+            // counter-party could cross-reference manually, but it added
+            // visual noise to a customer-facing report and the verification
+            // workflow was never end-to-end. Inspectors who need integrity
+            // can still cite the Report ID + full hash from device logs.
             html += "<div>"
             html += "<div class=\"hash-label\">Report ID</div>"
             html += "<span class=\"hash\">\(reportId)</span>"
             html += "</div>"
-            // QR Code encodes the report's identity + integrity hash
-            // as plain text rather than pointing to a URL. Avoids the
-            // broken-link problem — nexgenspec.com/verify/{id} was
-            // not actually serving verification pages, so scanners
-            // were landing on a 404. Plain-text payload is universally
-            // scannable, legible to any QR reader, and still carries
-            // enough info for a counter-party to cross-reference.
-            let qrPayload = [
-                "NexGenSpec Inspection Report",
-                "Report ID: \(reportId)",
-                "Hash: \(hash.prefix(16))",
-                version.inspection.clientName.isEmpty ? nil : "Client: \(version.inspection.clientName)",
-                version.inspection.propertyAddress.isEmpty ? nil : "Property: \(version.inspection.propertyAddress)"
-            ]
-            .compactMap { $0 }
-            .joined(separator: "\n")
-            if let qrBase64 = Self.generateQRCodeBase64(for: qrPayload) {
-                html += "<img src=\"data:image/png;base64,\(qrBase64)\" style=\"width:72px;height:72px;\" alt=\"Report Verification QR\"/>"
-            }
-            html += "</div>"
         } else if isDraft {
-            html += "This is a draft. Finalized reports include a verification hash."
+            html += "This is a draft. Finalized reports include a Report ID."
         }
         html += "</div></div></body></html>"
         return html

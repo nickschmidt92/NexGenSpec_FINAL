@@ -109,18 +109,15 @@ struct InspectionView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    // TimelineView keeps the timer text self-updating at
-                    // 1Hz without re-rendering the entire InspectionView.
-                    // Prior implementation drove an @State string from a
-                    // Timer.scheduledTimer callback, which invalidated the
-                    // whole body every second and caused the ellipsis.circle
-                    // toolbar icon to visibly blink. Beta feedback 2026-04-22:
-                    // "the three dot menu... blinks every second — no need."
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Label("Timer: \(formattedTimer(at: context.date))",
-                              systemImage: "timer")
-                            .disabled(true)
-                    }
+                    // Static snapshot of the timer at the moment the menu
+                    // opens. Beta feedback 2026-04-24: the live-ticking
+                    // TimelineView inside the menu was visually distracting.
+                    // The ticking is unnecessary anyway — the inspector
+                    // doesn't need second-by-second updates while the menu
+                    // is open. Reopening the menu refreshes the value.
+                    Label("Timer: \(formattedTimer(at: Date()))",
+                          systemImage: "timer")
+                        .disabled(true)
                     if let w = draft.inspection.weather {
                         Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
                             .disabled(true)
