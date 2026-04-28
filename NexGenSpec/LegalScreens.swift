@@ -158,11 +158,8 @@ struct PrivacyPolicyContent: View {
                     }
                     .padding(.horizontal)
 
-                    Button(action: {
-                        externalLink = LegalConstants.privacyPolicyURL
-                        showExternalLinkAlert = true
-                    }) {
-                        Text("View Full Privacy Policy Online")
+                    Link(destination: LegalConstants.privacyPolicyURL) {
+                        Text("View full document online")
                             .foregroundColor(Branding.accentColor)
                             .font(.headline)
                             .underline()
@@ -176,18 +173,6 @@ struct PrivacyPolicyContent: View {
         }
         .navigationTitle("Privacy Policy")
         .navigationBarTitleDisplayMode(.inline)
-        .alert(isPresented: $showExternalLinkAlert) {
-            Alert(
-                title: Text("Open External Link?"),
-                message: Text("You are about to open the full Privacy Policy in your browser."),
-                primaryButton: .default(Text("Open")) {
-                    if let url = externalLink {
-                        UIApplication.shared.open(url)
-                    }
-                },
-                secondaryButton: .cancel()
-            )
-        }
     }
 }
 
@@ -312,11 +297,8 @@ struct TermsOfServiceContent: View {
                     }
                     .padding(.horizontal)
 
-                    Button(action: {
-                        externalLink = LegalConstants.termsOfServiceURL
-                        showExternalLinkAlert = true
-                    }) {
-                        Text("View Full Terms of Service Online")
+                    Link(destination: LegalConstants.termsOfServiceURL) {
+                        Text("View full document online")
                             .foregroundColor(Branding.accentColor)
                             .font(.headline)
                             .underline()
@@ -330,18 +312,6 @@ struct TermsOfServiceContent: View {
         }
         .navigationTitle("Terms of Service")
         .navigationBarTitleDisplayMode(.inline)
-        .alert(isPresented: $showExternalLinkAlert) {
-            Alert(
-                title: Text("Open External Link?"),
-                message: Text("You are about to open the full Terms of Service in your browser."),
-                primaryButton: .default(Text("Open")) {
-                    if let url = externalLink {
-                        UIApplication.shared.open(url)
-                    }
-                },
-                secondaryButton: .cancel()
-            )
-        }
     }
 }
 

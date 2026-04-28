@@ -515,7 +515,7 @@ private struct SectionItemsListView: View {
                 } label: {
                     InspectionItemRowLabel(item: item)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).hoverEffect(.lift)
             }
             // Beta-requested (2026-04-22): let the inspector add a custom
             // item on the fly rather than only editing the pre-loaded

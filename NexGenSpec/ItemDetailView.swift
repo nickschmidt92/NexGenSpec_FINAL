@@ -257,7 +257,7 @@ struct ItemDetailView: View {
                                         .background(AppColor.surface)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.plain).hoverEffect(.lift)
                                     .accessibilityLabel("Capture photo with camera")
                                 }
                                 PhotosPicker(selection: $selectedImages, maxSelectionCount: 20, matching: .images) {
@@ -347,7 +347,7 @@ struct ItemDetailView: View {
                                         .foregroundStyle(AppColor.accent)
                                         .clipShape(Capsule())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.plain).hoverEffect(.lift)
                             }
                         }
                         Button(role: .cancel) {
@@ -384,7 +384,7 @@ struct ItemDetailView: View {
                                                 Image(systemName: "xmark.circle.fill")
                                                     .font(.caption2)
                                             }
-                                            .buttonStyle(.plain)
+                                            .buttonStyle(.plain).hoverEffect(.lift)
                                         }
                                     }
                                     .padding(.horizontal, 8)

@@ -185,6 +185,8 @@ struct AppPrimaryButtonStyle: ButtonStyle {
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .hoverEffect(.lift)   // Apple Pencil hover preview on iPad
     }
 }
 
@@ -202,6 +204,25 @@ struct AppSecondaryButtonStyle: ButtonStyle {
             )
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .hoverEffect(.lift)   // Apple Pencil hover preview on iPad
+    }
+}
+
+/// Adds Apple Pencil hover support to any clickable element.
+/// Use on Buttons / NavigationLinks that don't go through the
+/// AppPrimary/AppSecondary button styles. Beta feedback 2026-04-27:
+/// "hover feature with iPencil doesn't work with buttons in the app."
+extension View {
+    /// Apple-recommended `.hoverEffect(.automatic)` so iPad / iPad Pro
+    /// users with an Apple Pencil get a visual preview when the pencil
+    /// tip is near the screen but not yet touching. Required because
+    /// stock SwiftUI Buttons don't get hover effects for free — the
+    /// modifier has to be applied explicitly.
+    func appPencilHover() -> some View {
+        self
+            .contentShape(Rectangle())
+            .hoverEffect(.automatic)
     }
 }
 

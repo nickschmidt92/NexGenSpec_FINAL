@@ -684,7 +684,7 @@ private struct DashboardActionButton: View {
             )
             .adaptiveGlass(cornerRadius: 22)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).hoverEffect(.lift)
     }
 }
 

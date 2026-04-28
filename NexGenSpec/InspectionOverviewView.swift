@@ -128,22 +128,22 @@ struct InspectionOverviewView: View {
                             Button { onShowSummary?(.safety) } label: {
                                 SummaryBadge(color: AppColor.safetyAccessible, label: "Safety", count: counts.safety)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).hoverEffect(.lift)
                             .accessibilityHint("Shows all safety findings")
                             Button { onShowSummary?(.major) } label: {
                                 SummaryBadge(color: AppColor.majorAccessible, label: "Major", count: counts.major)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).hoverEffect(.lift)
                             .accessibilityHint("Shows all major findings")
                             Button { onShowSummary?(.marginal) } label: {
                                 SummaryBadge(color: AppColor.marginalAccessible, label: "Marginal", count: counts.marginal)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).hoverEffect(.lift)
                             .accessibilityHint("Shows all marginal findings")
                             Button { onShowSummary?(.minor) } label: {
                                 SummaryBadge(color: AppColor.minorAccessible, label: "Minor", count: counts.minor)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).hoverEffect(.lift)
                             .accessibilityHint("Shows all minor findings")
                         }
                     }
@@ -385,7 +385,7 @@ struct InspectionOverviewView: View {
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.accentColor)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).hoverEffect(.lift)
             }
             TextField("Inspector Name", text: binding(\.inspectorName))
             // Job ID also visible in draft mode, not just read-only.
@@ -622,7 +622,7 @@ struct InspectionOverviewView: View {
                                 Spacer()
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).hoverEffect(.lift)
                         if isEditable {
                             Button(role: .destructive) {
                                 removeVideo(video)
@@ -630,7 +630,7 @@ struct InspectionOverviewView: View {
                                 Image(systemName: "trash")
                                     .foregroundStyle(.red)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).hoverEffect(.lift)
                             .accessibilityLabel("Delete video")
                         }
                     }
@@ -798,7 +798,7 @@ struct InspectionOverviewView: View {
                                     .fixedSize(horizontal: true, vertical: false)
                                     .contentShape(Rectangle())
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.bordered).hoverEffect(.lift)
                             .controlSize(.small)
                         }
                         Button {
@@ -811,7 +811,7 @@ struct InspectionOverviewView: View {
                                 .fixedSize(horizontal: true, vertical: false)
                                 .contentShape(Rectangle())
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.bordered).hoverEffect(.lift)
                         .controlSize(.small)
                         if version.inspection.coverPhotoFileName != nil {
                             Button(role: .destructive) {
@@ -821,7 +821,7 @@ struct InspectionOverviewView: View {
                                 Image(systemName: "trash")
                                     .contentShape(Rectangle())
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.bordered).hoverEffect(.lift)
                             .controlSize(.small)
                             .tint(.red)
                         }
@@ -1053,7 +1053,7 @@ struct InspectionOverviewView: View {
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
                         Button("Dismiss") { exportService.reset() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.borderedProminent).hoverEffect(.lift)
                     } else {
                         ProgressView(value: exportService.progress)
                             .progressViewStyle(.linear)
@@ -1325,7 +1325,7 @@ private struct SchedulingCard: View {
                     } label: {
                         Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.bordered).hoverEffect(.lift)
                     .controlSize(.small)
                     .disabled(!isEditable)
 
@@ -1334,7 +1334,7 @@ private struct SchedulingCard: View {
                     } label: {
                         Label("Remove", systemImage: "calendar.badge.minus")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.bordered).hoverEffect(.lift)
                     .controlSize(.small)
                     .disabled(!isEditable)
                 }
@@ -1346,7 +1346,7 @@ private struct SchedulingCard: View {
                 } label: {
                     Label("Add to Calendar", systemImage: "calendar.badge.plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).hoverEffect(.lift)
                 .disabled(!isEditable || !calendarService.authorizationState.canCreateEvents)
 
                 if showSuccessCheck {
@@ -1556,7 +1556,7 @@ private struct ReminderRow: View {
                     .font(.title3)
                     .foregroundStyle(reminder.isCompleted ? Color.green : Color.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).hoverEffect(.lift)
             .disabled(!isEditable)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -1583,7 +1583,7 @@ private struct ReminderRow: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).hoverEffect(.lift)
                     .disabled(!isEditable)
                     if reminder.dueAt != nil {
                         Button {
@@ -1593,7 +1593,7 @@ private struct ReminderRow: View {
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).hoverEffect(.lift)
                         .disabled(!isEditable)
                         .accessibilityLabel("Clear due date")
                     }
@@ -1609,7 +1609,7 @@ private struct ReminderRow: View {
                     Image(systemName: "trash")
                         .foregroundStyle(.red)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).hoverEffect(.lift)
                 .accessibilityLabel("Delete reminder")
             }
         }
@@ -1655,7 +1655,7 @@ private struct TodoRow: View {
                     .font(.title3)
                     .foregroundStyle(todo.isCompleted ? Color.accentColor : Color.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).hoverEffect(.lift)
             .disabled(!isEditable)
 
             TextField("Task", text: $todo.text, axis: .vertical)
@@ -1673,7 +1673,7 @@ private struct TodoRow: View {
                     Image(systemName: "trash")
                         .foregroundStyle(.red)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).hoverEffect(.lift)
                 .accessibilityLabel("Delete task")
             }
         }
