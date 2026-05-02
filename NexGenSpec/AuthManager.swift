@@ -23,6 +23,11 @@ public final class AuthManager: ObservableObject {
     @Published public private(set) var authErrorMessage: String?
     @Published public private(set) var isBusy = false
 
+    /// True when a Sign in with Apple flow just signed up a brand-new user and
+    /// they have not yet supplied a fallback email. UI binds to this to present
+    /// the fallback-email capture sheet.
+    @Published public var pendingAppleFallbackPrompt = false
+
     /// Kept for compatibility with existing views (AppSettingsView uses role / isAdmin).
     /// In V1 every Firebase user is a standard user. Admin/team roles come from a later
     /// Firestore custom-claims pass; do not gate UI on this yet.
@@ -148,6 +153,17 @@ public final class AuthManager: ObservableObject {
 
             let result = try await Auth.auth().signIn(with: firebaseCredential)
             applyUser(result.user)
+            // Apple users may share a @privaterelay.appleid.com address (or no email
+            // at all if they hide it). The fallback we capture here is our only
+            // out-of-band way to reach the inspector if Apple's relay is later
+            // revoked or stops forwarding. Prompt every brand-new Apple signup,
+            // regardless of relay vs. real email — Apple's relay state can change
+            // after signup.
+            if result.additionalUserInfo?.isNewUser == true,
+               let uid = result.user.uid as String?,
+               Self.loadFallbackEmail(forUID: uid) == nil {
+                pendingAppleFallbackPrompt = true
+            }
             return true
         } catch {
             // Treat user-cancellation as a silent dismiss, not an error banner.
@@ -157,6 +173,47 @@ public final class AuthManager: ObservableObject {
             authErrorMessage = Self.friendlyMessage(for: error)
             return false
         }
+    }
+
+    // MARK: - Fallback email (account recovery)
+
+    /// UserDefaults key for the fallback email scoped to a Firebase UID.
+    private static func fallbackEmailDefaultsKey(forUID uid: String) -> String {
+        "ngs.fallbackEmail.\(uid)"
+    }
+
+    /// Reads the persisted fallback email for the given UID. Returns nil if none.
+    public static func loadFallbackEmail(forUID uid: String) -> String? {
+        UserDefaults.standard.string(forKey: fallbackEmailDefaultsKey(forUID: uid))
+    }
+
+    /// Fallback email for the *currently signed-in* user, or nil if none persisted.
+    public var fallbackEmail: String? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return Self.loadFallbackEmail(forUID: uid)
+    }
+
+    /// Saves a fallback email for the currently signed-in user. Returns false if
+    /// not signed in or the address is malformed.
+    @discardableResult
+    public func setFallbackEmail(_ email: String) -> Bool {
+        let cleaned = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard Self.isValidEmail(cleaned) else { return false }
+        guard let uid = Auth.auth().currentUser?.uid else { return false }
+        UserDefaults.standard.set(cleaned, forKey: Self.fallbackEmailDefaultsKey(forUID: uid))
+        AuditLog.log(event: "Fallback email recorded for account \(uid)")
+        pendingAppleFallbackPrompt = false
+        return true
+    }
+
+    /// User skipped the fallback prompt. Clears the pending flag so the sheet
+    /// dismisses; recorded in the audit log so we can prove the user was offered
+    /// the chance to provide one.
+    public func skipFallbackEmailPrompt() {
+        if let uid = Auth.auth().currentUser?.uid {
+            AuditLog.log(event: "Fallback email skipped at signup for account \(uid)")
+        }
+        pendingAppleFallbackPrompt = false
     }
 
     // MARK: - Forgot password
@@ -232,6 +289,24 @@ public final class AuthManager: ObservableObject {
             case .needsAppleReauth:     return "Please re-authenticate with Apple to confirm account deletion."
             case .other(let msg):       return msg
             }
+        }
+    }
+
+    /// Firebase UID for the currently signed-in user, or nil if signed out.
+    /// Captured by the Delete Account flow before Firebase clears the user, so
+    /// the deletion receipt can attribute the deletion to a stable identifier.
+    public var currentUserUID: String? {
+        Auth.auth().currentUser?.uid
+    }
+
+    /// Human-readable label for the current sign-in method, suitable for display
+    /// or for inclusion in the deletion receipt.
+    public var currentProviderLabel: String {
+        switch currentProviderID {
+        case "apple.com": return "Apple"
+        case "password": return "Email & Password"
+        case .some(let id): return id
+        case .none: return "Unknown"
         }
     }
 

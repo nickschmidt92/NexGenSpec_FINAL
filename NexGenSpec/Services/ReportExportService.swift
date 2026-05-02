@@ -104,6 +104,16 @@ public final class ReportExportService: ObservableObject {
                 return
             }
 
+            if pdfURL != nil, versionCopy.state.isFinalized {
+                let jobId = UUID(uuidString: versionCopy.inspection.inspectionId) ?? versionCopy.id
+                let hash = FinalizationService.loadReportHash(jobId: jobId, versionId: versionCopy.id) ?? "unknown"
+                AuditLog.log(
+                    event: "Report exported to PDF (integrity SHA-256: \(hash))",
+                    versionId: versionCopy.id,
+                    inspectionId: jobId
+                )
+            }
+
             progress = 1
             finishExport(result: .success(htmlURL: htmlResult.htmlURL, pdfURL: pdfURL))
         }

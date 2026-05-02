@@ -126,13 +126,27 @@ enum HTMLReportRenderer {
         .item-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
         .item-card .badge { display: inline-block; margin-left: 8px; }
         .item-card p { margin: 6px 0; }
-        /* Photos: side-by-side when there's room, max ~3in wide and 2.5in
-           tall so multiple photos fit on a single PDF page rather than
-           each one consuming its own page. Beta feedback 2026-04-24:
-           "images take up almost a whole page." page-break-inside: avoid
-           keeps a single photo from being split across pages. */
-        .item-card .photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-        .item-card .photo { display: block; width: 3in; max-width: 100%; max-height: 2.5in; height: auto; object-fit: cover; border-radius: 8px; page-break-inside: avoid; break-inside: avoid; }
+        /* Photos: 3-across grid sized to the printable width so each
+           photo lands at ~2in × 1.5in. Beta feedback 2026-04-27:
+           "make it 3 across, optimized so it doesn't take too many
+           pages." page-break-inside: avoid keeps a single photo from
+           being split across pages. */
+        .item-card .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .item-card .photo {
+            display: block;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            max-height: 1.7in;
+            object-fit: cover;
+            border-radius: 6px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
         .signatures { margin-top: 24px; }
         .signatures img { max-width: 200px; height: auto; border: 1px solid #dee2e6; border-radius: 8px; }
         .footer { margin-top: 32px; padding: 16px 20px; border-top: 2px solid #dee2e6; font-size: 0.8rem; color: #666; background: #f8f9fa; border-radius: 0 0 var(--radius) var(--radius); }
@@ -307,18 +321,21 @@ enum HTMLReportRenderer {
             let datePart = Self.reportIdDateFormatter.string(from: Date())
             let shortHash = String(hash.prefix(4)).uppercased()
             let reportId = "NGS-\(datePart)-\(shortHash)"
-            // Beta feedback 2026-04-24: QR code removed. The QR encoded a
-            // plain-text payload of report ID + truncated hash so a
-            // counter-party could cross-reference manually, but it added
-            // visual noise to a customer-facing report and the verification
-            // workflow was never end-to-end. Inspectors who need integrity
-            // can still cite the Report ID + full hash from device logs.
+            // Full SHA-256 published on the report so a counter-party can verify
+            // the report has not been altered post-finalization. Hash is computed
+            // by FinalizationService.writeSnapshot over canonical (sorted-keys)
+            // JSON of the InspectionVersion, so any data change yields a new hash.
             html += "<div>"
             html += "<div class=\"hash-label\">Report ID</div>"
             html += "<span class=\"hash\">\(reportId)</span>"
             html += "</div>"
+            html += "<div style=\"margin-top: 10px;\">"
+            html += "<div class=\"hash-label\">Integrity Hash (SHA-256)</div>"
+            html += "<span class=\"hash\">\(hash)</span>"
+            html += "</div>"
+            html += "<p style=\"margin-top: 10px; font-size: 0.7rem; color: #888; line-height: 1.4;\">This hash is a cryptographic fingerprint of the inspection data captured at finalization. Any subsequent edit produces a different hash. To verify integrity, cite the Report ID and hash above to the inspector or contact@nexgenspec.com.</p>"
         } else if isDraft {
-            html += "This is a draft. Finalized reports include a Report ID."
+            html += "This is a draft. Finalized reports include a Report ID and integrity hash."
         }
         html += "</div></div></body></html>"
         return html

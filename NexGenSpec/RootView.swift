@@ -39,7 +39,6 @@ enum TermsAcceptanceStore {
 struct RootView: View {
     @EnvironmentObject private var store: InspectionStore
     @EnvironmentObject private var authManager: AuthManager
-    @State private var termsAccepted = false
     @AppStorage("nexgenspec.onboarding.completed") private var onboardingCompleted = false
 
     var body: some View {
@@ -60,12 +59,6 @@ struct RootView: View {
                         insertion: .opacity.combined(with: .move(edge: .leading)),
                         removal: .opacity.combined(with: .move(edge: .leading))
                     ))
-            } else if !termsAccepted {
-                TermsAndConditionsView(onAcknowledge: .constant(acknowledgeCallback))
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .trailing)),
-                        removal: .opacity.combined(with: .move(edge: .leading))
-                    ))
             } else {
                 MainTabView()
                     .transition(.asymmetric(
@@ -76,38 +69,74 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: onboardingCompleted)
         .animation(.easeInOut(duration: 0.35), value: authManager.isAuthenticated)
-        .animation(.easeInOut(duration: 0.35), value: termsAccepted)
-        .onAppear(perform: refreshTermsAcceptance)
-        .onChange(of: authManager.isAuthenticated) { _, _ in
-            refreshTermsAcceptance()
+        .sheet(isPresented: $authManager.pendingAppleFallbackPrompt) {
+            FallbackEmailPromptSheet(authManager: authManager)
+                .interactiveDismissDisabled()
         }
-        .onChange(of: authManager.currentUsername) { _, _ in
-            refreshTermsAcceptance()
+    }
+}
+
+/// Captured at signup for inspectors who used Sign in with Apple. Apple may give
+/// us a `@privaterelay.appleid.com` address (or no email at all if the user hides
+/// it), and that relay can be revoked. The fallback gives us an out-of-band way
+/// to deliver receipts and account-recovery messages.
+private struct FallbackEmailPromptSheet: View {
+    @ObservedObject var authManager: AuthManager
+    @State private var email = ""
+    @State private var inlineError: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Add a fallback email so we can reach you for receipts, account recovery, or important service notices — even if your Apple Hide My Email relay is later revoked.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    TextField("you@example.com", text: $email)
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .autocorrectionDisabled()
+                        .textContentType(.emailAddress)
+                } header: {
+                    Text("Fallback email")
+                } footer: {
+                    if let inlineError {
+                        Text(inlineError).foregroundStyle(.red).font(.caption)
+                    } else {
+                        Text("We never send marketing email here without your opt-in. Skipping is allowed but not recommended.")
+                            .font(.caption)
+                    }
+                }
+            }
+            .navigationTitle("Account Recovery")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Skip") {
+                        authManager.skipFallbackEmailPrompt()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 
-    private var acknowledgeCallback: (() -> Void)? {
-        guard authManager.isAuthenticated,
-              let username = authManager.currentUsername,
-              !username.isEmpty else {
-            return nil
+    private func save() {
+        inlineError = nil
+        let ok = authManager.setFallbackEmail(email)
+        if ok {
+            dismiss()
+        } else {
+            inlineError = "Please enter a valid email address."
         }
-
-        return {
-            TermsAcceptanceStore.markAccepted(username: username)
-            termsAccepted = true
-        }
-    }
-
-    private func refreshTermsAcceptance() {
-        guard authManager.isAuthenticated,
-              let username = authManager.currentUsername,
-              !username.isEmpty else {
-            termsAccepted = false
-            return
-        }
-
-        termsAccepted = TermsAcceptanceStore.hasAcceptedTerms(username: username)
     }
 }
 

@@ -31,11 +31,20 @@ struct AppSettingsView: View {
 
     // Delete Account flow
     @State private var showDeleteConfirm = false
+    @State private var deleteConfirmText: String = ""
     @State private var showDeletePasswordSheet = false
     @State private var deletePasswordInput = ""
     @State private var deleteErrorMessage: String?
     @State private var showDeleteError = false
     @State private var isDeletingAccount = false
+
+    // Account-deletion receipt mailer (T-01216)
+    @State private var showDeletionReceiptMailer = false
+    @State private var pendingDeletionReceiptURL: URL?
+    @State private var pendingDeletionReceiptRecipients: [String] = []
+    @State private var pendingDeletionReceiptCC: [String] = []
+    @State private var pendingDeletionReceiptBody: String = ""
+    @State private var pendingDeletionReceiptSubject: String = "NexGenSpec — Account Deletion Receipt"
 
     var body: some View {
         AppScreenBackground {
@@ -90,15 +99,26 @@ struct AppSettingsView: View {
                         }
                         .buttonStyle(AppSecondaryButtonStyle())
 
+                        Text("Logging out preserves all inspections, photos, and reports on this device. Sign back in to restore access.")
+                            .font(AppFont.caption)
+                            .foregroundStyle(.secondary)
+
                         Button("Delete Account", role: .destructive) {
                             showDeleteConfirm = true
                         }
                         .buttonStyle(AppSecondaryButtonStyle())
                         .disabled(isDeletingAccount)
 
-                        Text("Deleting your account permanently removes your login and erases all inspections, photos, and reports stored on this device. This cannot be undone.")
+                        Text("Delete Account permanently erases your login AND every inspection, photo, signature, and report stored on this device. NexGenSpec keeps no server-side copy and cannot recover this data. This cannot be undone.")
                             .font(AppFont.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppColor.critical)
+                    }
+
+                    SettingsSectionCard(
+                        title: "Backup & Data",
+                        subtitle: "Your inspections live on this device. NexGenSpec does not host server-side copies. Back up your data so it survives device loss, factory reset, or accidental uninstall."
+                    ) {
+                        BackupStatusView(metadataCount: store.metadataList.count)
                     }
 
                     SettingsSectionCard(
@@ -292,22 +312,6 @@ struct AppSettingsView: View {
                         }
                     }
 
-                    // Diagnostics: DEBUG-only, shown to every signed-in user so
-                    // developers can exercise the Crashlytics pipeline without
-                    // depending on Firebase custom-claim admin role (which is
-                    // not yet wired up for the email-whitelisted admin account).
-                    // `#if DEBUG` keeps this out of App Store builds.
-                    #if DEBUG
-                    SettingsSectionCard(
-                        title: "Diagnostics (Debug only)",
-                        subtitle: "Force a crash to verify the Crashlytics pipeline. Must be run WITHOUT the Xcode debugger attached — launch the app from the Home Screen, then tap the button. Relaunch the app afterwards so Crashlytics can upload the report."
-                    ) {
-                        Button("Force Test Crash", role: .destructive) {
-                            triggerTestCrash()
-                        }
-                        .buttonStyle(AppSecondaryButtonStyle())
-                    }
-                    #endif
                 }
                 .frame(maxWidth: 860)
                 .padding(.horizontal, Spacing.md)
@@ -327,13 +331,73 @@ struct AppSettingsView: View {
         } message: {
             Text(purgeSummary)
         }
-        .alert("Delete your account?", isPresented: $showDeleteConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete Account", role: .destructive) {
-                Task { await performDelete() }
+        .sheet(isPresented: $showDeleteConfirm) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        Label("This action cannot be undone", systemImage: "exclamationmark.triangle.fill")
+                            .font(AppFont.headline)
+                            .foregroundStyle(AppColor.critical)
+
+                        Text("Deleting your account will:")
+                            .font(AppFont.subheadline.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Permanently remove your authentication record from our servers.", systemImage: "person.crop.circle.badge.minus")
+                            Label("Permanently erase ALL inspections, photos, signatures, audit logs, and PDF reports from this device.", systemImage: "trash.fill")
+                            Label("Make all locally stored data unrecoverable. NexGenSpec does not maintain server-side copies.", systemImage: "icloud.slash")
+                            Label("Send an account-deletion receipt by email to your account address and to contact@nexgenspec.com for our records.", systemImage: "envelope.badge")
+                        }
+                        .font(AppFont.footnote)
+                        .foregroundStyle(.primary)
+
+                        Divider().padding(.vertical, 4)
+
+                        Text("Before continuing, consider:")
+                            .font(AppFont.subheadline.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Have you exported your finalized inspections to Files / iCloud Drive?", systemImage: "square.and.arrow.up")
+                            Label("Do you have an iCloud Backup of this device that includes the app?", systemImage: "icloud")
+                            Label("Did you mean to LOG OUT instead? Logging out preserves all your data on the device.", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .font(AppFont.footnote)
+                        .foregroundStyle(.secondary)
+
+                        Divider().padding(.vertical, 4)
+
+                        Text("To confirm, type DELETE in the box below:")
+                            .font(AppFont.subheadline.weight(.semibold))
+                        TextField("Type DELETE", text: $deleteConfirmText)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .padding(Spacing.sm)
+                            .background(AppColor.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(AppColor.border, lineWidth: 1)
+                            )
+                    }
+                    .padding(Spacing.lg)
+                }
+                .navigationTitle("Delete Account")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            deleteConfirmText = ""
+                            showDeleteConfirm = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Delete Forever", role: .destructive) {
+                            deleteConfirmText = ""
+                            showDeleteConfirm = false
+                            Task { await performDelete() }
+                        }
+                        .disabled(deleteConfirmText.trimmingCharacters(in: .whitespacesAndNewlines) != "DELETE" || isDeletingAccount)
+                    }
+                }
             }
-        } message: {
-            Text("This permanently deletes your login and erases all inspections, photos, and reports stored on this device. This cannot be undone.")
         }
         .sheet(isPresented: $showDeletePasswordSheet) {
             NavigationStack {
@@ -393,6 +457,22 @@ struct AppSettingsView: View {
             )
             .ignoresSafeArea()
         }
+        .sheet(isPresented: $showDeletionReceiptMailer) {
+            MailComposeView(
+                toRecipients: pendingDeletionReceiptRecipients,
+                ccRecipients: pendingDeletionReceiptCC,
+                subject: pendingDeletionReceiptSubject,
+                body: pendingDeletionReceiptBody,
+                isHTML: false,
+                attachmentURL: pendingDeletionReceiptURL,
+                onDismiss: {
+                    showDeletionReceiptMailer = false
+                    AuditLog.log(event: "Account deletion receipt mailer dismissed")
+                    finishLocalWipeAndDismiss()
+                }
+            )
+            .ignoresSafeArea()
+        }
         .alert("Mail Not Configured", isPresented: $showMailUnavailable) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -421,16 +501,19 @@ struct AppSettingsView: View {
     private func performDelete() async {
         isDeletingAccount = true
         defer { isDeletingAccount = false }
+        // Snapshot what we'll need for the receipt BEFORE Firebase clears the user.
+        let snapshot = captureDeletionInputs()
         do {
             try await authManager.deleteAccount()
-            finishLocalWipeAndDismiss()
+            await proceedAfterFirebaseDelete(snapshot)
         } catch AuthManager.DeleteAccountError.needsPasswordReauth {
             showDeletePasswordSheet = true
         } catch AuthManager.DeleteAccountError.needsAppleReauth {
             do {
                 try await authManager.reauthenticateWithApple()
+                let postReauthSnapshot = captureDeletionInputs() ?? snapshot
                 try await authManager.deleteAccount()
-                finishLocalWipeAndDismiss()
+                await proceedAfterFirebaseDelete(postReauthSnapshot)
             } catch {
                 deleteErrorMessage = error.localizedDescription
                 showDeleteError = true
@@ -449,13 +532,73 @@ struct AppSettingsView: View {
             try await authManager.reauthenticateWithPassword(deletePasswordInput)
             deletePasswordInput = ""
             showDeletePasswordSheet = false
+            let snapshot = captureDeletionInputs()
             try await authManager.deleteAccount()
-            finishLocalWipeAndDismiss()
+            await proceedAfterFirebaseDelete(snapshot)
         } catch {
             deletePasswordInput = ""
             showDeletePasswordSheet = false
             deleteErrorMessage = error.localizedDescription
             showDeleteError = true
+        }
+    }
+
+    /// Captures everything needed for the deletion receipt while the Firebase
+    /// user is still resolvable. Must run BEFORE `authManager.deleteAccount()`.
+    @MainActor
+    private func captureDeletionInputs() -> AccountDeletionReceiptService.Inputs? {
+        guard let uid = authManager.currentUserUID else { return nil }
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return AccountDeletionReceiptService.Inputs(
+            accountEmail: authManager.currentUsername ?? "—",
+            firebaseUID: uid,
+            fallbackEmail: AuthManager.loadFallbackEmail(forUID: uid),
+            inspectionsDeletedCount: store.metadataList.count,
+            providerLabel: authManager.currentProviderLabel,
+            appVersion: appVersion,
+            buildNumber: build,
+            deviceModel: UIDevice.current.model,
+            osVersion: UIDevice.current.systemVersion
+        )
+    }
+
+    /// Generates the deletion-receipt PDF and presents the pre-composed mail
+    /// sheet. The local wipe + dismiss only run AFTER the user sends or cancels
+    /// the mail, so the receipt PDF is reachable for attachment. If MFMail is
+    /// unavailable or receipt generation fails, fall back to the wipe path.
+    @MainActor
+    private func proceedAfterFirebaseDelete(_ snapshot: AccountDeletionReceiptService.Inputs?) async {
+        guard let snapshot else {
+            finishLocalWipeAndDismiss()
+            return
+        }
+        AuditLog.log(event: "Account deletion receipt requested for \(snapshot.firebaseUID)")
+        do {
+            let receiptURL = try AccountDeletionReceiptService.generateReceipt(snapshot)
+            guard MFMailComposeViewController.canSendMail() else {
+                AuditLog.log(event: "Deletion receipt generated but MFMail unavailable; receipt left at \(receiptURL.lastPathComponent)")
+                finishLocalWipeAndDismiss()
+                return
+            }
+            pendingDeletionReceiptURL = receiptURL
+            // Send to the user's primary on-file email AND any fallback they
+            // recorded. CC contact@nexgenspec.com so we have an inbound copy
+            // for support audit purposes.
+            var recipients: [String] = [snapshot.accountEmail]
+            if let fallback = snapshot.fallbackEmail, fallback != snapshot.accountEmail {
+                recipients.append(fallback)
+            }
+            pendingDeletionReceiptRecipients = recipients
+            pendingDeletionReceiptCC = ["contact@nexgenspec.com"]
+            pendingDeletionReceiptBody = AccountDeletionReceiptService.emailBody(
+                for: snapshot,
+                attachmentFileName: receiptURL.lastPathComponent
+            )
+            showDeletionReceiptMailer = true
+        } catch {
+            Diagnostics.logError(context: "Deletion receipt PDF generation failed", error: error)
+            finishLocalWipeAndDismiss()
         }
     }
 
@@ -524,20 +667,6 @@ struct AppSettingsView: View {
         purgeSummary = "Deleted: \(result.deletedInspectionIDs.count)\nSkipped: \(result.skippedInspectionIDs.count)"
         showPurgeResult = true
     }
-
-    #if DEBUG
-    /// Forces an unrecoverable crash so we can verify Crashlytics is
-    /// reporting and the email-alert pipeline is wired up. Logs a marker
-    /// first so the crash is easy to identify in the Firebase console.
-    /// Only compiled into DEBUG builds so it can never reach production.
-    private func triggerTestCrash() {
-        Crashlytics.crashlytics().log("Manual test crash from Settings (DEBUG build)")
-        Crashlytics.crashlytics().setCustomValue("debug_settings_button", forKey: "test_crash_source")
-        // Firebase's recommended test crash. `fatalError` produces a
-        // signal that Crashlytics captures on next launch.
-        fatalError("NexGenSpec test crash — triggered from Settings")
-    }
-    #endif
 
     private func backupDirectory() -> URL {
         let dir = FilePaths.appRoot.appendingPathComponent("Backups", isDirectory: true)

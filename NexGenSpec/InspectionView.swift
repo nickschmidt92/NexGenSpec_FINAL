@@ -29,6 +29,17 @@ struct InspectionView: View {
     @State private var selectedPane: InspectionPane = .overview
     @State private var showShortcutsHelp = false
     @State private var showReportPreview = false
+
+    // T-01213: Auto-export ZIP backup prompt that fires once a version is
+    // finalized. The bundle lands in Documents/NexGenSpecExports/ and is
+    // surfaced via the share sheet so the inspector can drop it into Files,
+    // iCloud Drive, email, or AirDrop.
+    @State private var showExportZIPPrompt = false
+    @State private var isExportingZIP = false
+    @State private var exportZIPURL: URL?
+    @State private var showExportShareSheet = false
+    @State private var exportZIPError: String?
+    @State private var showExportZIPError = false
     /// Long-lived view model for the Summary pane. Previously this was
     /// created ad-hoc inside `paneContent(for: .summary)`, which meant
     /// every parent re-render (e.g. the 2s auto-save tick) installed a
@@ -175,6 +186,36 @@ struct InspectionView: View {
         }
         .fullScreenCover(isPresented: $showReportPreview) {
             ReportPreviewView(version: draft)
+        }
+        .confirmationDialog(
+            "Save a backup ZIP to Files?",
+            isPresented: $showExportZIPPrompt,
+            titleVisibility: .visible
+        ) {
+            Button("Save ZIP Backup") {
+                Task { await runZIPExport() }
+            }
+            Button("Skip", role: .cancel) { }
+        } message: {
+            Text("Bundles the report PDF, HTML, photos, and integrity hash into one file in your Files app. Recommended for client delivery and your 5-year record-retention obligation.")
+        }
+        .sheet(isPresented: $showExportShareSheet) {
+            if let url = exportZIPURL {
+                ShareSheet(activityItems: [url])
+            }
+        }
+        .alert("Export Failed", isPresented: $showExportZIPError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportZIPError ?? "Could not create ZIP backup.")
+        }
+        .overlay {
+            if isExportingZIP {
+                Color.black.opacity(0.4).ignoresSafeArea()
+                ProgressView("Bundling ZIP…")
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
         }
         .onAppear {
             draft = version
@@ -347,6 +388,22 @@ struct InspectionView: View {
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
+    @MainActor
+    private func runZIPExport() async {
+        guard !isExportingZIP else { return }
+        isExportingZIP = true
+        defer { isExportingZIP = false }
+        do {
+            let url = try await InspectionZIPExportService.exportZIP(for: draft)
+            exportZIPURL = url
+            showExportShareSheet = true
+        } catch {
+            Diagnostics.logError(context: "Inspection ZIP export failed", error: error)
+            exportZIPError = error.localizedDescription
+            showExportZIPError = true
+        }
+    }
+
     private var sectionSidebar: some View {
         List {
             Section("Inspection") {
@@ -357,6 +414,7 @@ struct InspectionView: View {
                 }
                 .accessibilityLabel("Overview")
                 .accessibilityHint("Cover page, export report, capture room")
+                .hoverEffect(.lift)
             }
             Section("Sections") {
                 ForEach(draft.inspection.sections) { section in
@@ -367,6 +425,7 @@ struct InspectionView: View {
                     }
                     .accessibilityLabel(section.title)
                     .accessibilityHint("\(section.items.count) items")
+                    .hoverEffect(.lift)
                 }
             }
             Section("Actions") {
@@ -377,6 +436,7 @@ struct InspectionView: View {
                 }
                 .accessibilityLabel("Summary")
                 .accessibilityHint("Findings by severity")
+                .hoverEffect(.lift)
                 NavigationLink {
                     paneContent(for: .finalize)
                 } label: {
@@ -384,6 +444,7 @@ struct InspectionView: View {
                 }
                 .accessibilityLabel("Finalize")
                 .accessibilityHint("Signatures and lock report")
+                .hoverEffect(.lift)
                 if draft.locked {
                     NavigationLink {
                         paneContent(for: .invoice)
@@ -392,10 +453,13 @@ struct InspectionView: View {
                     }
                     .accessibilityLabel("Invoice and send")
                     .accessibilityHint("Customer contact, invoice form, send to client and NexGenSpec")
+                    .hoverEffect(.lift)
                 }
             }
         }
         .listStyle(.sidebar)
+        .listSectionSpacing(.compact)
+        .environment(\.defaultMinListRowHeight, 36)
         .navigationTitle("Sections")
     }
 
@@ -432,6 +496,8 @@ struct InspectionView: View {
                 }
             }
             .listStyle(.sidebar)
+            .listSectionSpacing(.compact)
+            .environment(\.defaultMinListRowHeight, 36)
             .navigationTitle("Sections")
         } detail: {
             paneDetailContent
@@ -488,6 +554,9 @@ struct InspectionView: View {
                 if let updatedVersion = store.loadFullVersion(id: v.id) {
                     draft = updatedVersion
                     selectedPane = .invoice
+                    if updatedVersion.state.isFinalized {
+                        showExportZIPPrompt = true
+                    }
                 }
             }
         case .invoice:

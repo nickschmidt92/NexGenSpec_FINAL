@@ -31,6 +31,10 @@
 	<string>NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>PrivacyPolicyURL</key>
 	<string>https://nexgenspec.com/privacy</string>
 	<key>TermsAndConditionsURL</key>
