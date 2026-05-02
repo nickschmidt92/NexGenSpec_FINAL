@@ -38,13 +38,16 @@ struct AppSettingsView: View {
     @State private var showDeleteError = false
     @State private var isDeletingAccount = false
 
-    // Account-deletion receipt mailer (T-01216)
-    @State private var showDeletionReceiptMailer = false
+    // Account-deletion receipt share sheet (T-01216).
+    // Switched from MFMailComposeViewController → UIActivityViewController so
+    // the receipt is deliverable even if iOS Mail isn't configured (e.g.
+    // Yahoo-only users). The share sheet auto-detects installed Mail apps
+    // (Yahoo Mail / Gmail / Outlook), AirDrop, Messages, Files, etc., and the
+    // receipt PDF is also saved at Documents/NexGenSpecReceipts/ as a
+    // permanent record regardless of how the user delivers it.
+    @State private var showDeletionReceiptShareSheet = false
     @State private var pendingDeletionReceiptURL: URL?
-    @State private var pendingDeletionReceiptRecipients: [String] = []
-    @State private var pendingDeletionReceiptCC: [String] = []
     @State private var pendingDeletionReceiptBody: String = ""
-    @State private var pendingDeletionReceiptSubject: String = "NexGenSpec — Account Deletion Receipt"
 
     var body: some View {
         AppScreenBackground {
@@ -457,21 +460,17 @@ struct AppSettingsView: View {
             )
             .ignoresSafeArea()
         }
-        .sheet(isPresented: $showDeletionReceiptMailer) {
-            MailComposeView(
-                toRecipients: pendingDeletionReceiptRecipients,
-                ccRecipients: pendingDeletionReceiptCC,
-                subject: pendingDeletionReceiptSubject,
-                body: pendingDeletionReceiptBody,
-                isHTML: false,
-                attachmentURL: pendingDeletionReceiptURL,
-                onDismiss: {
-                    showDeletionReceiptMailer = false
-                    AuditLog.log(event: "Account deletion receipt mailer dismissed")
-                    finishLocalWipeAndDismiss()
-                }
-            )
-            .ignoresSafeArea()
+        .sheet(
+            isPresented: $showDeletionReceiptShareSheet,
+            onDismiss: {
+                AuditLog.log(event: "Account deletion receipt share sheet dismissed")
+                finishLocalWipeAndDismiss()
+            }
+        ) {
+            if let url = pendingDeletionReceiptURL {
+                ShareSheet(activityItems: [url, pendingDeletionReceiptBody])
+                    .ignoresSafeArea()
+            }
         }
         .alert("Mail Not Configured", isPresented: $showMailUnavailable) {
             Button("OK", role: .cancel) {}
@@ -563,10 +562,15 @@ struct AppSettingsView: View {
         )
     }
 
-    /// Generates the deletion-receipt PDF and presents the pre-composed mail
-    /// sheet. The local wipe + dismiss only run AFTER the user sends or cancels
-    /// the mail, so the receipt PDF is reachable for attachment. If MFMail is
-    /// unavailable or receipt generation fails, fall back to the wipe path.
+    /// Generates the deletion-receipt PDF and presents an iOS share sheet so
+    /// the user can deliver it via whatever channel works for them — Yahoo
+    /// Mail, Gmail, Apple Mail, AirDrop, Messages, Files, etc. The share sheet
+    /// is more robust than MFMailComposeViewController because canSendMail()
+    /// returns true on iPads where the Mail app exists but no account is
+    /// configured, leading to silently-undelivered receipts. The local wipe
+    /// only runs AFTER the share sheet dismisses, so the receipt PDF is
+    /// reachable for attachment. The PDF is also saved at
+    /// Documents/NexGenSpecReceipts/ regardless of delivery choice.
     @MainActor
     private func proceedAfterFirebaseDelete(_ snapshot: AccountDeletionReceiptService.Inputs?) async {
         guard let snapshot else {
@@ -576,26 +580,12 @@ struct AppSettingsView: View {
         AuditLog.log(event: "Account deletion receipt requested for \(snapshot.firebaseUID)")
         do {
             let receiptURL = try AccountDeletionReceiptService.generateReceipt(snapshot)
-            guard MFMailComposeViewController.canSendMail() else {
-                AuditLog.log(event: "Deletion receipt generated but MFMail unavailable; receipt left at \(receiptURL.lastPathComponent)")
-                finishLocalWipeAndDismiss()
-                return
-            }
             pendingDeletionReceiptURL = receiptURL
-            // Send to the user's primary on-file email AND any fallback they
-            // recorded. CC contact@nexgenspec.com so we have an inbound copy
-            // for support audit purposes.
-            var recipients: [String] = [snapshot.accountEmail]
-            if let fallback = snapshot.fallbackEmail, fallback != snapshot.accountEmail {
-                recipients.append(fallback)
-            }
-            pendingDeletionReceiptRecipients = recipients
-            pendingDeletionReceiptCC = ["contact@nexgenspec.com"]
-            pendingDeletionReceiptBody = AccountDeletionReceiptService.emailBody(
+            pendingDeletionReceiptBody = AccountDeletionReceiptService.shareBody(
                 for: snapshot,
                 attachmentFileName: receiptURL.lastPathComponent
             )
-            showDeletionReceiptMailer = true
+            showDeletionReceiptShareSheet = true
         } catch {
             Diagnostics.logError(context: "Deletion receipt PDF generation failed", error: error)
             finishLocalWipeAndDismiss()

@@ -292,12 +292,18 @@ private struct CreateAccountView: View {
                         .keyboardType(.emailAddress)
                         .autocorrectionDisabled()
                         .textContentType(.username)
+                    // Strong-password suggestion is keyed off the FIRST
+                    // SecureField marked .newPassword. Marking the confirm
+                    // field as .newPassword too suppresses the suggestion
+                    // bubble, which is why the autofill never appeared.
+                    // iOS's default strong-password rules (20 chars, mixed
+                    // case, digit, symbol) already satisfy validatePassword.
                     SecureField("Password", text: $password)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
                     SecureField("Confirm password", text: $confirmPassword)
                         .textFieldStyle(.roundedBorder)
-                        .textContentType(.newPassword)
+                        .textContentType(.password)
                 } header: {
                     Text("Create your NexGenSpec account")
                 } footer: {

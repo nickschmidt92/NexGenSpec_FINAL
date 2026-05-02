@@ -92,10 +92,16 @@ public enum AccountDeletionReceiptService {
         }
     }
 
-    public static func emailBody(for inputs: Inputs, attachmentFileName: String) -> String {
+    /// Body text to accompany the receipt PDF when it is shared via the
+    /// iOS share sheet. Includes a "please CC contact@nexgenspec.com"
+    /// instruction since the share sheet — unlike MFMailComposeViewController
+    /// — cannot pre-fill recipients.
+    public static func shareBody(for inputs: Inputs, attachmentFileName: String) -> String {
         let displayDate = ISO8601DateFormatter().string(from: inputs.timestamp)
         return """
-        This is your NexGenSpec account deletion receipt.
+        NexGenSpec — Account Deletion Receipt
+
+        Please send this email to yourself for your records, and CC contact@nexgenspec.com so NexGenSpec support has a copy on file.
 
         Deleted at: \(displayDate)
         Account: \(inputs.accountEmail)
@@ -107,8 +113,6 @@ public enum AccountDeletionReceiptService {
         The PDF attached (\(attachmentFileName)) is your permanent record. NexGenSpec has no server-side copy of your inspections, photos, signatures, or reports — local-first by design — so this receipt is the only artifact confirming the deletion took place.
 
         Per the NexGenSpec Terms of Use, the 5-year inspection-record retention obligation rests with you (the inspector). If you needed to keep any of the wiped inspection data for that obligation, contact contact@nexgenspec.com immediately; we cannot recover wiped data but we can document the timeline for your records.
-
-        Questions? Reply to this email or write to contact@nexgenspec.com.
 
         — NexGenSpec
         """

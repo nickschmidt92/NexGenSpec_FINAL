@@ -1200,3 +1200,200 @@ final class CalendarIntegrationFlowsTests: XCTestCase {
         _ = store.deleteVersion(id: version.id)
     }
 }
+
+// MARK: - AccountDeletionReceiptService tests (T-01216)
+
+final class AccountDeletionReceiptServiceTests: XCTestCase {
+
+    private func makeInputs(
+        email: String = "test@example.com",
+        uid: String = "test-uid-1234",
+        fallback: String? = "fallback@example.com",
+        count: Int = 7,
+        provider: String = "Email & Password"
+    ) -> AccountDeletionReceiptService.Inputs {
+        AccountDeletionReceiptService.Inputs(
+            accountEmail: email,
+            firebaseUID: uid,
+            fallbackEmail: fallback,
+            inspectionsDeletedCount: count,
+            providerLabel: provider,
+            appVersion: "1.0.0",
+            buildNumber: "10",
+            deviceModel: "iPad",
+            osVersion: "26.0",
+            timestamp: Date(timeIntervalSince1970: 1700000000)
+        )
+    }
+
+    func testReceiptFolderIsOutsideAppRoot() {
+        // Receipt PDFs MUST live outside FilePaths.appRoot so they survive
+        // store.clearAllLocalData() and remain reachable from the Files app
+        // for the user's permanent record. Verify by checking the parent —
+        // a string-prefix check fails here because "NexGenSpec" is a prefix
+        // of "NexGenSpecReceipts" though they are siblings, not nested.
+        let receipt = AccountDeletionReceiptService.receiptFolder
+        XCTAssertEqual(receipt.deletingLastPathComponent().standardizedFileURL,
+                       FilePaths.documentDirectory.standardizedFileURL,
+                       "Receipt folder must be a sibling of appRoot under Documents/")
+        XCTAssertEqual(receipt.lastPathComponent, "NexGenSpecReceipts")
+    }
+
+    func testGenerateReceiptCreatesPDFInCanonicalFolder() throws {
+        let url = try AccountDeletionReceiptService.generateReceipt(makeInputs())
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(url.pathExtension, "pdf")
+        XCTAssertTrue(url.path.contains("/NexGenSpecReceipts/"),
+                      "Receipt PDF must land in NexGenSpecReceipts/")
+        let data = try Data(contentsOf: url)
+        XCTAssertGreaterThan(data.count, 1000,
+                             "PDF should be more than a few bytes — got \(data.count)")
+    }
+
+    func testGeneratedReceiptPDFContainsAccountFields() throws {
+        let inputs = makeInputs(email: "alice@example.com", uid: "uid-xyz", count: 42)
+        let url = try AccountDeletionReceiptService.generateReceipt(inputs)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        guard let pdf = PDFDocument(url: url) else {
+            return XCTFail("Generated PDF was not readable")
+        }
+        let body = pdf.string ?? ""
+        XCTAssertTrue(body.contains("alice@example.com"), "PDF should include account email")
+        XCTAssertTrue(body.contains("uid-xyz"), "PDF should include Firebase UID")
+        XCTAssertTrue(body.contains("42"), "PDF should include inspection count")
+        XCTAssertTrue(body.contains("Email & Password"), "PDF should include provider label")
+        XCTAssertTrue(body.contains("contact@nexgenspec.com"),
+                      "PDF should include support contact for audit reach-back")
+    }
+
+    func testShareBodyIncludesContactCCAndAccountFields() {
+        let inputs = makeInputs(email: "bob@example.com", count: 3, provider: "Apple")
+        let body = AccountDeletionReceiptService.shareBody(
+            for: inputs,
+            attachmentFileName: "receipt-test.pdf"
+        )
+        XCTAssertTrue(body.contains("bob@example.com"))
+        XCTAssertTrue(body.contains("Apple"))
+        XCTAssertTrue(body.contains("3"))
+        XCTAssertTrue(body.contains("contact@nexgenspec.com"),
+                      "Share body must instruct user to CC support — share sheet can't pre-fill recipients")
+        XCTAssertTrue(body.contains("receipt-test.pdf"))
+    }
+}
+
+// MARK: - InspectionZIPExportService tests (T-01213)
+
+final class InspectionZIPExportServiceTests: XCTestCase {
+
+    func testExportFolderIsOutsideAppRoot() {
+        // ZIP exports MUST live outside FilePaths.appRoot — they are the
+        // user's deliverable for client handoff and 5-year retention, so
+        // a Delete Account wipe should not nuke previously-exported reports.
+        // Verify by parent-equality (string prefix gives a false negative
+        // since "NexGenSpec" is a prefix of "NexGenSpecExports").
+        let exports = InspectionZIPExportService.exportFolder
+        XCTAssertEqual(exports.deletingLastPathComponent().standardizedFileURL,
+                       FilePaths.documentDirectory.standardizedFileURL,
+                       "Export folder must be a sibling of appRoot under Documents/")
+        XCTAssertEqual(exports.lastPathComponent, "NexGenSpecExports")
+    }
+
+    @MainActor
+    func testExportZIPProducesArchiveWithExpectedEntries() async throws {
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        let inspection = Inspection(
+            id: jobId,
+            clientName: "ZIP Test Client",
+            clientEmail: "",
+            clientPhone: "",
+            propertyAddress: "1 Archive Way",
+            inspectionDate: Date(),
+            inspectorName: "Inspector",
+            sections: [
+                InspectionSection(
+                    title: "Roof",
+                    items: [
+                        InspectionItem(
+                            templateItemId: "roof-1",
+                            title: "Flashing",
+                            includeInReport: true,
+                            status: .inspected,
+                            defectSeverity: .major,
+                            location: "Roof edge",
+                            observed: "Flashing is loose.",
+                            implication: "Water intrusion is possible.",
+                            recommendation: "Repair flashing."
+                        )
+                    ]
+                )
+            ]
+        )
+        var version = InspectionVersion(
+            id: jobId,
+            versionNumber: 1,
+            status: .final,
+            finalizedAt: Date(),
+            locked: true,
+            inspection: inspection
+        )
+        // Persist the snapshot so InspectionZIPExportService can read the hash.
+        let hash = try FinalizationService.writeSnapshot(version)
+        XCTAssertFalse(hash.isEmpty, "FinalizationService should produce a non-empty hash")
+        // Update the version's id-bound jobId reference so loadReportHash finds it.
+        version.finalizedAt = version.finalizedAt ?? Date()
+
+        let zipURL = try await InspectionZIPExportService.exportZIP(for: version)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: zipURL)
+            try? FileManager.default.removeItem(at: FilePaths.inspectionFolder(jobId: jobId))
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: zipURL.path))
+        XCTAssertEqual(zipURL.pathExtension, "zip")
+        XCTAssertTrue(zipURL.path.contains("/NexGenSpecExports/"))
+
+        let size = (try? FileManager.default.attributesOfItem(atPath: zipURL.path)[.size] as? NSNumber)?.intValue ?? 0
+        XCTAssertGreaterThan(size, 1000, "ZIP archive should be more than a few bytes — got \(size)")
+    }
+}
+
+// MARK: - AuthManager fallback email tests (T-01215)
+
+@MainActor
+final class AuthManagerFallbackEmailTests: XCTestCase {
+
+    func testLoadFallbackEmailReturnsNilForUnknownUID() {
+        let uid = "test-unknown-uid-\(UUID().uuidString)"
+        XCTAssertNil(AuthManager.loadFallbackEmail(forUID: uid))
+    }
+
+    func testLoadFallbackEmailReturnsValueAfterDirectWrite() {
+        let uid = "test-write-uid-\(UUID().uuidString)"
+        let key = "ngs.fallbackEmail.\(uid)"
+        addTeardownBlock {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        UserDefaults.standard.set("nick@example.com", forKey: key)
+        XCTAssertEqual(AuthManager.loadFallbackEmail(forUID: uid), "nick@example.com")
+    }
+
+    func testFallbackEmailScopedByUID() {
+        // Two different UIDs must not share a stored value — the key is per-UID
+        // so two inspectors signing into the same device get isolated fallbacks.
+        let uidA = "test-iso-A-\(UUID().uuidString)"
+        let uidB = "test-iso-B-\(UUID().uuidString)"
+        let keyA = "ngs.fallbackEmail.\(uidA)"
+        addTeardownBlock {
+            UserDefaults.standard.removeObject(forKey: keyA)
+        }
+        UserDefaults.standard.set("a@example.com", forKey: keyA)
+        XCTAssertEqual(AuthManager.loadFallbackEmail(forUID: uidA), "a@example.com")
+        XCTAssertNil(AuthManager.loadFallbackEmail(forUID: uidB))
+    }
+}
