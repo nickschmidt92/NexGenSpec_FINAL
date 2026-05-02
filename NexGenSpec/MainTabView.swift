@@ -14,6 +14,7 @@ import SwiftUI
 public enum MainTab: Hashable {
     case workspace
     case calendar
+    case archived
     case settings
 }
 
@@ -63,6 +64,14 @@ struct MainTabView: View {
                 Label("Calendar", systemImage: "calendar")
             }
             .tag(MainTab.calendar)
+
+            NavigationStack {
+                ArchivedInspectionsView()
+            }
+            .tabItem {
+                Label("Archived", systemImage: "archivebox.fill")
+            }
+            .tag(MainTab.archived)
 
             NavigationStack {
                 AppSettingsView()

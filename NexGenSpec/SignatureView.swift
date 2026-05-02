@@ -34,31 +34,34 @@ struct SignatureView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(
-                    footer: Text("Signatures become a permanent part of the inspection record. Once saved, they cannot be cleared or re-signed within the app.")
-                        .font(.footnote)
-                ) {
-                    EmptyView()
-                }
                 Section(header: Text("Inspector Signature")) {
                     if hasInspectorSignature {
                         lockedSignatureRow(name: version.inspection.inspectorName)
                     } else {
                         SignaturePad(image: $inspectorSignature)
-                            .frame(height: 200)
+                            .frame(height: 150)
                             .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColor.border))
                     }
                 }
-                Section(header: Text("Client / Real Estate Agent")) {
+                // Disclaimer lives on the second section's footer rather
+                // than its own empty section. Reclaims ~60pt so both pads
+                // fit on iPad without scrolling, while keeping the legal
+                // disclosure visible above the Done button.
+                Section(
+                    header: Text("Client / Real Estate Agent"),
+                    footer: Text("Signatures become a permanent part of the inspection record. Once saved, they cannot be cleared or re-signed within the app.")
+                        .font(.footnote)
+                ) {
                     if hasClientSignature {
                         lockedSignatureRow(name: clientSignatureName)
                     } else {
                         SignaturePad(image: $clientSignature)
-                            .frame(height: 200)
+                            .frame(height: 150)
                             .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColor.border))
                     }
                 }
             }
+            .listSectionSpacing(.compact)
             .navigationTitle("Signatures")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -74,6 +77,8 @@ struct SignatureView: View {
                 }
             }
         }
+        .frame(minWidth: 720, minHeight: 800)
+        .presentationDetents([.large])
     }
 
     /// Enabled only when the user has provided what's still needed.

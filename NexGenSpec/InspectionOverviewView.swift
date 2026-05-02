@@ -187,7 +187,7 @@ struct InspectionOverviewView: View {
             }
             .navigationTitle("Overview")
             .toolbar {
-                if LiDARCapability.isSupported {
+                if LiDARCapability.isSupported && isEditable {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("Capture Room") { showLiDARCapture = true }
                             .accessibilityLabel("Capture room with LiDAR")

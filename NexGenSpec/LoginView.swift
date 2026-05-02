@@ -126,6 +126,7 @@ struct LoginView: View {
                                 }
                                 .font(AppFont.footnote)
                                 .foregroundStyle(.white.opacity(0.6))
+                                .appPencilHover()
 
                                 Spacer()
 
@@ -134,6 +135,7 @@ struct LoginView: View {
                                 }
                                 .font(AppFont.footnote)
                                 .foregroundStyle(AppColor.brandCyan)
+                                .appPencilHover()
                             }
                         }
                         .padding(Spacing.lg)

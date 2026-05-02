@@ -114,6 +114,9 @@ private struct FeaturesScreen: View {
                 .padding(.top, 24)
                 .padding(.bottom, 8)
 
+            BrandMark(size: 96)
+                .padding(.bottom, 8)
+
             List(features) { feature in
                 HStack(alignment: .top, spacing: 16) {
                     ZStack {
@@ -162,13 +165,7 @@ private struct FeaturesScreen: View {
 private struct OnboardingLegalScreen: View {
     let onAccept: () -> Void
 
-    @State private var viewedPrivacy = false
-    @State private var viewedTerms = false
     @State private var accepted = false
-
-    private var canAccept: Bool {
-        accepted && viewedPrivacy && viewedTerms
-    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -176,7 +173,10 @@ private struct OnboardingLegalScreen: View {
                 .font(.largeTitle.bold())
                 .padding(.top, 24)
 
-            Text("Please review our Privacy Policy and Terms of Service before continuing.")
+            BrandMark(size: 96)
+                .padding(.bottom, 4)
+
+            Text("Tap a document below to read the full text. Toggle the switch to accept and continue.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -185,54 +185,46 @@ private struct OnboardingLegalScreen: View {
             VStack(spacing: 12) {
                 NavigationLink {
                     PrivacyPolicyContent()
-                        .onDisappear { viewedPrivacy = true }
                 } label: {
                     OnboardingLegalRow(
                         title: "Privacy Policy",
                         subtitle: "How your data is collected, stored, and protected.",
-                        systemImage: "hand.raised.fill",
-                        visited: viewedPrivacy
+                        systemImage: "hand.raised.fill"
                     )
                 }
                 .buttonStyle(.plain)
+                .hoverEffect(.lift)
 
                 NavigationLink {
                     TermsOfServiceContent()
-                        .onDisappear { viewedTerms = true }
                 } label: {
                     OnboardingLegalRow(
                         title: "Terms of Service",
                         subtitle: "Rules governing your use of NexGenSpec.",
-                        systemImage: "doc.text.fill",
-                        visited: viewedTerms
+                        systemImage: "doc.text.fill"
                     )
                 }
                 .buttonStyle(.plain)
+                .hoverEffect(.lift)
             }
             .padding(.horizontal, 24)
 
-            if !viewedPrivacy || !viewedTerms {
-                Text("Please read both documents to continue.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-
-            Spacer()
+            Spacer(minLength: 12)
 
             Toggle(isOn: $accepted) {
                 Text("I accept the Terms of Service and Privacy Policy")
                     .font(.subheadline.weight(.medium))
             }
-            .disabled(!viewedPrivacy || !viewedTerms)
             .padding(.horizontal, 24)
 
             Button("Accept & Continue") {
                 Diagnostics.logInfo("User accepted Terms and Privacy Policy via onboarding")
+                AuditLog.log(event: "Terms and Privacy Policy accepted via onboarding")
                 onAccept()
             }
             .buttonStyle(AppPrimaryButtonStyle())
-            .disabled(!canAccept)
-            .opacity(canAccept ? 1 : 0.5)
+            .disabled(!accepted)
+            .opacity(accepted ? 1 : 0.5)
             .padding(.horizontal, 32)
             .padding(.bottom, 24)
             .accessibilityLabel("Accept terms and continue")
@@ -246,7 +238,6 @@ private struct OnboardingLegalRow: View {
     let title: String
     let subtitle: String
     let systemImage: String
-    let visited: Bool
 
     var body: some View {
         HStack(spacing: 14) {
@@ -270,14 +261,9 @@ private struct OnboardingLegalRow: View {
 
             Spacer(minLength: 0)
 
-            if visited {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(14)
         .background(AppColor.surface)

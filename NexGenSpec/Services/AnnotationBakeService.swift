@@ -17,7 +17,7 @@ enum AnnotationBakeService {
     /// every photo to ~150-300 KB while staying easily readable on a
     /// printed PDF page (~8 inches at 200 DPI). Beta feedback 2026-04-24:
     /// "main images are still massive."
-    private static let maxReportSidePixels: CGFloat = 1600
+    private static let maxReportSidePixels: CGFloat = 1000
 
     /// Returns JPEG data of photo with overlay drawn on top, resized for
     /// report use (long side capped at maxReportSidePixels). If no overlay,

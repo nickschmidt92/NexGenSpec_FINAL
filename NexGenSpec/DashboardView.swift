@@ -32,6 +32,22 @@ struct DashboardView: View {
     @State private var selectedTemplateId: String?
     @EnvironmentObject private var router: TabRouter
 
+    // MARK: - Derived state
+    //
+    // Hoisted out of the List body so the UserDefaults reads behind
+    // `isArchived` and `badge` happen ONCE per body render rather than
+    // N+1 times (once per row + once for the section header count).
+    // Each `metadata.badge` does up to 2 UserDefaults reads, and every
+    // `store.objectWillChange.send()` rebuilds the whole dashboard, so
+    // this materially cuts the cost of marking an inspection paid /
+    // invoiced / finalized.
+    private var visibleList: [VersionMetadata] {
+        store.metadataList.filter { !$0.isArchived }
+    }
+    private var badgeMap: [UUID: InspectionBadge] {
+        Dictionary(uniqueKeysWithValues: store.metadataList.map { ($0.id, $0.badge) })
+    }
+
     // MARK: - View
     var body: some View {
         AppScreenBackground {
@@ -83,7 +99,7 @@ struct DashboardView: View {
                     .listRowSeparator(.hidden)
 
                     Section {
-                        if store.metadataList.isEmpty {
+                        if visibleList.isEmpty {
                             EmptyDashboardState {
                                 prepareForNewInspection()
                             }
@@ -92,25 +108,47 @@ struct DashboardView: View {
                             .listRowSeparator(.hidden)
                         }
 
-                        ForEach(store.metadataList) { meta in
+                        ForEach(visibleList) { meta in
                             NavigationLink {
                                 InspectionRootView(versionID: meta.id)
                                     .environmentObject(store)
                             } label: {
-                                VersionRow(metadata: meta)
+                                VersionRow(metadata: meta, badge: badgeMap[meta.id] ?? meta.badge)
                             }
                             .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.md, bottom: Spacing.xs, trailing: Spacing.md))
                             .listRowBackground(Color.clear)
-                            // Disable swipe-to-delete on finalized rows.
-                            // Previously the row would swipe open but the
-                            // deleteVersion call was a silent no-op (state
-                            // machine blocks delete on finalized). Testers
-                            // saw "delete isn't working, keeps popping up".
-                            // Finalized records must be preserved for legal
-                            // retention; an explicit Archive feature is on
-                            // the v1.1 roadmap.
-                            .deleteDisabled(!meta.isEditable)
+                            .hoverEffect(.lift)
+                            // Swipe-trailing actions:
+                            // • Archive — always available (works for finalized
+                            //   records too, which can't be deleted for legal
+                            //   retention but should still be hideable).
+                            // • Delete — only on editable drafts. Finalized
+                            //   records stay on disk per the 5-year retention
+                            //   policy.
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    InspectionFlags.setArchived(true, inspectionId: meta.inspectionId.uuidString)
+                                    store.objectWillChange.send()
+                                } label: {
+                                    Label("Archive", systemImage: "archivebox.fill")
+                                }
+                                .tint(.gray)
+
+                                if meta.isEditable {
+                                    Button(role: .destructive) {
+                                        versionToDeleteID = meta.id
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
                             .contextMenu {
+                                Button {
+                                    InspectionFlags.setArchived(true, inspectionId: meta.inspectionId.uuidString)
+                                    store.objectWillChange.send()
+                                } label: {
+                                    Label("Archive", systemImage: "archivebox")
+                                }
                                 if meta.isEditable {
                                     Button("Delete inspection", role: .destructive) {
                                         versionToDeleteID = meta.id
@@ -123,17 +161,11 @@ struct DashboardView: View {
                                 }
                             }
                         }
-                        .onDelete { indexSet in
-                            let idsToDelete = indexSet
-                                .filter { store.metadataList[$0].isEditable }
-                                .map { store.metadataList[$0].id }
-                            for id in idsToDelete { _ = store.deleteVersion(id: id) }
-                        }
                     } header: {
                         HStack {
                             Text("Inspections")
                             Spacer()
-                            Text("\(store.metadataList.count) total")
+                            Text("\(visibleList.count) total")
                                 .font(AppFont.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -394,6 +426,9 @@ struct DashboardView: View {
 // MARK: - Single row helper (uses metadata for list; full version loaded on open)
 private struct VersionRow: View {
     let metadata: VersionMetadata
+    /// Pre-computed by the parent so the row doesn't repeat UserDefaults
+    /// reads on every diff. See DashboardView.badgeMap.
+    let badge: InspectionBadge
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.md) {
@@ -422,10 +457,10 @@ private struct VersionRow: View {
                     )
 
                     InspectionInfoPill(
-                        title: metadata.status.rawValue,
-                        systemImage: metadata.status == .draft ? "square.and.pencil" : "lock.fill",
-                        foregroundStyle: metadata.status.badgeColor,
-                        background: metadata.status.badgeColor.opacity(0.14)
+                        title: badge.label,
+                        systemImage: badge.systemImage,
+                        foregroundStyle: badge.color,
+                        background: badge.color.opacity(0.14)
                     )
                 }
             }
@@ -572,7 +607,7 @@ private struct CoverThumbnailView: View {
     }
 }
 
-private struct InspectionInfoPill: View {
+struct InspectionInfoPill: View {
     let title: String
     let systemImage: String
     var foregroundStyle: Color = .secondary
