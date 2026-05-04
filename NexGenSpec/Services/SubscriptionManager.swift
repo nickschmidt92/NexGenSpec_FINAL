@@ -7,8 +7,11 @@
 //  of the app can gate features (export, unlimited inspections, etc.).
 //
 //  Product IDs configured in App Store Connect (NexGenSpec Pro group):
-//    - com.nexgenspec.monthly1     ($28.99  / month)
-//    - com.nexgenspec.annual       ($289.99 / year)
+//    - com.nexgenspec.monthly1     ($49  / month)  — Tier 49
+//    - com.nexgenspec.annual       ($449 / year)   — Tier 449
+//
+//  Pricing locked by D-0045 (2026-04-27): single plan, auto-renew, annual
+//  is the upgrade tier within the `nexgenspec_pro` subscription group.
 //
 
 import Foundation
