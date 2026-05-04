@@ -72,6 +72,12 @@ struct RootView: View {
         .sheet(isPresented: $authManager.pendingFallbackEmailPrompt) {
             FallbackEmailPromptSheet(authManager: authManager)
                 .interactiveDismissDisabled()
+                .onAppear {
+                    AuditLog.log(event: "FallbackEmailPromptSheet onAppear")
+                }
+        }
+        .onChange(of: authManager.pendingFallbackEmailPrompt) { _, newValue in
+            AuditLog.log(event: "RootView observed pendingFallbackEmailPrompt → \(newValue)")
         }
     }
 }

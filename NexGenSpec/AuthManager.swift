@@ -168,10 +168,15 @@ public final class AuthManager: ObservableObject {
             // revoked or stops forwarding. Prompt every brand-new Apple signup,
             // regardless of relay vs. real email — Apple's relay state can change
             // after signup.
-            if result.additionalUserInfo?.isNewUser == true,
-               let uid = result.user.uid as String?,
-               Self.loadFallbackEmail(forUID: uid) == nil {
+            let uid = result.user.uid
+            let isNewUser = result.additionalUserInfo?.isNewUser
+            let existingFallback = Self.loadFallbackEmail(forUID: uid)
+            AuditLog.log(event: "SIWA decision: uid=\(uid), isNewUser=\(isNewUser.map(String.init(describing:)) ?? "nil"), existingFallback=\(existingFallback ?? "nil")")
+            if isNewUser == true, existingFallback == nil {
                 pendingFallbackEmailPrompt = true
+                AuditLog.log(event: "SIWA set pendingFallbackEmailPrompt=true for uid=\(uid)")
+            } else {
+                AuditLog.log(event: "SIWA suppressed prompt: isNewUser=\(isNewUser.map(String.init(describing:)) ?? "nil"), hasFallback=\(existingFallback != nil)")
             }
             return true
         } catch {
