@@ -294,15 +294,21 @@ private struct CreateAccountView: View {
                         .textContentType(.username)
                     // Both password fields tagged .newPassword so iOS treats
                     // them as a confirm-password pair: tapping "Use Strong
-                    // Password" auto-fills BOTH. Tagging confirm as .password
-                    // (existing-password content type) breaks the auto-fill
-                    // because iOS can't reconcile the two roles.
+                    // Password" auto-fills BOTH.
+                    //
+                    // .foregroundStyle(.primary) is required because
+                    // SecureField + .roundedBorder doesn't honor the system
+                    // color scheme on iOS 26 — dots render black-on-black in
+                    // dark mode without an explicit foreground color, making
+                    // the field appear empty even when the user is typing.
                     SecureField("Password", text: $password)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
+                        .foregroundStyle(.primary)
                     SecureField("Confirm password", text: $confirmPassword)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
+                        .foregroundStyle(.primary)
                 } header: {
                     Text("Create your NexGenSpec account")
                 } footer: {
