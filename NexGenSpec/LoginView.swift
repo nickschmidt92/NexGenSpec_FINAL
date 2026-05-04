@@ -8,6 +8,7 @@ struct LoginView: View {
     @ObservedObject var authManager: AuthManager
     @State private var email = ""
     @State private var password = ""
+    @State private var showSignInPassword = false
     @State private var showingError = false
     @State private var showingCreateAccount = false
     @State private var showingForgotPassword = false
@@ -72,13 +73,32 @@ struct LoginView: View {
                                 }
 
                                 LoginDarkField(title: "Password", systemImage: "lock.fill") {
-                                    SecureField("Password", text: $password)
+                                    HStack(spacing: Spacing.sm) {
+                                        Group {
+                                            if showSignInPassword {
+                                                TextField("Password", text: $password)
+                                                    .textContentType(.password)
+                                            } else {
+                                                SecureField("Password", text: $password)
+                                                    .textContentType(.password)
+                                            }
+                                        }
                                         .textInputAutocapitalization(.never)
-                                        .textContentType(.password)
+                                        .autocorrectionDisabled()
                                         .submitLabel(.go)
                                         .focused($focusedField, equals: .password)
                                         .onSubmit { attemptLogin() }
                                         .foregroundStyle(.white)
+
+                                        Button {
+                                            showSignInPassword.toggle()
+                                        } label: {
+                                            Image(systemName: showSignInPassword ? "eye.slash.fill" : "eye.fill")
+                                                .foregroundStyle(.white.opacity(0.6))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel(showSignInPassword ? "Hide password" : "Show password")
+                                    }
                                 }
                             }
 
@@ -275,6 +295,8 @@ private struct CreateAccountView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var showPassword = false
+    @State private var showConfirmPassword = false
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
@@ -300,10 +322,46 @@ private struct CreateAccountView: View {
                         .keyboardType(.emailAddress)
                         .autocorrectionDisabled()
                         .textContentType(.username)
-                    SecureField("Password", text: $password)
+                    HStack {
+                        Group {
+                            if showPassword {
+                                TextField("Password", text: $password)
+                            } else {
+                                SecureField("Password", text: $password)
+                            }
+                        }
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                         .textContentType(.newPassword)
-                    SecureField("Confirm password", text: $confirmPassword)
+                        Button {
+                            showPassword.toggle()
+                        } label: {
+                            Image(systemName: showPassword ? "eye.slash" : "eye")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(showPassword ? "Hide password" : "Show password")
+                    }
+                    HStack {
+                        Group {
+                            if showConfirmPassword {
+                                TextField("Confirm password", text: $confirmPassword)
+                            } else {
+                                SecureField("Confirm password", text: $confirmPassword)
+                            }
+                        }
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                         .textContentType(.newPassword)
+                        Button {
+                            showConfirmPassword.toggle()
+                        } label: {
+                            Image(systemName: showConfirmPassword ? "eye.slash" : "eye")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(showConfirmPassword ? "Hide confirm password" : "Show confirm password")
+                    }
                 } header: {
                     Text("Create your NexGenSpec account")
                 } footer: {
