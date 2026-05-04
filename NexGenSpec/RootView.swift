@@ -69,17 +69,18 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: onboardingCompleted)
         .animation(.easeInOut(duration: 0.35), value: authManager.isAuthenticated)
-        .sheet(isPresented: $authManager.pendingAppleFallbackPrompt) {
+        .sheet(isPresented: $authManager.pendingFallbackEmailPrompt) {
             FallbackEmailPromptSheet(authManager: authManager)
                 .interactiveDismissDisabled()
         }
     }
 }
 
-/// Captured at signup for inspectors who used Sign in with Apple. Apple may give
-/// us a `@privaterelay.appleid.com` address (or no email at all if the user hides
-/// it), and that relay can be revoked. The fallback gives us an out-of-band way
-/// to deliver receipts and account-recovery messages.
+/// Captured at signup (both Sign in with Apple and email/password flows). The
+/// fallback gives us an out-of-band way to deliver receipts and account-recovery
+/// messages if the inspector loses access to their primary email — Apple's
+/// private-relay revocation, provider lockout, account hijack, or simple
+/// abandonment of the original address.
 private struct FallbackEmailPromptSheet: View {
     @ObservedObject var authManager: AuthManager
     @State private var email = ""
@@ -90,7 +91,7 @@ private struct FallbackEmailPromptSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Add a fallback email so we can reach you for receipts, account recovery, or important service notices — even if your Apple Hide My Email relay is later revoked.")
+                    Text("Add a fallback email so we can reach you for receipts, account recovery, or important service notices if you ever lose access to your primary email.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

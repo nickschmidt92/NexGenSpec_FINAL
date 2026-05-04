@@ -23,10 +23,10 @@ public final class AuthManager: ObservableObject {
     @Published public private(set) var authErrorMessage: String?
     @Published public private(set) var isBusy = false
 
-    /// True when a Sign in with Apple flow just signed up a brand-new user and
-    /// they have not yet supplied a fallback email. UI binds to this to present
-    /// the fallback-email capture sheet.
-    @Published public var pendingAppleFallbackPrompt = false
+    /// True when a brand-new account was just created (Sign in with Apple
+    /// OR email/password) and the user has not yet supplied a fallback email.
+    /// UI binds to this to present the fallback-email capture sheet.
+    @Published public var pendingFallbackEmailPrompt = false
 
     /// Kept for compatibility with existing views (AppSettingsView uses role / isAdmin).
     /// In V1 every Firebase user is a standard user. Admin/team roles come from a later
@@ -119,6 +119,15 @@ public final class AuthManager: ObservableObject {
             // Fire-and-forget verification email; don't block account creation on delivery.
             try? await result.user.sendEmailVerification()
             applyUser(result.user)
+            // Email/password signup gets the same fallback-email prompt as the
+            // SIWA new-user flow. The primary email could become unreachable
+            // (provider lockout, hijack, abandonment) and a fallback is the
+            // only out-of-band way to recover the account. Match the SIWA
+            // skip-aware behavior so users who already supplied a fallback
+            // (e.g. on a previous device) aren't re-prompted.
+            if Self.loadFallbackEmail(forUID: result.user.uid) == nil {
+                pendingFallbackEmailPrompt = true
+            }
             return true
         } catch {
             authErrorMessage = Self.friendlyMessage(for: error)
@@ -162,7 +171,7 @@ public final class AuthManager: ObservableObject {
             if result.additionalUserInfo?.isNewUser == true,
                let uid = result.user.uid as String?,
                Self.loadFallbackEmail(forUID: uid) == nil {
-                pendingAppleFallbackPrompt = true
+                pendingFallbackEmailPrompt = true
             }
             return true
         } catch {
@@ -202,7 +211,7 @@ public final class AuthManager: ObservableObject {
         guard let uid = Auth.auth().currentUser?.uid else { return false }
         UserDefaults.standard.set(cleaned, forKey: Self.fallbackEmailDefaultsKey(forUID: uid))
         AuditLog.log(event: "Fallback email recorded for account \(uid)")
-        pendingAppleFallbackPrompt = false
+        pendingFallbackEmailPrompt = false
         return true
     }
 
@@ -213,7 +222,7 @@ public final class AuthManager: ObservableObject {
         if let uid = Auth.auth().currentUser?.uid {
             AuditLog.log(event: "Fallback email skipped at signup for account \(uid)")
         }
-        pendingAppleFallbackPrompt = false
+        pendingFallbackEmailPrompt = false
     }
 
     // MARK: - Forgot password
