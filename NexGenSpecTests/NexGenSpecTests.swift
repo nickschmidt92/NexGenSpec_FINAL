@@ -1201,6 +1201,41 @@ final class CalendarIntegrationFlowsTests: XCTestCase {
     }
 }
 
+// MARK: - clearAllLocalData wipe regression (Bug B caught in iPad testing)
+
+@MainActor
+final class ClearAllLocalDataWipeTests: XCTestCase {
+
+    func testClearAllLocalDataRemovesAppRootEntirely() throws {
+        let store = InspectionStore()
+        let jobId = UUID()
+        try FilePaths.ensureAppStructure(jobId: jobId)
+        // Plant a file deep inside appRoot to prove recursive removal works.
+        let evidence = FilePaths.photosFolder(jobId: jobId)
+            .appendingPathComponent("evidence.txt")
+        try FileSecurity.writeProtected(Data("evidence".utf8), to: evidence)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: FilePaths.appRoot.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: evidence.path))
+
+        store.clearAllLocalData()
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: FilePaths.appRoot.path),
+            "appRoot must NOT exist after clearAllLocalData — Bug B regression"
+        )
+        XCTAssertEqual(store.metadataList.count, 0)
+    }
+
+    func testClearAllLocalDataIsIdempotent() {
+        // Calling twice in succession must not throw; the second call is a
+        // no-op since appRoot is already gone.
+        let store = InspectionStore()
+        store.clearAllLocalData()
+        store.clearAllLocalData()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: FilePaths.appRoot.path))
+    }
+}
+
 // MARK: - AccountDeletionReceiptService tests (T-01216)
 
 final class AccountDeletionReceiptServiceTests: XCTestCase {
