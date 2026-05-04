@@ -286,29 +286,24 @@ private struct CreateAccountView: View {
         NavigationStack {
             Form {
                 Section {
+                    // .textFieldStyle(.roundedBorder) is intentionally OMITTED
+                    // here. On iOS 26 it renders SecureField with a fully
+                    // opaque dark background that hides the dots in dark
+                    // mode (caught by Nick during launch testing — both
+                    // password rows showed solid black with no visible
+                    // characters). Form's default style honors the system
+                    // color scheme correctly. Both password fields tagged
+                    // .newPassword so iOS treats them as a confirm-password
+                    // pair and auto-fills BOTH on "Use Strong Password".
                     TextField("Email", text: $email)
-                        .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
                         .autocorrectionDisabled()
                         .textContentType(.username)
-                    // Both password fields tagged .newPassword so iOS treats
-                    // them as a confirm-password pair: tapping "Use Strong
-                    // Password" auto-fills BOTH.
-                    //
-                    // .foregroundStyle(.primary) is required because
-                    // SecureField + .roundedBorder doesn't honor the system
-                    // color scheme on iOS 26 — dots render black-on-black in
-                    // dark mode without an explicit foreground color, making
-                    // the field appear empty even when the user is typing.
                     SecureField("Password", text: $password)
-                        .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
-                        .foregroundStyle(.primary)
                     SecureField("Confirm password", text: $confirmPassword)
-                        .textFieldStyle(.roundedBorder)
                         .textContentType(.newPassword)
-                        .foregroundStyle(.primary)
                 } header: {
                     Text("Create your NexGenSpec account")
                 } footer: {
