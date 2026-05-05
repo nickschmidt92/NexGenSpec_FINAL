@@ -207,8 +207,8 @@ struct AppSettingsView: View {
                     }
 
                     SettingsSectionCard(
-                        title: "Legal & Data Safety",
-                        subtitle: "Review the customer-facing legal text, retention posture, and data-safety summary."
+                        title: "Legal",
+                        subtitle: "Review the customer-facing legal text shown to inspection clients."
                     ) {
                         NavigationLink {
                             PrivacyPolicyView()
@@ -231,19 +231,6 @@ struct AppSettingsView: View {
                             )
                         }
                         .buttonStyle(.plain)
-
-                        NavigationLink {
-                            DataSafetySummaryView()
-                        } label: {
-                            SettingsNavigationRow(
-                                title: "Data Safety Summary",
-                                subtitle: "The in-app explanation of storage, access, and sharing rules.",
-                                systemImage: "lock.doc.fill"
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-
                     }
 
                     SettingsSectionCard(

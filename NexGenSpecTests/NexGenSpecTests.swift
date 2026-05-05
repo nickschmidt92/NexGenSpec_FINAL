@@ -715,24 +715,6 @@ final class CalendarPreferencesTests: XCTestCase {
     }
 }
 
-// MARK: - Voice command
-
-final class VoiceCommandCalendarTests: XCTestCase {
-
-    @MainActor
-    func testGoToCalendarRecognized() {
-        let mgr = VoiceCommandManager()
-        let r1 = mgr.parseCommand(transcript: "go to calendar", fireAction: false)
-        XCTAssertEqual(r1.command, "Go to calendar")
-
-        let r2 = mgr.parseCommand(transcript: "open calendar", fireAction: false)
-        XCTAssertEqual(r2.command, "Go to calendar")
-
-        let r3 = mgr.parseCommand(transcript: "calendar", fireAction: false)
-        XCTAssertEqual(r3.command, "Go to calendar")
-    }
-}
-
 // MARK: - Calendar alarm DST / timezone correctness
 
 /// `CalendarService.dayBeforeAt8AM` produces the absolute alarm date for
@@ -837,31 +819,6 @@ final class CalendarAlarmDSTTests: XCTestCase {
         XCTAssertEqual(parts.month, 12)
         XCTAssertEqual(parts.day, 31)
         XCTAssertEqual(parts.hour, 8)
-    }
-}
-
-// MARK: - Tab router notification bridge
-
-/// The voice-command deep-link "go to calendar" posts a notification
-/// that `MainTabView` observes to switch the active tab. This test
-/// validates the observer wiring without mounting the view hierarchy.
-final class TabRouterNotificationTests: XCTestCase {
-
-    @MainActor
-    func testRouterSwitchesToCalendarOnNotification() async {
-        let router = TabRouter(initial: .workspace)
-        // Mirror the observer `MainTabView` installs.
-        let cancellable = NotificationCenter.default
-            .publisher(for: .nexGenSpecRequestCalendarTab)
-            .sink { _ in router.show(.calendar) }
-        defer { cancellable.cancel() }
-
-        XCTAssertEqual(router.selected, .workspace)
-        NotificationCenter.default.post(name: .nexGenSpecRequestCalendarTab, object: nil)
-        // Publisher is synchronous on the main run loop, but yield to
-        // flush any pending Combine delivery.
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        XCTAssertEqual(router.selected, .calendar)
     }
 }
 

@@ -13,14 +13,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>NexGenSpec needs camera access to capture inspection photos and scan documents.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>NexGenSpec uses the microphone to record audio notes during inspections.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Speech recognition lets you dictate inspection notes with the iOS keyboard's microphone key.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used for importing/exporting inspection images and annotations.</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>NexGenSpec supports Bluetooth headsets and microphones for audio notes during inspections.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NexGenSpec uses your location to auto-fill the property address when creating a new inspection.</string>
 	<key>NSFaceIDUsageDescription</key>

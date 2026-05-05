@@ -10,7 +10,6 @@ public struct TermsAndConditionsView: View {
     @State private var showShareSheet = false
     @State private var showAuditLogSheet = false
     @State private var searchText: String = ""
-    @State private var showDataSafetyPDF = false
     
     /// Optional callback invoked when user acknowledges terms.
     /// If `nil`, no accept button is shown and view is readonly.
@@ -28,7 +27,7 @@ public struct TermsAndConditionsView: View {
                 VStack(spacing: Spacing.sm) {
                     VStack(spacing: Spacing.sm) {
                         BrandLockup(
-                            subtitle: "Terms, privacy, and data-safety commitments for NexGenSpec users.",
+                            subtitle: "Terms and privacy commitments for NexGenSpec users.",
                             markSize: 60
                         )
 
@@ -180,30 +179,6 @@ public struct TermsAndConditionsView: View {
                             Divider()
                         }
                         .id("section2")
-                        
-                        // Data Safety Summary Section
-                        Group {
-                            highlightedText("Data Safety Summary", id: "datasafety", font: .title3.bold(), isHeader: true)
-                            highlightedText("NexGenSpec is local-first. Inspection content — defects, photos, signatures, LiDAR scans, notes, client info, agent info, calendar events, invoices, and PDFs — is stored privately on your iPhone or iPad in the app's sandboxed storage. Other apps cannot read it. NexGenSpec LLC does not receive copies and has no server-side database of inspection data.\n\nThe only data sent off-device is: (a) your account login (email and an encrypted password, or your Apple ID identifier if using Sign in with Apple) stored in Firebase Authentication, and (b) anonymized crash reports sent to Firebase Crashlytics if the app crashes. No personal data, no inspection content.\n\nNexGenSpec LLC does not sell, rent, or share your data. No third-party advertising. No marketing trackers.\n", font: .body)
-
-                            highlightedText("iCloud (Optional)", font: .headline, isHeader: true)
-                            highlightedText("If you enable iCloud Backup in iOS Settings, your device — including NexGenSpec's app data — is backed up to your personal iCloud account. Apple encrypts and manages that backup. NexGenSpec has no access.\n", font: .body)
-
-                            highlightedText("Calendar (Optional)", font: .headline, isHeader: true)
-                            highlightedText("If you grant Calendar access, NexGenSpec writes events to a calendar you choose, including the property address, client name, client phone, client email, agent contact details (if provided), and the NexGenSpec job ID. This information is written only to your local calendar and to any calendar accounts (iCloud, Google) you have enabled on your device. NexGenSpec does not receive this data. Deleting an inspection in NexGenSpec also deletes its calendar event. Calendar access is entirely optional — all other app features work without it.\n", font: .body)
-
-                            highlightedText("Your Control", font: .headline, isHeader: true)
-                            highlightedText("• Delete the app to remove inspection data from your device.\n• Email contact@nexgenspec.com to delete your login account.\n• Manage your subscription in iOS Settings → Apple ID → Subscriptions.\n", font: .body)
-                            
-                            Button(action: {
-                                showDataSafetyPDF = true
-                            }) {
-                                Text("View Full Data Safety Summary (PDF)")
-                            }
-                            .buttonStyle(AppSecondaryButtonStyle())
-                            .padding(.vertical, 8)
-                            .accessibilityLabel("View Full Data Safety Summary PDF")
-                        }
                     }
                         .padding()
                         .onChange(of: searchText) { _, _ in
@@ -274,20 +249,8 @@ public struct TermsAndConditionsView: View {
         .sheet(isPresented: $showAuditLogSheet) {
             ActivityView(activityItems: [AuditLog.read()])
         }
-        // Present PDF viewer for Data Safety Summary
-        .sheet(isPresented: $showDataSafetyPDF) {
-            if let url = dataSafetySummaryPDFURL {
-                PDFViewer(url: url)
-            } else {
-                TermsDataSafetySummaryFallbackView()
-            }
-        }
     }
 
-    private var dataSafetySummaryPDFURL: URL? {
-        Bundle.main.url(forResource: "DataSafetySummary", withExtension: "pdf")
-    }
-    
     /// Aggregates all terms text into a single plain text string for sharing.
     public var fullTermsText: String {
         """
@@ -515,16 +478,6 @@ public struct TermsAndConditionsView: View {
 
             Important: NexGenSpec software stores inspection records on the Inspector's device. NexGenSpec LLC does not host, backup, audit, or guarantee retention of these records.
             """
-        case "datasafety":
-            contentForId =
-            """
-            Data Safety Summary
-            NexGenSpec is local-first. Inspection content is stored privately on your iPhone or iPad in the app's sandboxed storage. NexGenSpec LLC does not receive copies and has no server-side database of inspection data.
-
-            The only data sent off-device is your account login (Firebase Authentication) and anonymized crash reports (Firebase Crashlytics).
-
-            iCloud (Optional), Calendar (Optional), and Your Control sections describe how your device-level features interact with NexGenSpec.
-            """
         default:
             contentForId = ""
         }
@@ -565,81 +518,6 @@ struct ActivityView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-/// PDF Viewer for displaying PDF documents from URL
-struct PDFViewer: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> UIViewController {
-        let pdfView = PDFView()
-        pdfView.document = PDFDocument(url: url)
-        pdfView.autoScales = true
-
-        let viewController = UIViewController()
-        viewController.view = pdfView
-        viewController.navigationItem.title = "Data Safety Summary"
-        
-        let nav = UINavigationController(rootViewController: viewController)
-        return nav
-    }
-
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-}
-
-private struct TermsDataSafetySummaryFallbackView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Data Safety Summary")
-                        .font(.title2.bold())
-
-                    Text("This build does not include a bundled PDF copy of the data safety summary. The current summary is provided below.")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-
-                    Group {
-                        Text("What We Collect")
-                            .font(.headline)
-                        Text("NexGenSpec stores inspection details, photos, signatures, LiDAR scans, videos, and audit events so reports can be created, finalized, and retained for business records.")
-
-                        Text("How Data Is Protected")
-                            .font(.headline)
-                        Text("Inspection data written by the app is saved with file protection enabled. Backups can be encrypted, and finalized reports keep an audit trail and verification hash.")
-
-                        Text("How Data Is Used")
-                            .font(.headline)
-                        Text("Inspection records are used to build reports, support customer communication, and preserve documentation for retention and dispute resolution workflows.")
-
-                        Text("Sharing")
-                            .font(.headline)
-                        Text("Inspection data is not shared publicly. Exports and disclosures are limited to the inspector's reporting workflow, the client, or cases required by law or explicit consent.")
-                    }
-                    .font(.body)
-
-                    Divider()
-
-                    Link("View Full Privacy Policy", destination: URL(string: "https://nexgenspec.com/privacy.html")!)
-                        .font(.headline)
-                    Link("View Terms of Service", destination: URL(string: "https://nexgenspec.com/terms.html")!)
-                        .font(.headline)
-                }
-                .padding()
-            }
-            .navigationTitle("Data Safety Summary")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
 }
 
 struct TermsAndConditionsView_Previews: PreviewProvider {

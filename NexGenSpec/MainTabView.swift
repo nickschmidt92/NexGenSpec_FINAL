@@ -10,7 +10,8 @@
 
 import SwiftUI
 
-/// Names for programmatic tab switching (e.g. from voice commands).
+/// Names for programmatic tab switching, e.g. when an inspection-level
+/// view needs to route the user to a sibling tab (Workspace → Calendar).
 public enum MainTab: Hashable {
     case workspace
     case calendar
@@ -42,9 +43,6 @@ struct MainTabView: View {
 
     var body: some View {
         tabBody
-            .onReceive(NotificationCenter.default.publisher(for: .nexGenSpecRequestCalendarTab)) { _ in
-                router.show(.calendar)
-            }
     }
 
     private var tabBody: some View {
@@ -83,13 +81,6 @@ struct MainTabView: View {
         }
         .environmentObject(router)
     }
-}
-
-extension Notification.Name {
-    /// Posted when a voice command or deep-link asks the UI to bring the
-    /// Calendar tab to the front (used from within an inspection flow
-    /// where the tab bar isn't directly reachable).
-    static let nexGenSpecRequestCalendarTab = Notification.Name("NexGenSpec.requestCalendarTab")
 }
 
 #if DEBUG

@@ -385,57 +385,6 @@ public extension InspectionStore {
         save()
     }
 
-    /// Inserts one sample draft inspection when the list is empty (e.g. first launch). Uses fallback template if needed.
-    func insertSampleInspectionIfNeeded() {
-        guard metadataList.isEmpty else { return }
-        let template = heavyTemplate ?? InspectionStore.fallbackTemplate
-        let jobId = UUID()
-        try? FilePaths.ensureAppStructure(jobId: jobId)
-        let inspection = Inspection(
-            id: jobId,
-            clientName: "Sample Client",
-            clientEmail: "",
-            clientPhone: "",
-            propertyAddress: "123 Main St",
-            inspectionDate: Date(),
-            inspectorName: "Inspector",
-            sections: template.sections.map { src in
-                InspectionSection(
-                    id: StableUUID.from(seed: "\(jobId.uuidString)-section-\(src.sectionId)"),
-                    title: src.title,
-                    items: src.items.map { itm in
-                        InspectionItem(
-                            id: StableUUID.from(seed: "\(jobId.uuidString)-item-\(itm.itemId)"),
-                            templateItemId: itm.itemId,
-                            title: itm.title,
-                            includeInReport: false,
-                            status: .notInspected,
-                            defectSeverity: nil,
-                            location: "",
-                            observed: itm.commentLibrary.observed,
-                            implication: itm.commentLibrary.implication,
-                            recommendation: itm.commentLibrary.recommendation,
-                            contractorTag: itm.contractorTag,
-                            photos: []
-                        )
-                    }
-                )
-            },
-            inspectorConfirmed: true
-        )
-        let version = InspectionVersion(
-            id: jobId,
-            versionNumber: 1,
-            status: .draft,
-            finalizedAt: nil,
-            locked: false,
-            inspection: inspection
-        )
-        try? writeVersionToFile(version)
-        metadataList.insert(VersionMetadata(from: version), at: 0)
-        save()
-    }
-
     /// Removes a version if it is still a draft (not signed by both parties / not finalized). Returns true if deleted.
     func deleteVersion(id: UUID) -> Bool {
         guard let idx = metadataList.firstIndex(where: { $0.id == id }) else { return false }
