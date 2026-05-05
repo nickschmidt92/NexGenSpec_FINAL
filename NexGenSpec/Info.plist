@@ -12,13 +12,11 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>NexGenSpec needs camera access to capture inspection photos and scan documents.</string>
+	<string>NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used for importing/exporting inspection images and annotations.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NexGenSpec uses your location to auto-fill the property address when creating a new inspection.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Used for secure authentication if enabled (optional).</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>NexGenSpec adds inspection appointments to the calendar you choose and reads your other events to flag scheduling conflicts. Calendar access is optional.</string>
 	<key>NSCalendarsUsageDescription</key>
