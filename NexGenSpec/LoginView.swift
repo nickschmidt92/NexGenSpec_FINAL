@@ -14,6 +14,11 @@ struct LoginView: View {
     @State private var showingForgotPassword = false
     @State private var forgotPasswordEmail = ""
     @State private var forgotPasswordInfo: String?
+    /// Raw nonce produced by `SignInWithAppleButton`'s request closure and
+    /// then handed to AuthManager in onCompletion alongside Apple's
+    /// authorization. Stored as @State so it survives between the two
+    /// callbacks of a single SIWA flow.
+    @State private var siwaRawNonce = ""
     @FocusState private var focusedField: LoginField?
 
     private enum LoginField {
@@ -122,21 +127,30 @@ struct LoginView: View {
                                 Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
                             }
 
-                            Button {
-                                attemptAppleSignIn()
-                            } label: {
-                                HStack(spacing: Spacing.sm) {
-                                    Image(systemName: "applelogo")
-                                    Text("Sign in with Apple")
-                                        .fontWeight(.semibold)
+                            // Apple's SignInWithAppleButton — gets logo, label,
+                            // sizing, contrast, and dark/light variants strictly
+                            // per HIG so App Store review can't flag the SIWA
+                            // surface. .white style matches the navy login bg.
+                            SignInWithAppleButton(.signIn) { request in
+                                let nonce = SignInWithAppleCoordinator.makeNonce()
+                                siwaRawNonce = nonce
+                                request.requestedScopes = [.fullName, .email]
+                                request.nonce = SignInWithAppleCoordinator.sha256(nonce)
+                            } onCompletion: { result in
+                                Task { @MainActor in
+                                    let ok = await authManager.handleAppleSignIn(
+                                        result: result,
+                                        rawNonce: siwaRawNonce
+                                    )
+                                    if !ok && authManager.authErrorMessage != nil {
+                                        showingError = true
+                                    }
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 50)
-                                .foregroundStyle(AppColor.brandNavy)
-                                .background(Color.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
+                            .signInWithAppleButtonStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .cornerRadius(10)
                             .disabled(authManager.isBusy)
-                            .accessibilityLabel("Sign in with Apple")
 
                             HStack {
                                 Button("Forgot password?") {
@@ -211,14 +225,6 @@ struct LoginView: View {
         }
     }
 
-    private func attemptAppleSignIn() {
-        Task { @MainActor in
-            let ok = await authManager.signInWithApple()
-            if !ok && authManager.authErrorMessage != nil {
-                showingError = true
-            }
-        }
-    }
 }
 
 // MARK: - Forgot password sheet

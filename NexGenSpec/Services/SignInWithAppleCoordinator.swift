@@ -76,8 +76,13 @@ final class SignInWithAppleCoordinator: NSObject,
     }
 
     // MARK: - Nonce helpers
+    //
+    // Exposed at module-internal scope so the SignInWithAppleButton SwiftUI
+    // wrapper in LoginView can produce the same nonce shape (raw + SHA256
+    // hashed) without duplicating the implementation. Reauth still uses the
+    // coordinator path; new sign-in goes through SignInWithAppleButton.
 
-    private static func makeNonce(length: Int = 32) -> String {
+    static func makeNonce(length: Int = 32) -> String {
         precondition(length > 0)
         let charset: [Character] =
             Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._")
@@ -97,7 +102,7 @@ final class SignInWithAppleCoordinator: NSObject,
         return result
     }
 
-    private static func sha256(_ input: String) -> String {
+    static func sha256(_ input: String) -> String {
         let hashed = SHA256.hash(data: Data(input.utf8))
         return hashed.map { String(format: "%02x", $0) }.joined()
     }

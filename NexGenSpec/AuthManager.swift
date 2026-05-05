@@ -137,29 +137,45 @@ public final class AuthManager: ObservableObject {
 
     // MARK: - Sign in with Apple
 
-    /// Runs the Sign in with Apple flow and exchanges the resulting Apple ID
-    /// token for a Firebase credential. Returns true on success.
+    /// Bridges the SwiftUI `SignInWithAppleButton` onCompletion callback into
+    /// the Firebase credential exchange. The button (in LoginView) generates
+    /// the rawNonce, hashes it for the Apple request, and passes both the raw
+    /// value and the system's `Result<ASAuthorization, Error>` here on
+    /// completion. Using Apple's official button keeps the visual + a11y
+    /// behavior strictly within HIG — important for App Store review.
     @discardableResult
-    public func signInWithApple() async -> Bool {
+    public func handleAppleSignIn(result: Result<ASAuthorization, Error>, rawNonce: String) async -> Bool {
         authErrorMessage = nil
         isBusy = true
         defer { isBusy = false }
 
-        let coordinator = SignInWithAppleCoordinator()
-        do {
-            let appleCredential = try await coordinator.start()
-            guard let tokenData = appleCredential.identityToken,
-                  let idTokenString = String(data: tokenData, encoding: .utf8) else {
-                authErrorMessage = "Apple sign-in did not return an identity token."
+        let authorization: ASAuthorization
+        switch result {
+        case .success(let auth):
+            authorization = auth
+        case .failure(let error):
+            // Treat user-cancellation as a silent dismiss, not an error banner.
+            if let asError = error as? ASAuthorizationError, asError.code == .canceled {
                 return false
             }
+            authErrorMessage = Self.friendlyMessage(for: error)
+            return false
+        }
 
-            let firebaseCredential = OAuthProvider.appleCredential(
-                withIDToken: idTokenString,
-                rawNonce: coordinator.rawNonce,
-                fullName: appleCredential.fullName
-            )
+        guard let appleCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = appleCredential.identityToken,
+              let idTokenString = String(data: tokenData, encoding: .utf8) else {
+            authErrorMessage = "Apple sign-in did not return an identity token."
+            return false
+        }
 
+        let firebaseCredential = OAuthProvider.appleCredential(
+            withIDToken: idTokenString,
+            rawNonce: rawNonce,
+            fullName: appleCredential.fullName
+        )
+
+        do {
             let result = try await Auth.auth().signIn(with: firebaseCredential)
             applyUser(result.user)
             // Apple users may share a @privaterelay.appleid.com address (or no email
@@ -180,10 +196,6 @@ public final class AuthManager: ObservableObject {
             }
             return true
         } catch {
-            // Treat user-cancellation as a silent dismiss, not an error banner.
-            if let asError = error as? ASAuthorizationError, asError.code == .canceled {
-                return false
-            }
             authErrorMessage = Self.friendlyMessage(for: error)
             return false
         }

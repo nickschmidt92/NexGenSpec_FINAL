@@ -16,6 +16,7 @@
 
 import Foundation
 import StoreKit
+import CryptoKit
 
 @MainActor
 public final class SubscriptionManager: ObservableObject {
@@ -117,11 +118,21 @@ public final class SubscriptionManager: ObservableObject {
     ///   - Internal QA — lets the team test Pro features without sandbox purchases.
     ///   - Comps — press/partners granted free access without subscribing.
     ///
-    /// The email list is visible to anyone who reverse-engineers the binary, so
-    /// protect the account(s) with strong passwords. Compare case-insensitively.
-    /// To add more admin emails later: edit this Set, rebuild, ship an update.
-    public static let adminEmails: Set<String> = [
-        "contact@nexgenspec.com"
+    /// SHA-256 hashes of admin emails (lowercased, trimmed) rather than the
+    /// emails themselves so the binary doesn't leak the addresses to anyone
+    /// reverse-engineering it. The actual security gate is still the strong
+    /// password on each admin Firebase account — hashing just makes it harder
+    /// to identify which email to target.
+    ///
+    /// Currently registered:
+    ///   contact@nexgenspec.com → 3b00017c…
+    ///
+    /// To add a new admin email, run on the command line:
+    ///   echo -n "<email>@<domain>" | shasum -a 256
+    /// and append the hex digest below. (Long-term plan: move to Firebase
+    /// Cloud Functions custom claims so this list lives server-side.)
+    public static let adminEmailHashes: Set<String> = [
+        "3b00017c131aa4a07923190294a22c9fd157378c78aa113ef91f9862992ee97d"
     ]
 
     /// True if the currently signed-in Firebase user matches the admin whitelist.
@@ -129,16 +140,23 @@ public final class SubscriptionManager: ObservableObject {
     /// auth state changes.
     @Published public private(set) var isAdminAccount: Bool = false
 
-    /// Wire this to `AuthManager.currentUsername`. Pass `nil` on sign-out.
-    public func applyCurrentUser(email: String?) {
-        let normalized = email?
+    /// SHA-256 of a normalized email, hex-encoded. Used to compare against
+    /// `adminEmailHashes` without ever holding the plaintext email.
+    private static func adminHash(of email: String) -> String {
+        let normalized = email
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-        if let normalized, Self.adminEmails.contains(normalized) {
-            isAdminAccount = true
-        } else {
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Wire this to `AuthManager.currentUsername`. Pass `nil` on sign-out.
+    public func applyCurrentUser(email: String?) {
+        guard let email else {
             isAdminAccount = false
+            return
         }
+        isAdminAccount = Self.adminEmailHashes.contains(Self.adminHash(of: email))
     }
 
     // MARK: - Persistence keys (offline grace)
