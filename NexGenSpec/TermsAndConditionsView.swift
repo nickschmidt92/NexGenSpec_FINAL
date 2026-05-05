@@ -51,13 +51,13 @@ public struct TermsAndConditionsView: View {
                         .padding(.top, 4)
 
                         HStack(spacing: Spacing.sm) {
-                            Link(destination: URL(string: "https://nexgenspec.com/privacy")!) {
+                            Link(destination: URL(string: "https://nexgenspec.com/privacy.html")!) {
                                 TermsQuickLink(title: "Privacy Policy", systemImage: "hand.raised.fill")
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("View Privacy Policy")
 
-                            Link(destination: URL(string: "https://nexgenspec.com/terms")!) {
+                            Link(destination: URL(string: "https://nexgenspec.com/terms.html")!) {
                                 TermsQuickLink(title: "Terms of Service", systemImage: "doc.text.fill")
                             }
                             .buttonStyle(.plain)
@@ -622,9 +622,9 @@ private struct TermsDataSafetySummaryFallbackView: View {
 
                     Divider()
 
-                    Link("View Full Privacy Policy", destination: URL(string: "https://nexgenspec.com/privacy")!)
+                    Link("View Full Privacy Policy", destination: URL(string: "https://nexgenspec.com/privacy.html")!)
                         .font(.headline)
-                    Link("View Terms of Service", destination: URL(string: "https://nexgenspec.com/terms")!)
+                    Link("View Terms of Service", destination: URL(string: "https://nexgenspec.com/terms.html")!)
                         .font(.headline)
                 }
                 .padding()

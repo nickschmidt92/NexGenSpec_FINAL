@@ -36,8 +36,8 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>PrivacyPolicyURL</key>
-	<string>https://nexgenspec.com/privacy</string>
+	<string>https://nexgenspec.com/privacy.html</string>
 	<key>TermsAndConditionsURL</key>
-	<string>https://nexgenspec.com/terms</string>
+	<string>https://nexgenspec.com/terms.html</string>
 </dict>
 </plist>

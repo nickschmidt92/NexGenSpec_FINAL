@@ -20,8 +20,13 @@ struct LegalConstants {
     // Safe URL resolution: try Info.plist first, fall back to canonical
     // nexgenspec.com endpoints. No force-unwraps — an empty/missing plist
     // key on older builds used to crash the app when tapping the link.
-    private static let fallbackPrivacy = "https://nexgenspec.com/privacy"
-    private static let fallbackTerms   = "https://nexgenspec.com/terms"
+    // Use the standalone .html files rather than the bare /privacy /terms
+    // routes. The bare routes redirect to index.html and open a JS modal that
+    // (a) depends on the homepage caching the latest content correctly, and
+    // (b) fights Chrome iOS's WebKit cache when content updates ship. The
+    // standalone .html pages serve the canonical Apr 28+ legal text directly.
+    private static let fallbackPrivacy = "https://nexgenspec.com/privacy.html"
+    private static let fallbackTerms   = "https://nexgenspec.com/terms.html"
 
     static let privacyPolicyURL: URL = {
         let s = (Bundle.main.object(forInfoDictionaryKey: "PrivacyPolicyURL") as? String) ?? ""
