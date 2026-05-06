@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+lib/
+*.tsbuildinfo
+
+# Firebase
+.firebase/
+.firebaserc.local
+firebase-debug.log
+firebase-debug.*.log
+ui-debug.log
+firestore-debug.log
+pubsub-debug.log
+functions-debug.log
+
+# Local env / secrets — never commit
+.env
+.env.*
+.runtimeconfig.json
+*.p8
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Test / coverage
+coverage/

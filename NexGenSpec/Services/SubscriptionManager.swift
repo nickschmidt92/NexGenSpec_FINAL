@@ -52,9 +52,26 @@ public final class SubscriptionManager: ObservableObject {
     /// Number of inspections the user has created (persisted across launches).
     @Published public private(set) var freeInspectionsUsed: Int = 0
 
-    /// True if the user can create a new inspection (subscribed, admin, beta tester, or under free limit).
+    /// True when the Apple-DeviceCheck-backed bit for this device says
+    /// the trial has already been consumed on this hardware. Refreshed
+    /// asynchronously on launch and after sign-in via `refreshDeviceCheckTrial()`.
+    /// Defaults to false so the UI never blocks a fresh install while
+    /// the first network check is in flight.
+    @Published public private(set) var deviceCheckTrialUsed: Bool = false
+
+    /// True if the user can create a new inspection. Order of checks:
+    ///   1. Pro / admin / beta unlocks always win — these users see no gate.
+    ///   2. Otherwise the local UserDefaults counter must be under the limit.
+    ///   3. Even if the local counter is under the limit, a flipped
+    ///      DeviceCheck bit (`deviceCheckTrialUsed == true`) blocks creation.
+    ///      That branch fires after Delete App + reinstall: the local
+    ///      counter resets to 0, but Apple's per-device bit (set the
+    ///      first time the trial was burned through) survives the
+    ///      reinstall and flags the abuser.
     public var canCreateInspection: Bool {
-        isPro || isAdminAccount || Self.isBetaOrSandboxBuild || freeInspectionsUsed < Self.freeInspectionLimit
+        if isPro || isAdminAccount || Self.isBetaOrSandboxBuild { return true }
+        if deviceCheckTrialUsed { return false }
+        return freeInspectionsUsed < Self.freeInspectionLimit
     }
 
     /// True if the user should have access to premium features (LiDAR,
@@ -80,6 +97,17 @@ public final class SubscriptionManager: ObservableObject {
         guard !isPro, !isAdminAccount, !Self.isBetaOrSandboxBuild else { return }
         freeInspectionsUsed += 1
         UserDefaults.standard.set(freeInspectionsUsed, forKey: TrialKey.inspectionsCreated)
+
+        // Once the trial is fully consumed, flip the DeviceCheck bit so a
+        // future Delete App + reinstall doesn't grant a fresh 3-pack.
+        // Fire-and-forget — the local counter is the synchronous gate,
+        // the device bit is the post-reinstall backstop.
+        if freeInspectionsUsed >= Self.freeInspectionLimit {
+            let gate = DeviceCheckTrialGate()
+            Task { [gate] in
+                _ = await gate.markTrialUsed()
+            }
+        }
     }
 
     // MARK: - TestFlight / sandbox unlock
@@ -195,6 +223,11 @@ public final class SubscriptionManager: ObservableObject {
         // Restore free trial counter
         self.freeInspectionsUsed = UserDefaults.standard.integer(forKey: TrialKey.inspectionsCreated)
 
+        // Seed deviceCheckTrialUsed from the on-disk DeviceCheck cache so the
+        // paywall reflects the right state on launch even before the async
+        // refresh completes. Stale cache (>24h) is treated as "no opinion".
+        self.deviceCheckTrialUsed = DeviceCheckTrialGate.lastKnownTrialUsed
+
         // Restore cached entitlement immediately so UI shows Pro on launch
         // even before StoreKit async calls complete.
         let cached = UserDefaults.standard.bool(forKey: CacheKey.isPro)
@@ -215,6 +248,7 @@ public final class SubscriptionManager: ObservableObject {
         }
 
         Task { await refresh() }
+        Task { await refreshDeviceCheckTrial() }
     }
 
     deinit {
@@ -254,6 +288,30 @@ public final class SubscriptionManager: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             return false
+        }
+    }
+
+    /// Refreshes `deviceCheckTrialUsed` from the DeviceCheck-backed
+    /// backend. Safe to call from anywhere — never blocks the UI, and
+    /// `.unknown(...)` outcomes (offline, server down, simulator without
+    /// DeviceCheck support) leave the published value at its previous
+    /// state, so a transient network failure can't lock a paying user out.
+    public func refreshDeviceCheckTrial() async {
+        let gate = DeviceCheckTrialGate()
+        let result = await gate.isTrialUsedOnThisDevice()
+        switch result {
+        case .used:
+            if !deviceCheckTrialUsed {
+                deviceCheckTrialUsed = true
+                AuditLog.log(event: "DeviceCheck reports trial consumed on this device")
+            }
+        case .unused:
+            if deviceCheckTrialUsed {
+                deviceCheckTrialUsed = false
+            }
+        case .unknown:
+            // Fail open — keep whatever cached/last-known value we have.
+            break
         }
     }
 

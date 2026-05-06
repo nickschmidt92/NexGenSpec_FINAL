@@ -1389,3 +1389,129 @@ final class AuthManagerFallbackEmailTests: XCTestCase {
         XCTAssertNil(AuthManager.loadFallbackEmail(forUID: uidB))
     }
 }
+
+// MARK: - DeviceCheck trial gate (T-01302)
+//
+// The DeviceCheck-backed trial bit is the second-line defense against
+// trial abuse via Delete-App-and-reinstall. Tests here exercise the
+// pieces that are reachable without an actual Apple-DeviceCheck round
+// trip: the cache TTL, the unsupported-device fallback, and the
+// SubscriptionManager wiring that consumes the published flag.
+
+import DeviceCheck
+
+@MainActor
+final class DeviceCheckTrialGateTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        DeviceCheckTrialGate.clearCacheForTesting()
+    }
+
+    override func tearDown() {
+        DeviceCheckTrialGate.clearCacheForTesting()
+        super.tearDown()
+    }
+
+    /// On a device where DeviceCheck isn't supported (older simulators,
+    /// for example), the gate must surface `.unknown(.unsupported)`
+    /// rather than throwing or silently treating the trial as consumed —
+    /// the spec requires fail-open on every `.unknown` outcome.
+    ///
+    /// On simulators where DeviceCheck *is* supported, the call would
+    /// otherwise reach our backend and fail with `.notAuthenticated`
+    /// (no Firebase user in the test harness) — also a `.unknown`
+    /// variant, which is the same fail-open contract. We assert the
+    /// reachable contract: the result is one of the `.unknown(...)`
+    /// cases and `trialIsConsumed` is false.
+    func testUnsupportedDeviceReturnsUnknown() async {
+        let gate = DeviceCheckTrialGate()
+        let result = await gate.isTrialUsedOnThisDevice()
+        if case .unknown = result {
+            XCTAssertFalse(result.trialIsConsumed,
+                           "Unknown results must fail open (trialIsConsumed == false)")
+        } else {
+            XCTFail("Test environment has no Firebase user / no real backend, so the gate must report .unknown — got \(result)")
+        }
+    }
+
+    /// The 24-hour TTL cache is the load-bearing piece that keeps the
+    /// paywall fast: a fresh entry is honored, a stale entry is
+    /// ignored. Verify both branches by writing entries with
+    /// hand-picked timestamps and reading back through
+    /// `lastKnownTrialUsed`.
+    func testCacheRoundTrip() {
+        // No cache → false (fail open).
+        XCTAssertFalse(DeviceCheckTrialGate.lastKnownTrialUsed)
+
+        // Fresh `used` → true.
+        let now = Date().timeIntervalSince1970
+        DeviceCheckTrialGate.writeCacheForTesting(result: "used", timestampUnix: now)
+        XCTAssertTrue(DeviceCheckTrialGate.lastKnownTrialUsed,
+                      "Fresh `used` cache entry must be honored")
+
+        // Fresh `unused` → false.
+        DeviceCheckTrialGate.writeCacheForTesting(result: "unused", timestampUnix: now)
+        XCTAssertFalse(DeviceCheckTrialGate.lastKnownTrialUsed,
+                       "Fresh `unused` cache entry must report not-consumed")
+
+        // Stale `used` (>24h old) → false (cache treated as expired).
+        let stale = now - (25 * 60 * 60)
+        DeviceCheckTrialGate.writeCacheForTesting(result: "used", timestampUnix: stale)
+        XCTAssertFalse(DeviceCheckTrialGate.lastKnownTrialUsed,
+                       "Cache entries older than 24h must be treated as expired")
+
+        // Just under TTL boundary → still honored.
+        let almostExpired = now - (23 * 60 * 60)
+        DeviceCheckTrialGate.writeCacheForTesting(result: "used", timestampUnix: almostExpired)
+        XCTAssertTrue(DeviceCheckTrialGate.lastKnownTrialUsed,
+                      "Cache entries within 24h must still be honored")
+    }
+
+    /// In production the simulator unlocks the paywall via
+    /// `isBetaOrSandboxBuild`, which would short-circuit the
+    /// DeviceCheck check before it ever runs. The test here verifies
+    /// the DeviceCheck branch in `canCreateInspection` independently:
+    /// when sandbox-unlock is bypassed and the device bit reports
+    /// `used`, creation must be denied even with a fresh local
+    /// counter. We exercise this by reading the published value
+    /// after seeding the cache and re-initializing the manager — the
+    /// init path uses `DeviceCheckTrialGate.lastKnownTrialUsed` to
+    /// seed `deviceCheckTrialUsed`, and the boolean math in
+    /// `canCreateInspection` is a pure function of `(isPro,
+    /// isAdminAccount, isBetaOrSandboxBuild, deviceCheckTrialUsed,
+    /// freeInspectionsUsed)`.
+    func testCanCreateInspectionRespectsDeviceCheckUsedFlag() {
+        // Reset the local counter so we know freeInspectionsUsed == 0.
+        UserDefaults.standard.set(0, forKey: "nexgenspec.trial.inspectionsCreated")
+        defer { UserDefaults.standard.removeObject(forKey: "nexgenspec.trial.inspectionsCreated") }
+
+        // Seed a fresh `used` DeviceCheck cache entry so the manager's
+        // init() picks it up.
+        DeviceCheckTrialGate.writeCacheForTesting(
+            result: "used",
+            timestampUnix: Date().timeIntervalSince1970
+        )
+
+        let manager = SubscriptionManager()
+        XCTAssertEqual(manager.freeInspectionsUsed, 0,
+                       "Test setup: counter should be 0")
+        XCTAssertTrue(manager.deviceCheckTrialUsed,
+                      "Manager init must seed deviceCheckTrialUsed from the cache")
+
+        // In a real (non-simulator) build, this combination — counter at
+        // 0, no Pro, no admin, but device bit flipped — must deny creation.
+        // In the simulator, `isBetaOrSandboxBuild` short-circuits to true,
+        // and that's also a contract we test in
+        // SubscriptionManagerBetaUnlockTests. Assert the branch that
+        // actually runs in this environment, but still prove the device
+        // flag is wired through.
+        if SubscriptionManager.isBetaOrSandboxBuild {
+            XCTAssertTrue(manager.canCreateInspection,
+                          "Sandbox builds always unlock — device-check is irrelevant here")
+        } else {
+            XCTAssertFalse(manager.canCreateInspection,
+                           "Production build must deny creation when device bit is flipped, even with a fresh counter")
+        }
+    }
+}

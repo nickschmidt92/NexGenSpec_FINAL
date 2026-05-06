@@ -36,9 +36,20 @@ struct NexGenSpecApp: App {
                 // so whitelisted admin emails get premium access automatically.
                 .onAppear {
                     subscriptions.applyCurrentUser(email: authManager.currentUsername)
+                    // Re-confirm DeviceCheck trial bit on every cold launch so
+                    // a Delete App + reinstall is detected immediately rather
+                    // than after the abuser has already started a 4th inspection.
+                    Task { await subscriptions.refreshDeviceCheckTrial() }
                 }
                 .onChange(of: authManager.currentUsername) { _, newEmail in
                     subscriptions.applyCurrentUser(email: newEmail)
+                    // After sign-in (email/password or Sign in with Apple),
+                    // re-check the device bit. The first call may have
+                    // returned `.unknown(.notAuthenticated)` because no
+                    // Firebase user existed yet — this catches that case.
+                    if newEmail != nil {
+                        Task { await subscriptions.refreshDeviceCheckTrial() }
+                    }
                 }
         }
     }
