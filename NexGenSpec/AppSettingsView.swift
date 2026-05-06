@@ -582,7 +582,12 @@ struct AppSettingsView: View {
     @MainActor
     private func finishLocalWipeAndDismiss() {
         store.clearAllLocalData()
-        authManager.logout()
+        // finalizeDeletion releases the auth-state hold set by deleteAccount()
+        // and flips isAuthenticated to false, triggering RootView to swap in
+        // LoginView. Call this AFTER any post-delete UI (receipt share sheet)
+        // has finished presenting — otherwise the host view tears down mid-
+        // present and the share sheet pops up and immediately disappears.
+        authManager.finalizeDeletion()
         dismiss()
     }
 

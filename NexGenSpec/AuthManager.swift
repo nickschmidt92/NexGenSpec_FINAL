@@ -41,6 +41,15 @@ public final class AuthManager: ObservableObject {
 
     private var authStateHandle: AuthStateDidChangeListenerHandle?
 
+    /// True while a Delete Account flow is in progress. Suppresses auth-state
+    /// teardown so the post-delete UI (deletion-receipt share sheet) can finish
+    /// presenting before RootView swaps LoginView in. Without this flag,
+    /// Firebase's `user.delete()` synchronously fires the auth listener with
+    /// `user == nil`, which collapses the entire MainTabView hierarchy and
+    /// pulls the rug out from under the share sheet — making it pop up and
+    /// vanish in the same frame.
+    @Published public private(set) var isDeletingAccount = false
+
     public init() {
         // Rehydrate session on launch and keep state in sync with Firebase.
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
@@ -57,6 +66,11 @@ public final class AuthManager: ObservableObject {
     }
 
     private func applyUser(_ user: User?) {
+        // Hold the UI state pinned to "still authenticated" while a delete is
+        // in flight; finalizeDeletion() flushes the real nil at the right time.
+        if isDeletingAccount && user == nil {
+            return
+        }
         if let user {
             isAuthenticated = true
             currentUsername = user.email
@@ -356,10 +370,18 @@ public final class AuthManager: ObservableObject {
     /// `reauthenticateWithPassword(_:)` / `reauthenticateWithApple()` before retrying.
     public func deleteAccount() async throws {
         guard let user = Auth.auth().currentUser else { throw DeleteAccountError.notSignedIn }
+        // Suppress auth-state teardown until the receipt-share-sheet flow
+        // finishes. Without this, Firebase's user.delete() synchronously
+        // signals "no user", the listener fires applyUser(nil), RootView
+        // swaps in LoginView, and the share sheet sees its host disappear
+        // in the same frame it tries to present.
+        isDeletingAccount = true
         do {
             try await user.delete()
-            applyUser(nil)
+            // Intentionally NOT calling applyUser(nil) here — finalizeDeletion()
+            // is called from the share-sheet's onDismiss to release the gate.
         } catch {
+            isDeletingAccount = false
             let ns = error as NSError
             if ns.domain == AuthErrorDomain,
                let code = AuthErrorCode(rawValue: ns.code),
@@ -375,6 +397,16 @@ public final class AuthManager: ObservableObject {
             }
             throw DeleteAccountError.other(Self.friendlyMessage(for: error))
         }
+    }
+
+    /// Releases the auth-state hold set by `deleteAccount()` and applies the
+    /// post-delete `nil` user — flipping `isAuthenticated` to false and
+    /// triggering RootView's swap to LoginView. Call this AFTER any
+    /// post-delete UI (receipt share sheet, banner, etc.) has finished
+    /// presenting. Safe to call when `isDeletingAccount` is already false.
+    public func finalizeDeletion() {
+        isDeletingAccount = false
+        applyUser(Auth.auth().currentUser)
     }
 
     /// Re-authenticates the current email/password user so a sensitive operation
