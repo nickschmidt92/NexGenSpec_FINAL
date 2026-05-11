@@ -70,7 +70,8 @@ final class InspectorProfile: ObservableObject {
     // MARK: - Disk persistence
 
     private static var logoURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         return docs.appendingPathComponent("company_logo.png")
     }
 

@@ -76,7 +76,6 @@ struct PrivacyPolicyView: View {
                             • Camera: Capture inspection photos and video. Saved only to NexGenSpec's secure storage — never written to your iPhone/iPad Photos app.
                             • Photo Library (read-only): Import existing photos and video into a specific inspection (e.g. drone or thermal imagery you AirDropped). NexGenSpec never writes back to your Photo Library, never scans it in the background, and never accesses photos outside picker actions you initiate.
                             • Calendar (optional): Writes scheduled inspection events to a calendar of your choice. Only on your device.
-                            • Microphone: Recorded only when you capture in-app video with audio.
                             • Notifications (optional): Inspection reminders.
 
                             Revoke any permission anytime in iOS Settings → NexGenSpec.
