@@ -33,7 +33,7 @@
           "displayPrice" : "449.00",
           "familyShareable" : false,
           "groupNumber" : 1,
-          "internalID" : "annual",
+          "internalID" : "annualv1",
           "introductoryOffer" : null,
           "localizations" : [
             {
@@ -42,7 +42,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.nexgenspec.annual",
+          "productID" : "com.nexgenspec.annualv1",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Pro Annual",
           "subscriptionGroupID" : "nexgenspec_pro",
@@ -58,7 +58,7 @@
           "displayPrice" : "49.00",
           "familyShareable" : false,
           "groupNumber" : 2,
-          "internalID" : "monthly1",
+          "internalID" : "monthlyv1",
           "introductoryOffer" : null,
           "localizations" : [
             {
@@ -67,7 +67,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.nexgenspec.monthly1",
+          "productID" : "com.nexgenspec.monthlyv1",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Pro Monthly",
           "subscriptionGroupID" : "nexgenspec_pro",

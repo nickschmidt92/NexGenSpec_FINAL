@@ -7,8 +7,8 @@
 //  of the app can gate features (export, unlimited inspections, etc.).
 //
 //  Product IDs configured in App Store Connect (NexGenSpec Pro group):
-//    - com.nexgenspec.monthly1     ($49  / month)  — Tier 49
-//    - com.nexgenspec.annual       ($449 / year)   — Tier 449
+//    - com.nexgenspec.monthlyv1    ($49  / month)  — Tier 49
+//    - com.nexgenspec.annualv1     ($449 / year)   — Tier 449
 //
 //  Pricing locked by D-0045 (2026-04-27): single plan, auto-renew, annual
 //  is the upgrade tier within the `nexgenspec_pro` subscription group.
@@ -25,8 +25,8 @@ public final class SubscriptionManager: ObservableObject {
 
     public enum ProductID {
         // Current single-tier Pro products
-        public static let monthly = "com.nexgenspec.monthly1"
-        public static let annual  = "com.nexgenspec.annual"
+        public static let monthly = "com.nexgenspec.monthlyv1"
+        public static let annual  = "com.nexgenspec.annualv1"
 
         // Legacy IDs (old two-tier pricing) — kept so existing subscribers
         // retain entitlements if they purchased before the tier change.
