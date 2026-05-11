@@ -50,6 +50,12 @@ final class LiDARCapturePending: ObservableObject {
 final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomCaptureSessionDelegate, NSCoding {
     weak var pending: LiDARCapturePending?
 
+    /// Fires when the underlying RoomCaptureSession reports an unrecoverable
+    /// failure (ARKit tracking lost, sensor blocked, etc.). Host controller
+    /// uses this to surface an actionable alert instead of leaving the user
+    /// staring at a frozen scan UI.
+    var onSessionFailed: ((Error) -> Void)?
+
     /// Held so we can process `CapturedRoomData` ourselves as a fallback path
     /// when the view-delegate `didPresent` callback doesn't fire (observed in
     /// the wild on some devices — session ends but the preview never finalizes).
@@ -108,6 +114,16 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
             }
         }
     }
+
+    /// Fires when ARKit / RoomPlan can't continue (tracking lost, sensor
+    /// blocked, hardware issue, low-light). The didEndWith path may also
+    /// fire with an error, but didFailWith is the canonical signal for
+    /// non-recoverable session failures mid-scan.
+    func captureSession(_ session: RoomCaptureSession, didFailWith error: Error) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onSessionFailed?(error)
+        }
+    }
 }
 
 @available(iOS 16.0, *)
@@ -141,6 +157,9 @@ struct RoomPlanCaptureViewControllerRepresentable: UIViewControllerRepresentable
         }
         vc.onSaveTapped = {
             onSaveRequested()
+        }
+        context.coordinator.onSessionFailed = { [weak vc] error in
+            vc?.sessionDidFail(with: error)
         }
         return vc
     }
@@ -327,6 +346,31 @@ final class RoomCaptureHostController: UIViewController {
         let alert = UIAlertController(
             title: "Scan couldn't be processed",
             message: "RoomPlan didn't return a finished 3D model in time. This can happen in rooms with very little surface detail or when the scan was too brief.\n\nTry again — move the device slowly around the entire perimeter of the room for at least 20 seconds, keeping walls, floor, and ceiling in view.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Try Again", style: .default) { [weak self] _ in
+            self?.onCancelTapped?()
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
+            self?.onCancelTapped?()
+        })
+        present(alert, animated: true)
+    }
+
+    /// Called from the coordinator when RoomCaptureSession reports a
+    /// non-recoverable failure mid-scan (ARKit tracking lost, sensor
+    /// blocked, low-light). Cancels any armed processing timeout,
+    /// surfaces the error, and routes the user back through the
+    /// existing cancel path so the SwiftUI parent dismisses cleanly.
+    func sessionDidFail(with error: Error) {
+        guard state != .readyToSave else { return }
+        guard presentedViewController == nil else { return }
+        processingTimeoutTask?.cancel()
+        processingTimeoutTask = nil
+        Diagnostics.logError(context: "RoomCaptureSession.didFailWith", error: error)
+        let alert = UIAlertController(
+            title: "Scan couldn't continue",
+            message: "RoomPlan ran into an issue: \(error.localizedDescription)\n\nThis can happen in low-light rooms, when the LiDAR sensor is covered, or when device tracking is lost. Try again with steady movement, good lighting, and a clear view of the room.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "Try Again", style: .default) { [weak self] _ in
