@@ -14,6 +14,7 @@
 - **Version**: Marketing Version `1.0.0`, current Build `9`. Bump to `10` for the next TestFlight upload (in Xcode: target → **General** → **Current Project Version**).
 - **Privacy**: `PrivacyInfo.xcprivacy` is at `NexGenSpec/PrivacyInfo.xcprivacy`. Usage descriptions present (verified 2026-05-10): `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSCalendarsUsageDescription`, `NSCalendarsFullAccessUsageDescription`, `NSLocationWhenInUseUsageDescription`. No microphone / speech-recognition keys (NGS does not use voice input — confirmed by codebase grep).
 - **Capabilities**: Add any required capabilities (e.g. iCloud) in Xcode if needed.
+- **Mac availability**: Explicitly disabled. `SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO` is set on both Debug and Release configs of the main app target. Why: NGS depends on LiDAR (RoomPlan) and is built for inspectors in the field on iPad Pro hardware (D-0085). Macs lack a LiDAR sensor, so running the iPad binary on Apple Silicon Macs via Apple's automatic "iPhone & iPad Apps on Mac" feature would surface a paywall-then-broken-feature flow that earns bad reviews. If a future release adds a real Mac Catalyst or native macOS target, flip this back to `YES` on the same setting and update this note.
 
 ## Steps to deploy to TestFlight
 
