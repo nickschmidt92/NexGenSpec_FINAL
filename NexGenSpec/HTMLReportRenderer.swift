@@ -102,12 +102,14 @@ enum HTMLReportRenderer {
         @page { size: A4 portrait; margin: 24px; }
         * { box-sizing: border-box; }
         html, body { background: #f4f7fb; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; overflow-wrap: anywhere; word-wrap: break-word; }
         .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-25deg); font-size: 48px; font-weight: bold; color: rgba(0,0,0,0.08); pointer-events: none; z-index: 0; }
         .free-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-30deg); font-size: 56px; font-weight: 900; color: rgba(0,100,200,0.10); pointer-events: none; z-index: 9999; letter-spacing: 4px; white-space: nowrap; }
         .free-banner { background: linear-gradient(135deg, #0066cc, #00aaff); color: #fff; text-align: center; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.9rem; font-weight: 600; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
-        .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; }
+        .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; break-inside: avoid-page; page-break-inside: avoid; }
+        .item-card { break-inside: auto; page-break-inside: auto; }
+        .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .header-card { margin-bottom: 24px; border-top: 4px solid #0066cc; }
         h1 { margin: 0 0 8px; font-size: 1.75rem; }
         .meta { color: #666; font-size: 0.95rem; }
@@ -141,7 +143,6 @@ enum HTMLReportRenderer {
             display: block;
             width: 100%;
             aspect-ratio: 4 / 3;
-            max-height: 1.7in;
             object-fit: cover;
             border-radius: 6px;
             page-break-inside: avoid;
@@ -167,6 +168,7 @@ enum HTMLReportRenderer {
         @media print {
           html, body { background: #fff !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .card { background: #fff !important; box-shadow: none !important; break-inside: avoid-page; page-break-inside: avoid; }
+          .item-card { break-inside: auto !important; page-break-inside: auto !important; }
           .meta, .footer { color: #555 !important; }
           .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .cover-page { min-height: 100vh; }
@@ -302,13 +304,13 @@ enum HTMLReportRenderer {
             html += "<div class=\"card\" style=\"page-break-before:always;\"><h2 class=\"section-title\">Room Scans (LiDAR) — Reference</h2>"
             html += "<p class=\"meta\" style=\"font-style:italic;color:#666;\">These floor plans are generated from a device-level LiDAR scan and represent rough estimates of room geometry. They are intended as spatial reference only and should not be used for construction or measurement-critical decisions.</p>"
             for scan in lidarScans {
-                html += "<div style=\"margin-bottom:18px;\">"
+                html += "<div style=\"margin-bottom:18px;page-break-inside:avoid;break-inside:avoid;\">"
                 html += "<p class=\"meta\"><strong>\(escapeHTML(scan.displayName))</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
                 if let pngName = scan.floorplanPNGFileName {
                     let pngURL = lidarDir.appendingPathComponent(pngName)
                     if let pngData = try? Data(contentsOf: pngURL) {
                         let b64 = pngData.base64EncodedString()
-                        html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;height:auto;border:1px solid #ccc;border-radius:6px;\" />"
+                        html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;max-height:7in;height:auto;object-fit:contain;border:1px solid #ccc;border-radius:6px;\" />"
                     }
                 }
                 html += "</div>"
@@ -432,13 +434,13 @@ enum HTMLReportRenderer {
         <div class="card defect-summary-page" style="page-break-after:always;">
         <h2 class="section-title" style="color:#0066cc;margin-top:0;">Defect Summary</h2>
         <p class="meta" style="margin-bottom:12px;">\(rows.count) defect\(rows.count == 1 ? "" : "s") identified across all sections.</p>
-        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;table-layout:fixed;word-wrap:break-word;overflow-wrap:anywhere;">
         <thead>
         <tr style="background:#0066cc;color:#fff;text-align:left;">
-        <th style="padding:10px 8px;border-radius:8px 0 0 0;">Room / Section</th>
-        <th style="padding:10px 8px;">Defect Description</th>
-        <th style="padding:10px 8px;">Severity</th>
-        <th style="padding:10px 8px;border-radius:0 8px 0 0;">Photo</th>
+        <th style="padding:10px 8px;border-radius:8px 0 0 0;width:18%;">Room / Section</th>
+        <th style="padding:10px 8px;width:52%;">Defect Description</th>
+        <th style="padding:10px 8px;width:12%;">Severity</th>
+        <th style="padding:10px 8px;border-radius:0 8px 0 0;width:18%;">Photo</th>
         </tr>
         </thead>
         <tbody>
