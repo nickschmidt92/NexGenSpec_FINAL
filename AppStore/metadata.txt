@@ -1,6 +1,6 @@
 ═══════════════════════════════════════════════════════════════
   NEXGENSPEC — APP STORE METADATA
-  Last updated: 2026-04-26 (1.0.0 launch prep)
+  Last updated: 2026-05-10 (1.0.0 launch prep, pricing aligned to D-0045)
 ═══════════════════════════════════════════════════════════════
 
 CATEGORY:          Business (Primary) / Utilities (Secondary)
@@ -65,7 +65,7 @@ NexGenSpec is free to download with 3 full-featured inspections. Upgrade to Pro 
 - Annotation pack
 - Invoicing & client delivery
 
-Pro: $28.99/month or $289.99/year
+Pro: $49/month or $449/year
 
 Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings > Apple ID > Subscriptions.
 
@@ -112,7 +112,7 @@ Demo Account:
 Notes for Reviewer:
 - This is a professional home inspection app for licensed property inspectors.
 - The app requires login to protect inspection data (client PII, property photos).
-- Free users get 3 complete inspections with full PDF export. After 3 inspections, a Pro subscription ($28.99/mo or $289.99/yr) is required to continue creating new inspections.
+- Free users get 3 complete inspections with full PDF export. After 3 inspections, a Pro subscription ($49/mo or $449/yr) is required to continue creating new inspections.
 - LiDAR room scanning requires a device with a LiDAR sensor (iPad Pro, iPhone Pro). If the device has no LiDAR sensor the feature is hidden — this is expected.
 - Company logo upload (Settings → Inspector Profile) brands every PDF report. If no logo is uploaded, the NexGenSpec app icon is used as a default.
 - Calendar integration is optional. The first time the inspector taps "Add to Calendar" on an inspection, iOS prompts for Calendar access. Granting the permission lets the app create / update / remove EKEvents linked to that inspection. Declining the permission disables only this feature; the rest of the app works unchanged.
