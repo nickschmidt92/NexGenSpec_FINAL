@@ -1,11 +1,18 @@
 # NexGenSpec – TestFlight Deployment
 
+> **Doc scope:** Xcode-side build/upload mechanics only. For the operator runbooks that gate App Store submission, see:
+> - **DeviceCheck (Cloud Functions + Apple key + secrets):** `docs/devicecheck-setup.md` (T-01336)
+> - **In-App Purchases (subscription group + 2 products in ASC):** `AppStore/iap-setup-steps.md` (T-01222)
+> - **App Store listing copy + keywords:** `AppStore/metadata.txt` + `marketing/ASO.md` (T-01133)
+
+**Last updated:** 2026-05-10 (build 9 staged, next upload = build 10)
+
 ## Pre-flight checklist
 
 - **Team**: Signing & Capabilities uses Development Team `CPTLCQYSJJ` (already set).
 - **Bundle ID**: `com.nexgenspec.app` (already set).
-- **Version**: Marketing Version `1.0`, Build `1` (in Xcode: **General** tab).
-- **Privacy**: `PrivacyInfo.xcprivacy` is in the app target; Camera and Photo Library usage descriptions are in build settings.
+- **Version**: Marketing Version `1.0.0`, current Build `9`. Bump to `10` for the next TestFlight upload (in Xcode: target → **General** → **Current Project Version**).
+- **Privacy**: `PrivacyInfo.xcprivacy` is at `NexGenSpec/PrivacyInfo.xcprivacy`. Usage descriptions present (verified 2026-05-10): `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSCalendarsUsageDescription`, `NSCalendarsFullAccessUsageDescription`, `NSLocationWhenInUseUsageDescription`. No microphone / speech-recognition keys (NGS does not use voice input — confirmed by codebase grep).
 - **Capabilities**: Add any required capabilities (e.g. iCloud) in Xcode if needed.
 
 ## Steps to deploy to TestFlight

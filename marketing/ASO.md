@@ -1,6 +1,6 @@
 # NexGenSpec — App Store Optimization (ASO)
 
-**Last updated:** 2026-04-17
+**Last updated:** 2026-05-10
 **Status:** Ready to paste into App Store Connect when submitting for public review
 
 ---
@@ -29,7 +29,7 @@ Home Inspection Reports
 
 ### Keywords (100 char limit, comma-separated, NOT user-visible)
 ```
-inspector,property,condo,house,report,PDF,photo,annotate,LiDAR,scan,scheduler,calendar,voice,iPad
+inspector,property,condo,house,report,PDF,photo,annotate,LiDAR,scan,scheduler,calendar,invoice,iPad
 ```
 **100 chars exactly.** Rules of this field:
 - No spaces after commas (saves chars)
@@ -141,9 +141,10 @@ These are the names ranking ahead of us in App Store search for "home inspection
 |---|---|---|
 | Spectora | Established brand, web + iOS | Native iPad-first UX, LiDAR, offline-first |
 | HomeGauge | Enterprise, strong PDF output | Simpler setup, no IT required |
-| InspectIt | Cheap monthly price | LiDAR + voice (they have neither) |
+| InspectIt | Cheap monthly price | LiDAR scanning + Apple Pencil annotations |
 | Tap Inspect | Template library | Calendar conflict detection is unique |
 | Horizon Inspection | Desktop heritage | Built for iPad from day one |
+| Scribeware | Desktop-primary, multi-inspector firms ($89-$99/mo + $69 per extra inspector) | iPad-native + solo focus + ~50% cheaper ($449/yr vs $1,068/yr). Their iOS app has only 31 ratings — secondary surface for them. Don't compete on multi-inspector (their wheelhouse); lean into solo. NGS gaps to acknowledge: no voice-to-text dictation, no ISN/Keystone scheduling integration — both candidates for v1.1. |
 
 ---
 

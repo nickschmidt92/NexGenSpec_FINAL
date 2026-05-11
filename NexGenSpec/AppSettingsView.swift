@@ -261,7 +261,7 @@ struct AppSettingsView: View {
                         .buttonStyle(.plain)
                     }
 
-                    if authManager.isAdmin {
+                    if subscriptions.isAdminAccount {
                         SettingsSectionCard(
                             title: "Admin Backup",
                             subtitle: "Encrypted backups stay in the protected app backup directory."
@@ -645,7 +645,7 @@ struct AppSettingsView: View {
     }
 
     private func runRetentionPurge() {
-        let result = store.purgeExpiredInspections(isAdmin: authManager.isAdmin, actorId: authManager.currentUsername)
+        let result = store.purgeExpiredInspections(isAdmin: subscriptions.isAdminAccount, actorId: authManager.currentUsername)
         purgeSummary = "Deleted: \(result.deletedInspectionIDs.count)\nSkipped: \(result.skippedInspectionIDs.count)"
         showPurgeResult = true
     }
