@@ -440,6 +440,8 @@ public extension Inspection {
 // MARK: - Version
 
 public struct InspectionVersion: Identifiable, Codable, Equatable {
+    /// Schema version anchor. v1.0 ships as 1. Beta JSON without this key decodes as 1.
+    public var schemaVersion: Int
     public var inspectionVersionId: UUID
     public var versionNumber: Int
     public var status: VersionStatus
@@ -455,14 +457,37 @@ public struct InspectionVersion: Identifiable, Codable, Equatable {
         status: VersionStatus,
         finalizedAt: Date? = nil,
         locked: Bool,
-        inspection: Inspection
+        inspection: Inspection,
+        schemaVersion: Int = 1
     ) {
+        self.schemaVersion = schemaVersion
         self.inspectionVersionId = id
         self.versionNumber = versionNumber
         self.status = status
         self.finalizedAt = finalizedAt
         self.locked = locked
         self.inspection = inspection
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case inspectionVersionId
+        case versionNumber
+        case status
+        case finalizedAt
+        case locked
+        case inspection
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        self.inspectionVersionId = try c.decode(UUID.self, forKey: .inspectionVersionId)
+        self.versionNumber = try c.decode(Int.self, forKey: .versionNumber)
+        self.status = try c.decode(VersionStatus.self, forKey: .status)
+        self.finalizedAt = try c.decodeIfPresent(Date.self, forKey: .finalizedAt)
+        self.locked = try c.decode(Bool.self, forKey: .locked)
+        self.inspection = try c.decode(Inspection.self, forKey: .inspection)
     }
 }
 
