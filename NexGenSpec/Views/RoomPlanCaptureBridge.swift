@@ -281,6 +281,7 @@ final class RoomCaptureHostController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        guard LiDARCapability.isSupported else { return }
         let config = RoomCaptureSession.Configuration()
         captureView.captureSession.run(configuration: config)
     }
