@@ -2,7 +2,7 @@
 
 **Status:** Planning only. No code changes committed. Do not start implementation until TestFlight → public launch cycle has produced ≥3 paying customers asking for team features.
 
-**Author:** Nick + Claude, 2026-04-17
+**Author:** Nick + Claude, 2026-04-17 (solo-pricing row updated 2026-05-10 to match D-0045 launch pricing — team-tier hypotheses unchanged, still subject to v2 product validation)
 **Target:** NexGenSpec v2.0.0 (a version bump, not a dot release — breaks data model)
 
 ---
@@ -157,7 +157,7 @@ function hasRole(teamId, allowedRoles) {
 | Tier | Price | What's unlocked |
 |---|---|---|
 | Free | $0 | 3 lifetime inspections, no team |
-| Pro (solo) | $28.99/mo or $289.99/yr | Unlimited inspections, solo only |
+| Pro (solo) | $49/mo or $449/yr | Unlimited inspections, solo only |
 | Team Starter | $59.99/mo or $599.99/yr | Up to 3 seats, all features |
 | Team Growth | $19.99/mo per seat (flat) | 4–25 seats, all features |
 
