@@ -37,6 +37,12 @@ struct InvoiceAndSendView: View {
     private var sentAtKey: String { "invoice.sentAt.\(version.inspection.inspectionId)" }
     private var paidAtKey: String { "invoice.paidAt.\(version.inspection.inspectionId)" }
 
+    /// Once the invoice has been emailed to the client, the dollar amounts and
+    /// services description are locked. Editing them after send would let the
+    /// inspector show a different invoice in-app than the one the client
+    /// received — i.e. an audit-trail break (T-01384).
+    private var isInvoiceLocked: Bool { invoiceSentAt != nil }
+
     var body: some View {
         Form {
             Section(header: Text("Customer Contact")) {
@@ -96,11 +102,12 @@ struct InvoiceAndSendView: View {
                     }
                 }
             }
-            Section(header: Text("Invoice")) {
+            Section {
                 HStack(spacing: 2) {
                     Text("$")
                     TextField("Price", text: $invoicePrice)
                         .keyboardType(.decimalPad)
+                        .decimalFiltered($invoicePrice)
                 }
                 TextField("Additional services", text: $additionalServices, axis: .vertical)
                     .lineLimit(3...6)
@@ -108,8 +115,18 @@ struct InvoiceAndSendView: View {
                     Text("$")
                     TextField("Total", text: $invoiceTotal)
                         .keyboardType(.decimalPad)
+                        .decimalFiltered($invoiceTotal)
+                }
+            } header: {
+                Text("Invoice")
+            } footer: {
+                if isInvoiceLocked {
+                    Text("Locked after the invoice was emailed to the client.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .disabled(isInvoiceLocked)
             // Legal / liability disclaimer — NexGenSpec is a reporting
             // tool, not a payment processor. Client pays the inspector
             // directly via whatever method the two agree on outside

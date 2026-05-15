@@ -388,3 +388,42 @@ extension View {
         modifier(PhoneNumberFormatter(text: text))
     }
 }
+
+// MARK: - Decimal-Only Input Filter
+
+/// Strips anything that isn't a digit or a single decimal point. `.keyboardType(.decimalPad)`
+/// already covers the on-screen keypad, but doesn't catch paste, hardware keyboards, or
+/// dictation — this binding wrapper does (T-01385).
+func filterDecimal(_ value: String) -> String {
+    var sawDot = false
+    var out = ""
+    for ch in value {
+        if ch.isWholeNumber {
+            out.append(ch)
+        } else if ch == "." && !sawDot {
+            sawDot = true
+            out.append(ch)
+        }
+    }
+    return out
+}
+
+struct DecimalOnlyFilter: ViewModifier {
+    @Binding var text: String
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: text) { _, newValue in
+                let filtered = filterDecimal(newValue)
+                if filtered != newValue {
+                    text = filtered
+                }
+            }
+    }
+}
+
+extension View {
+    func decimalFiltered(_ text: Binding<String>) -> some View {
+        modifier(DecimalOnlyFilter(text: text))
+    }
+}
