@@ -23,8 +23,9 @@ For each type, ASC asks: linked to user / used for tracking / purposes.
 - **Used to track user:** ✗
 - **Purposes:** App Functionality, Account Management
 
-> Justification: Firebase Auth uses email/password sign-in. Email is the
-> account key. Quoted from `PrivacyInfo.xcprivacy`.
+> Justification: Firebase Auth uses email/password or Sign in with Apple.
+> Email is the account key (Apple private-relay address if the user hides it).
+> Quoted from `PrivacyInfo.xcprivacy`.
 
 ### User Content → Photos or Videos
 
@@ -45,6 +46,12 @@ For each type, ASC asks: linked to user / used for tracking / purposes.
 
 > Justification: Inspection notes, client name, property address,
 > defect commentary, signatures.
+>
+> Note (applies to Photos/Videos + Other User Content above): this content is
+> stored on-device only and is never transmitted to NexGenSpec servers. Under
+> Apple's definition ("collect" = transmitted off device), these two arguably
+> belong in "Not Collected"; they are disclosed here conservatively. Revisit if
+> cloud sync or server-side report storage ever ships.
 
 ### Location → Coarse Location
 
@@ -53,9 +60,11 @@ For each type, ASC asks: linked to user / used for tracking / purposes.
 - **Used to track user:** ✗
 - **Purposes:** App Functionality
 
-> Justification: WeatherKit uses coarse location to fetch the weather
-> stamp at inspection start. Not stored beyond the WeatherData blob on the
-> inspection record. Quoted from `PrivacyInfo.xcprivacy:90-102`.
+> Justification: Coarse location at inspection start is used to (a) fetch the
+> WeatherKit weather stamp and (b) reverse-geocode the property address that
+> auto-fills the inspection record. The raw coordinate is not retained; the
+> derived address is stored as user content on the inspection. Transmitted to
+> Apple (WeatherKit) only — no third party. Quoted from `PrivacyInfo.xcprivacy:90-102`.
 
 ### Diagnostics → Crash Data
 

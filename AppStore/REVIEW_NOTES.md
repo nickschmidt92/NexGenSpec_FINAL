@@ -14,7 +14,7 @@ Password: `NexGen-Review-2026!`
 This account is pre-flagged with full Pro entitlement so the reviewer can
 test every paywalled feature without going through StoreKit. To test the
 free-trial gate: any signed-in account starts with 3 free full
-inspections (counted by `SubscriptionManager.trialCount` + DeviceCheck).
+inspections (counted by `SubscriptionManager.freeInspectionsUsed` against `freeInspectionLimit = 3`, plus DeviceCheck).
 
 To test the paywall purchase flow, the reviewer should use a sandbox
 Apple ID — both subscriptions (`com.nexgenspec.annualv1` at $449/yr and
@@ -43,7 +43,7 @@ StoreKit. This is intentional StoreKit best practice — losing
 subscription benefits the moment a user enters an elevator or boards a
 flight would be a poor user experience. After 7 days offline, or at the
 first online check, real-time entitlement is restored. Implementation:
-`NexGenSpec/SubscriptionManager.swift:198-239`.
+`NexGenSpec/Services/SubscriptionManager.swift:194-239`.
 
 **"Mark Invoice as Paid" is record-keeping only.**
 The Invoice & Send screen includes a "Mark Invoice as Paid" toggle.
@@ -58,7 +58,7 @@ collected, transmitted, or stored.
 ## Privacy & Data
 
 NexGenSpec stores inspection data on-device with iOS Data Protection
-enabled (NSFileProtectionComplete). The only network usage is:
+enabled (NSFileProtectionCompleteUnlessOpen). The only network usage is:
 
 - **Firebase Auth** — for sign-in (email/password or Sign in with Apple)
 - **Firebase Crashlytics** — anonymized crash reports
