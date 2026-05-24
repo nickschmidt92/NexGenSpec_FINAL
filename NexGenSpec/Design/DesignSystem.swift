@@ -398,7 +398,7 @@ func filterDecimal(_ value: String) -> String {
     var sawDot = false
     var out = ""
     for ch in value {
-        if ch.isWholeNumber {
+        if ch.isASCII && ch.isNumber {
             out.append(ch)
         } else if ch == "." && !sawDot {
             sawDot = true

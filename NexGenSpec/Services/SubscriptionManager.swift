@@ -32,12 +32,16 @@ public final class SubscriptionManager: ObservableObject {
         // retain entitlements if they purchased before the tier change.
         static let legacyMonthlyPro = "com.nexgenspec.monthlypro1"
         static let legacyAnnualPro  = "com.nexgenspec.annualpro1"
+        // Pre-v1 single-tier IDs (replaced by monthlyv1/annualv1 in this build) —
+        // kept so anyone who subscribed under them retains Pro.
+        static let legacyMonthlyV0  = "com.nexgenspec.monthly1"
+        static let legacyAnnualV0   = "com.nexgenspec.annual"
 
         /// Products available for purchase (shown in paywall).
         public static let current: [String] = [annual, monthly]
 
         /// All recognized IDs including legacy (used for entitlement checks).
-        public static let all: [String] = [annual, monthly, legacyAnnualPro, legacyMonthlyPro]
+        public static let all: [String] = [annual, monthly, legacyAnnualPro, legacyMonthlyPro, legacyAnnualV0, legacyMonthlyV0]
     }
 
     // MARK: - Free trial

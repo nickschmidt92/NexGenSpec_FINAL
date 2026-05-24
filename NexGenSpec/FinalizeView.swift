@@ -48,7 +48,7 @@ struct FinalizeView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("\(section.title), \(defectCount) defects")
+                        .accessibilityLabel("\(section.title), \(defectCount) defect\(defectCount == 1 ? "" : "s")")
                     }
                 }
                 Section(

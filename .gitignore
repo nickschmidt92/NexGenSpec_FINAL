@@ -23,3 +23,12 @@ _backups/
 
 # Agent / tooling local state
 .claude/
+
+# Screenshot fixture: photos are AI-generated and re-generated as needed.
+# Keep the directory tracked via .gitkeep but ignore the actual images.
+marketing/screenshot-assets/*.jpg
+marketing/screenshot-assets/*.png
+!marketing/screenshot-assets/.gitkeep
+
+# Live-fetched web pages stored as styling reference, not deliverables
+marketing/website-pages/*.reference

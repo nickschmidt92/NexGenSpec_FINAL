@@ -93,7 +93,15 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
     func captureSession(_ session: RoomCaptureSession,
                         didEndWith data: CapturedRoomData,
                         error: Error?) {
-        guard error == nil else { return }
+        if let error = error {
+            // RoomPlan reports unrecoverable failures (tracking lost, sensor
+            // blocked, low-light) through this error param — there is no separate
+            // didFailWith delegate method. Surface it instead of swallowing.
+            DispatchQueue.main.async { [weak self] in
+                self?.onSessionFailed?(error)
+            }
+            return
+        }
         guard let builder = self.roomBuilder else { return }
         // Capture `pending` strongly into the Task so we don't have to touch
         // `self` from the concurrent context (Swift 6 rejects that). The
@@ -112,16 +120,6 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
                 // Swallow — the host controller's timeout will surface an
                 // error to the user if neither path produces a room.
             }
-        }
-    }
-
-    /// Fires when ARKit / RoomPlan can't continue (tracking lost, sensor
-    /// blocked, hardware issue, low-light). The didEndWith path may also
-    /// fire with an error, but didFailWith is the canonical signal for
-    /// non-recoverable session failures mid-scan.
-    func captureSession(_ session: RoomCaptureSession, didFailWith error: Error) {
-        DispatchQueue.main.async { [weak self] in
-            self?.onSessionFailed?(error)
         }
     }
 }
