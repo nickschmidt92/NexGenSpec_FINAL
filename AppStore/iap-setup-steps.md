@@ -19,8 +19,8 @@ NexGenSpec ships with two auto-renewing subscriptions, both inside a single subs
 
 | Product ID | Display | Price | Group rank | Notes |
 |---|---|---|---|---|
-| `com.nexgenspec.annual` | NexGenSpec Pro — Annual | **$449/yr** | **1** | Higher rank = upgrade tier |
-| `com.nexgenspec.monthly1` | NexGenSpec Pro — Monthly | **$49/mo** | **2** | Lower rank = base tier |
+| `com.nexgenspec.annualv1` | NexGenSpec Pro — Annual | **$449/yr** | **1** | Higher rank = upgrade tier |
+| `com.nexgenspec.monthlyv1` | NexGenSpec Pro — Monthly | **$49/mo** | **2** | Lower rank = base tier |
 
 Shared `subscriptionGroupID = nexgenspec_pro` is what makes them upgrade/downgrade siblings in iOS. The `groupNumber` ranks (1 vs 2) define the order Apple presents them and which is treated as the "upgrade." Per D-0083, **rank 1=annual, rank 2=monthly is correct and intentional** — this is the standard Apple pattern. If a future audit re-flags this as "wrong," point to D-0083 and close the alarm.
 
@@ -56,7 +56,7 @@ Verify before continuing:
 
 1. Inside the subscription group → **Create Subscription**.
 2. **Reference Name:** `NexGenSpec Pro Annual`
-3. **Product ID:** `com.nexgenspec.annual`  ← **must match exactly**, no typos, lowercase, no version suffix
+3. **Product ID:** `com.nexgenspec.annualv1`  ← **must match exactly**, lowercase. The `v1` suffix is intentional per D-0108 (versioned IDs let future v2 paywalls swap pricing without touching the v1 product).
 4. **Subscription Duration:** `1 Year`
 5. **Subscription Group:** the group you created in §3
 6. **Subscription Price** → choose **USD $449.00** as the base. ASC will auto-calculate other-currency tiers; accept the defaults unless you want to manually pin a non-US price.
@@ -78,7 +78,7 @@ Repeat §4 with these substitutions:
 | Field | Value |
 |---|---|
 | Reference Name | `NexGenSpec Pro Monthly` |
-| Product ID | `com.nexgenspec.monthly1` |
+| Product ID | `com.nexgenspec.monthlyv1` |
 | Subscription Duration | `1 Month` |
 | Subscription Price | **USD $49.00** |
 | Display Name | `NexGenSpec Pro — Monthly` |
@@ -116,7 +116,7 @@ Note: this is the **local** verification (.storekit file → simulator). ASC san
 ## 8. Submit
 
 1. App Store Connect → **NexGenSpec** → **App Store** tab → **iOS App** → **+ Version or Platform** if a 1.0 version row does not already exist.
-2. In the version's **In-App Purchases** section: **+ Add IAP** → select **both** `com.nexgenspec.annual` and `com.nexgenspec.monthly1`.
+2. In the version's **In-App Purchases** section: **+ Add IAP** → select **both** `com.nexgenspec.annualv1` and `com.nexgenspec.monthlyv1`.
 3. Make sure each IAP shows **Ready to Submit** status (green or yellow dot; never red).
 4. The IAPs submit with the binary. You **cannot** submit IAPs for review without submitting the binary that uses them (and vice versa). One bundle, one review.
 

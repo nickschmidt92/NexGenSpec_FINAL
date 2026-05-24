@@ -302,6 +302,18 @@ struct AppSettingsView: View {
                         }
                     }
 
+                    #if DEBUG
+                    SettingsSectionCard(
+                        title: "Debug — Screenshot Fixture",
+                        subtitle: "Loads two demo inspections (one draft for live PencilKit annotation, one ready-to-finalize) populated from marketing/screenshot-assets/. Debug builds only."
+                    ) {
+                        Button("Load Demo Inspection Data") {
+                            DemoModeFixture.populate(store: store)
+                        }
+                        .buttonStyle(AppPrimaryButtonStyle())
+                    }
+                    #endif
+
                 }
                 .frame(maxWidth: 860)
                 .padding(.horizontal, Spacing.md)
