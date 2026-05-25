@@ -26,7 +26,7 @@ struct NexGenSpecApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            rootContent
                 .environmentObject(store)
                 .environmentObject(authManager)
                 .environmentObject(subscriptions)
@@ -52,5 +52,19 @@ struct NexGenSpecApp: App {
                     }
                 }
         }
+    }
+
+    /// Production launches always go through RootView. Only a `-screenshotMode`
+    /// DEBUG launch is routed to the screenshot host (compiled out of Release).
+    @ViewBuilder private var rootContent: some View {
+        #if DEBUG
+        if ScreenshotMode.isActive {
+            ScreenshotHost()
+        } else {
+            RootView()
+        }
+        #else
+        RootView()
+        #endif
     }
 }
