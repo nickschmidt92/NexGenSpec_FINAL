@@ -572,6 +572,13 @@ struct AppSettingsView: View {
     /// Documents/NexGenSpecReceipts/ regardless of delivery choice.
     @MainActor
     private func proceedAfterFirebaseDelete(_ snapshot: AccountDeletionReceiptService.Inputs?) async {
+        // T-01412: Firebase has deleted the account; mark the local wipe as owed
+        // BEFORE it runs — and before the receipt share sheet, which the user can
+        // abandon by killing the app. This flag lives in UserDefaults, which
+        // clearAllLocalData() does not touch, so it survives the wipe and is
+        // cleared once the wipe actually completes (here on success, or on the
+        // next launch if this flow is interrupted).
+        UserDefaults.standard.set(true, forKey: "deletion-pending-wipe")
         guard let snapshot else {
             finishLocalWipeAndDismiss()
             return
@@ -594,6 +601,9 @@ struct AppSettingsView: View {
     @MainActor
     private func finishLocalWipeAndDismiss() {
         store.clearAllLocalData()
+        // The wipe completed in-flow, so the next-launch retry guard set in
+        // proceedAfterFirebaseDelete is no longer owed (T-01412).
+        UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
         // finalizeDeletion releases the auth-state hold set by deleteAccount()
         // and flips isAuthenticated to false, triggering RootView to swap in
         // LoginView. Call this AFTER any post-delete UI (receipt share sheet)
