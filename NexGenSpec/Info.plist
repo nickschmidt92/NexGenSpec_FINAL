@@ -13,6 +13,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NexGenSpec records video walkthroughs of inspection areas to include in your report.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used for importing/exporting inspection images and annotations.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
