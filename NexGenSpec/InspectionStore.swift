@@ -17,8 +17,23 @@ public final class InspectionStore: ObservableObject {
     @Published public private(set) var lastSavedAt: Date?
     @Published public private(set) var isSaving = false
     /// True when the inspection template failed to load (e.g. missing JSON). Create inspection will no-op.
+    /// Accessing this lazily loads the template (see `heavyTemplate`).
     public var templateLoadFailed: Bool { heavyTemplate == nil }
-    private var heavyTemplate: HeavyTemplate?
+
+    /// The ~115 KB bundled inspection template, parsed lazily on first use.
+    /// It is only needed when *creating* an inspection, so parsing it in
+    /// `init()` taxed every cold launch with a synchronous main-thread JSON
+    /// decode for no reason. Backed by `heavyTemplateCache` + a loaded flag so
+    /// a parse failure (nil) is cached too and not retried on every access.
+    private var heavyTemplateCache: HeavyTemplate?
+    private var heavyTemplateLoaded = false
+    private var heavyTemplate: HeavyTemplate? {
+        if !heavyTemplateLoaded {
+            heavyTemplateLoaded = true
+            heavyTemplateCache = Self.loadHeavyTemplateFromBundle()
+        }
+        return heavyTemplateCache
+    }
     private let indexURL = FilePaths.inspectionsIndex
     private var saveWorkItem: DispatchWorkItem?
     private let saveDebounceInterval: DispatchTimeInterval = .milliseconds(400)
@@ -26,7 +41,6 @@ public final class InspectionStore: ObservableObject {
 
     public init() {
         load()
-        loadHeavyTemplate()
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.saveWorkItem?.cancel()
@@ -36,14 +50,13 @@ public final class InspectionStore: ObservableObject {
         }
     }
 
-    private func loadHeavyTemplate() {
+    private static func loadHeavyTemplateFromBundle() -> HeavyTemplate? {
         let name = "InspectionTemplate"
         if let url = Bundle.main.url(forResource: name, withExtension: "json")
             ?? Bundle(for: Self.self).url(forResource: name, withExtension: "json") {
-            heavyTemplate = HeavyTemplateImporter.load(from: url)
-        } else {
-            heavyTemplate = InspectionStore.fallbackTemplate
+            return HeavyTemplateImporter.load(from: url)
         }
+        return InspectionStore.fallbackTemplate
     }
 
     private func load() {
