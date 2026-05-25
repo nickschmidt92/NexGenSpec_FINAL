@@ -37,5 +37,5 @@ enum AppCapabilities {
     /// visibly broken feature: the weather UI is hidden everywhere and no
     /// WeatherKit fetch is attempted. Flip to `true` once WeatherKit returns
     /// live data on device. See the WeatherKit registration blocker in NickOS.
-    static var weatherLoggingEnabled: Bool { true }
+    static var weatherLoggingEnabled: Bool { false }
 }
