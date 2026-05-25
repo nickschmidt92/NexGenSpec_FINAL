@@ -530,7 +530,10 @@ enum HTMLReportRenderer {
     private static func renderWeatherAndTimerSection(inspection: Inspection) -> String {
         var parts: [String] = []
 
-        if let w = inspection.weather {
+        // Weather is gated off until WeatherKit is registered for the App ID on
+        // the Apple Developer portal (on-device test 2026-05-25 returned no data).
+        // Hidden here too so the report never advertises a feature we can't fill.
+        if AppCapabilities.weatherLoggingEnabled, let w = inspection.weather {
             parts.append("""
             <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding:12px 16px;background:#f0f7ff;border-radius:8px;font-size:0.9rem;">
             <span style="font-weight:600;color:#0066cc;">Weather at Inspection:</span>

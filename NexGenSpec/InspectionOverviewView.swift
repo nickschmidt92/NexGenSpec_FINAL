@@ -148,8 +148,10 @@ struct InspectionOverviewView: View {
                         }
                     }
                     
-                    // Weather info
-                    if let weather = version.inspection.weather {
+                    // Weather info — gated behind AppCapabilities.weatherLoggingEnabled
+                    // so a half-working WeatherKit integration stays hidden until
+                    // the App ID is registered for WeatherKit on the dev portal.
+                    if AppCapabilities.weatherLoggingEnabled, let weather = version.inspection.weather {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Weather at Inspection")
                                 .font(.headline)

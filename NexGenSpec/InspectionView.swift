@@ -129,28 +129,35 @@ struct InspectionView: View {
                     Label("Timer: \(formattedTimer(at: Date()))",
                           systemImage: "timer")
                         .disabled(true)
-                    if let w = draft.inspection.weather {
-                        Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
-                            .disabled(true)
-                    } else if weatherService.isFetching {
-                        Label("Fetching weather…", systemImage: "cloud")
-                            .disabled(true)
-                    } else {
-                        // Surface the underlying reason (location denied, simulator
-                        // with no set location, WeatherKit entitlement missing, etc.)
-                        // so the user can fix whichever is the real problem.
-                        Label(weatherService.errorMessage ?? "Weather unavailable",
-                              systemImage: "cloud.slash")
-                            .disabled(true)
-                        Button {
-                            weatherService.retry { data in
-                                if let data { draft.inspection.weather = data }
+                    // Weather menu items are gated behind
+                    // AppCapabilities.weatherLoggingEnabled. WeatherKit returned
+                    // no data on device (App ID not yet registered for the
+                    // service), so the feature is hidden rather than shipped
+                    // showing a permanent "Weather unavailable" error.
+                    if AppCapabilities.weatherLoggingEnabled {
+                        if let w = draft.inspection.weather {
+                            Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
+                                .disabled(true)
+                        } else if weatherService.isFetching {
+                            Label("Fetching weather…", systemImage: "cloud")
+                                .disabled(true)
+                        } else {
+                            // Surface the underlying reason (location denied, simulator
+                            // with no set location, WeatherKit entitlement missing, etc.)
+                            // so the user can fix whichever is the real problem.
+                            Label(weatherService.errorMessage ?? "Weather unavailable",
+                                  systemImage: "cloud.slash")
+                                .disabled(true)
+                            Button {
+                                weatherService.retry { data in
+                                    if let data { draft.inspection.weather = data }
+                                }
+                            } label: {
+                                Label("Retry weather", systemImage: "arrow.clockwise")
                             }
-                        } label: {
-                            Label("Retry weather", systemImage: "arrow.clockwise")
                         }
+                        Divider()
                     }
-                    Divider()
                     if store.isSaving {
                         Label("Saving…", systemImage: "arrow.triangle.2.circlepath")
                             .disabled(true)
@@ -237,8 +244,9 @@ struct InspectionView: View {
             }
             // Start timer
             startTimer()
-            // Fetch weather if not already captured
-            if draft.inspection.weather == nil {
+            // Fetch weather if not already captured. Gated off until WeatherKit
+            // is confirmed working on device (App ID portal registration).
+            if AppCapabilities.weatherLoggingEnabled, draft.inspection.weather == nil {
                 weatherService.fetchCurrentWeather { data in
                     if let data {
                         draft.inspection.weather = data
