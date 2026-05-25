@@ -27,6 +27,11 @@ struct InspectionOverviewView: View {
     @State private var showShareSheet = false
     @State private var shareItems: [Any] = []
     @State private var showLiDARCapture = false
+    /// Saved LiDAR scans for this inspection, loaded from disk. Refreshed on
+    /// appear and after the capture sheet closes so scans show up on the
+    /// overview alongside photos and videos (previously they were only
+    /// visible inside the capture sheet and the final report).
+    @State private var lidarScans: [LiDARScan] = []
     @State private var selectedVideoItems: [PhotosPickerItem] = []
     /// Drives the cover-photo picker. When non-nil, a fullScreenCover
     /// presents the appropriate UIImagePickerController. Set to nil
@@ -172,6 +177,9 @@ struct InspectionOverviewView: View {
                     // Drone / Video
                     droneVideoSection
 
+                    // Room Scans (LiDAR) — loaded from disk
+                    roomScansSection
+
                     // Reminders + To-Do (per-inspection scratchpads)
                     remindersSection
                     todosSection
@@ -181,6 +189,7 @@ struct InspectionOverviewView: View {
                 .padding()
             }
             .scrollDismissesKeyboard(.interactively)
+            .onAppear { loadLiDARScans() }
             .onChange(of: selectedVideoItems) { _, newItems in
                 guard let item = newItems.first else { return }
                 Task {
@@ -246,7 +255,7 @@ struct InspectionOverviewView: View {
             } message: {
                 Text(exportService.errorMessage ?? "The report could not be exported as PDF. It may be too large.")
             }
-            .sheet(isPresented: $showLiDARCapture) {
+            .sheet(isPresented: $showLiDARCapture, onDismiss: { loadLiDARScans() }) {
                 LiDARCaptureView(jobId: UUID(uuidString: version.inspection.inspectionId) ?? version.id)
             }
             .sheet(item: $videoToPlay) { video in
@@ -713,6 +722,127 @@ struct InspectionOverviewView: View {
             Diagnostics.logError(context: "addVideoFromPickerItem failed", error: error)
         }
         await MainActor.run { selectedVideoItems = [] }
+    }
+
+    // MARK: - Room Scans (LiDAR)
+
+    /// Lists LiDAR scans saved for this inspection. Scans are persisted to
+    /// disk by the capture flow (not stored in the Inspection JSON), so this
+    /// section reads them from `LiDARScanStore` and shows each scan's name,
+    /// capture date, and floor-plan thumbnail when one was rendered. This is
+    /// what makes captured scans visible on the project page — they used to
+    /// only surface inside the capture sheet and the final PDF.
+    @ViewBuilder
+    private var roomScansSection: some View {
+        // Hide the whole section on devices that can't scan AND have no saved
+        // scans — nothing to show or do there.
+        if LiDARCapability.isSupported || !lidarScans.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Room Scans (LiDAR)")
+                        .font(.headline)
+                    Spacer()
+                    if isEditable && LiDARCapability.isSupported {
+                        Button {
+                            showLiDARCapture = true
+                        } label: {
+                            Label("Capture", systemImage: "square.viewfinder")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .accessibilityLabel("Capture room with LiDAR")
+                    }
+                }
+                if lidarScans.isEmpty {
+                    Text(LiDARCapability.isSupported
+                         ? "No room scans yet. Tap Capture to scan a room with LiDAR."
+                         : "No room scans attached.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(lidarScans) { scan in
+                        roomScanRow(scan)
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Room scans captured with LiDAR")
+        }
+    }
+
+    @ViewBuilder
+    private func roomScanRow(_ scan: LiDARScan) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let thumb = loadFloorplanThumbnail(scan) {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 64, height: 64)
+                    .background(Color(.systemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color(.separator), lineWidth: 0.5)
+                    )
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(.systemBackground))
+                        .frame(width: 64, height: 64)
+                    Image(systemName: "cube.transparent")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(scan.displayName)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+                Text(scan.capturedAt, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("3D model (USDZ) saved with this inspection")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            if isEditable {
+                Button(role: .destructive) {
+                    deleteLiDARScan(scan)
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain).hoverEffect(.lift)
+                .accessibilityLabel("Delete room scan")
+            }
+        }
+        .padding(8)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+    }
+
+    private func loadLiDARScans() {
+        lidarScans = LiDARScanStore.loadScans(jobId: jobId)
+            .sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    private func loadFloorplanThumbnail(_ scan: LiDARScan) -> UIImage? {
+        guard let pngName = scan.floorplanPNGFileName else { return nil }
+        let url = FilePaths.lidarFolder(jobId: jobId).appendingPathComponent(pngName)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// Removes a scan's record plus its USDZ and floor-plan files from disk.
+    private func deleteLiDARScan(_ scan: LiDARScan) {
+        let dir = FilePaths.lidarFolder(jobId: jobId)
+        let fm = FileManager.default
+        try? fm.removeItem(at: dir.appendingPathComponent("\(scan.id.uuidString).json"))
+        try? fm.removeItem(at: dir.appendingPathComponent(scan.usdzFileName))
+        if let png = scan.floorplanPNGFileName {
+            try? fm.removeItem(at: dir.appendingPathComponent(png))
+        }
+        loadLiDARScans()
     }
 
     private func binding<T>(_ keyPath: WritableKeyPath<Inspection, T>) -> Binding<T> {
