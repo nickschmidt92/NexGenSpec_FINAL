@@ -49,6 +49,12 @@ struct InspectionOverviewView: View {
     /// the old tap-does-nothing behavior where an uploaded video row
     /// was inert — a top complaint from the first TestFlight cohort.
     @State private var videoToPlay: InspectionVideo?
+    /// Drives the rename alert for a video. When non-nil, an alert with a
+    /// text field lets the inspector give the recording a friendly name
+    /// (stored as the video's caption). TestFlight finding 2026-05-25:
+    /// videos couldn't be renamed after capture.
+    @State private var videoToRename: InspectionVideo?
+    @State private var renameText: String = ""
     /// Unified sheet router. Cover photo is NOT in this enum — it's
     /// driven separately by coverPhotoSource (see above) because the
     /// cover-photo path was rewritten to use UIImagePickerController
@@ -263,6 +269,19 @@ struct InspectionOverviewView: View {
                     url: FilePaths.videosFolder(jobId: jobId).appendingPathComponent(video.fileName),
                     caption: video.caption.isEmpty ? video.fileName : video.caption
                 )
+            }
+            .alert(
+                "Rename Video",
+                isPresented: Binding(
+                    get: { videoToRename != nil },
+                    set: { if !$0 { videoToRename = nil } }
+                )
+            ) {
+                TextField("Video name", text: $renameText)
+                Button("Save") { commitVideoRename() }
+                Button("Cancel", role: .cancel) { videoToRename = nil }
+            } message: {
+                Text("Give this recording a name so it's easy to identify in the report.")
             }
             // fullScreenCover (not sheet) because UIImagePickerController
             // with sourceType = .camera wants the entire screen — using
@@ -635,6 +654,15 @@ struct InspectionOverviewView: View {
                         }
                         .buttonStyle(.plain).hoverEffect(.lift)
                         if isEditable {
+                            Button {
+                                renameText = video.caption
+                                videoToRename = video
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain).hoverEffect(.lift)
+                            .accessibilityLabel("Rename video")
                             Button(role: .destructive) {
                                 removeVideo(video)
                             } label: {
@@ -686,6 +714,21 @@ struct InspectionOverviewView: View {
         } catch {
             Diagnostics.logError(context: "addVideoFromRecordedURL failed", error: error)
         }
+    }
+
+    /// Applies the pending rename to the video's caption. Empty input clears
+    /// the caption (the row then falls back to showing the file name).
+    private func commitVideoRename() {
+        guard let target = videoToRename else { return }
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var insp = version.inspection
+        if let idx = insp.videos.firstIndex(where: { $0.id == target.id }) {
+            insp.videos[idx].caption = trimmed
+            var v = version
+            v.inspection = insp
+            version = v
+        }
+        videoToRename = nil
     }
 
     /// Removes a video from both the inspection model and the file
