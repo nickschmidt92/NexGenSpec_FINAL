@@ -321,7 +321,7 @@ struct InvoiceAndSendView: View {
         let priceDisplay = invoicePrice.isEmpty ? "—" : "$\(invoicePrice)"
         let totalDisplay = invoiceTotal.isEmpty ? "—" : "$\(invoiceTotal)"
         let additionalRow = additionalServices.isEmpty ? "" : """
-            <tr><td style="padding:8px 12px;color:#666;">Additional Services</td><td style="padding:8px 12px;text-align:right;">\(additionalServices)</td></tr>
+            <tr><td style="padding:8px 12px;color:#666;">Additional Services</td><td style="padding:8px 12px;text-align:right;">\(additionalServices.htmlEscaped)</td></tr>
             """
         let companyName = InspectorProfile.shared.companyName
         let inspectorLine = companyName.isEmpty ? inspection.inspectorName : "\(inspection.inspectorName) — \(companyName)"
@@ -342,10 +342,10 @@ struct InvoiceAndSendView: View {
         let footerLine = footerBits.joined(separator: " · ")
         let headerSubtitle = brandName.trimmingCharacters(in: .whitespaces).isEmpty
             ? ""
-            : "<p style=\"color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;\">\(brandName)</p>"
+            : "<p style=\"color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;\">\(brandName.htmlEscaped)</p>"
         let footerHTML = footerLine.isEmpty
             ? ""
-            : "<p style=\"margin:0;font-size:12px;color:#999;\">\(footerLine)</p>"
+            : "<p style=\"margin:0;font-size:12px;color:#999;\">\(footerLine.htmlEscaped)</p>"
 
         return """
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
@@ -356,19 +356,19 @@ struct InvoiceAndSendView: View {
           <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:none;">
             <h2 style="font-size:16px;color:#333;margin:0 0 12px;">Client Details</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:6px 0;color:#666;width:140px;">Name</td><td>\(inspection.clientName)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Email</td><td>\(inspection.clientEmail)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Phone</td><td>\(inspection.clientPhone)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Property</td><td>\(inspection.propertyAddress)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;width:140px;">Name</td><td>\(inspection.clientName.htmlEscaped)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Email</td><td>\(inspection.clientEmail.htmlEscaped)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Phone</td><td>\(inspection.clientPhone.htmlEscaped)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Property</td><td>\(inspection.propertyAddress.htmlEscaped)</td></tr>
               <tr><td style="padding:6px 0;color:#666;">Date</td><td>\(dateStr)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Inspector</td><td>\(inspectorLine)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Inspector</td><td>\(inspectorLine.htmlEscaped)</td></tr>
             </table>
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;">
             <h2 style="font-size:16px;color:#333;margin:0 0 12px;">Invoice</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;background:#f8f9fa;border-radius:8px;">
-              <tr><td style="padding:8px 12px;color:#666;">Inspection Fee</td><td style="padding:8px 12px;text-align:right;font-weight:600;">\(priceDisplay)</td></tr>
+              <tr><td style="padding:8px 12px;color:#666;">Inspection Fee</td><td style="padding:8px 12px;text-align:right;font-weight:600;">\(priceDisplay.htmlEscaped)</td></tr>
               \(additionalRow)
-              <tr style="border-top:2px solid #0066cc;"><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:right;font-weight:700;color:#0066cc;font-size:16px;">\(totalDisplay)</td></tr>
+              <tr style="border-top:2px solid #0066cc;"><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:right;font-weight:700;color:#0066cc;font-size:16px;">\(totalDisplay.htmlEscaped)</td></tr>
             </table>
             <p style="margin:20px 0 0;font-size:13px;color:#666;">The full inspection report is attached as a PDF. If no attachment is present, please request it from your inspector.</p>
           </div>
