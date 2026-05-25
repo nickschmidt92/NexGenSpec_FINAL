@@ -68,6 +68,27 @@ enum FilesAppPublisher {
         }
     }
 
+    /// The published folder URL for an inspection (NexGenSpec/[Property Address]/).
+    static func publishedFolderURL(for inspection: Inspection, jobId: UUID) -> URL {
+        FilePaths.appRoot.appendingPathComponent(
+            folderName(for: inspection, jobId: jobId),
+            isDirectory: true
+        )
+    }
+
+    /// Removes the published Files-app folder for an inspection, if present.
+    /// Called when an inspection is deleted so its mirror (PDF + _data) doesn't
+    /// linger in the Files app after the inspection is gone.
+    static func removePublished(for inspection: Inspection, jobId: UUID) {
+        let folder = publishedFolderURL(for: inspection, jobId: jobId)
+        guard FileManager.default.fileExists(atPath: folder.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: folder)
+        } catch {
+            Diagnostics.logError(context: "FilesAppPublisher.removePublished failed", error: error)
+        }
+    }
+
     // MARK: - Folder naming
 
     /// Builds a filesystem-safe folder name from the property address, falling

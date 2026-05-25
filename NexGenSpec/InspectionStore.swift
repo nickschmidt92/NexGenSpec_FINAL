@@ -395,12 +395,12 @@ public extension InspectionStore {
             offset != idx && other.inspectionId == metadata.inspectionId
         }
 
-        // Cascade: if this inspection has a mirrored calendar event, try to
-        // delete it before we lose the identifier. We load the full version
-        // to read the `calendarEventIdentifier` — the metadata list only
-        // carries the lightweight fields.
-        if let full = loadFullVersion(id: id),
-           let eventIdentifier = full.inspection.calendarEventIdentifier {
+        // Load the full version once: we need it both to cascade-delete a
+        // mirrored calendar event (before we lose the identifier) and to
+        // resolve the property address for the published Files-app folder.
+        // The metadata list only carries the lightweight fields.
+        let full = loadFullVersion(id: id)
+        if let eventIdentifier = full?.inspection.calendarEventIdentifier {
             try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
         }
 
@@ -413,6 +413,14 @@ public extension InspectionStore {
         } catch {
             saveError = "Could not remove inspection files: \(error.localizedDescription)"
             return false
+        }
+
+        // Also remove the published Files-app mirror (NexGenSpec/[Address]/)
+        // if one was exported, so the report + _data don't outlive the
+        // inspection. No-op when nothing was published.
+        if let inspection = full?.inspection, !hasRemainingInspectionReferences {
+            let jobId = UUID(uuidString: inspection.inspectionId) ?? metadata.id
+            FilesAppPublisher.removePublished(for: inspection, jobId: jobId)
         }
 
         metadataList.remove(at: idx)
