@@ -2,7 +2,8 @@
 //  InvoiceAndSendView.swift
 //  NexGenSpec
 //
-//  Post-finalize: customer contact, report link/PDF, invoice form, send to client and contact@nexgenspec.com.
+//  Post-finalize: customer contact, report link/PDF, invoice form, send to the
+//  client (CC the inspector's own profile email and any selected agents).
 //
 
 import SwiftUI
@@ -31,8 +32,6 @@ struct InvoiceAndSendView: View {
     // are soft metadata — safe to lose if reinstalled.
     @State private var invoiceSentAt: Date?
     @State private var invoicePaidAt: Date?
-
-    private let nexGenSpecEmail = "contact@nexgenspec.com"
 
     private var sentAtKey: String { "invoice.sentAt.\(version.inspection.inspectionId)" }
     private var paidAtKey: String { "invoice.paidAt.\(version.inspection.inspectionId)" }
@@ -231,33 +230,43 @@ struct InvoiceAndSendView: View {
 
     @ViewBuilder
     private var mailComposeSheet: some View {
-        let recipients = [version.inspection.clientEmail, nexGenSpecEmail].filter { !$0.isEmpty }
-        if !recipients.isEmpty {
-            MailComposeView(
-                toRecipients: recipients,
-                ccRecipients: ccEmails,
-                subject: invoiceSubject,
-                body: invoiceEmailHTML,
-                isHTML: true,
-                attachmentURL: exportedPDFURL,
-                extraAttachmentURLs: lidarUSDZAttachmentURLs(),
-                onDismiss: { showMailCompose = false },
-                onResult: { result in
-                    if result == .sent {
-                        let now = Date()
-                        invoiceSentAt = now
-                        UserDefaults.standard.set(now, forKey: sentAtKey)
-                    }
+        // To: the client only. NexGenSpec is the tool, not the inspector of
+        // record — it must never be a recipient on a client-facing report.
+        // The inspector keeps their own copy via the CC below (their profile
+        // email) plus their mail account's Sent folder. If the client email
+        // is blank the composer still opens so the inspector can type it.
+        let recipients = [version.inspection.clientEmail].filter { !$0.isEmpty }
+        MailComposeView(
+            toRecipients: recipients,
+            ccRecipients: ccEmails,
+            subject: invoiceSubject,
+            body: invoiceEmailHTML,
+            isHTML: true,
+            attachmentURL: exportedPDFURL,
+            extraAttachmentURLs: lidarUSDZAttachmentURLs(),
+            onDismiss: { showMailCompose = false },
+            onResult: { result in
+                if result == .sent {
+                    let now = Date()
+                    invoiceSentAt = now
+                    UserDefaults.standard.set(now, forKey: sentAtKey)
                 }
-            )
-        }
+            }
+        )
     }
 
-    /// Auto-populated CC list based on which agent toggles are on.
+    /// Auto-populated CC list: any selected agents, plus the inspector's own
+    /// address from their profile so they retain a copy of exactly what the
+    /// client received. This replaces the former hardcoded contact@nexgenspec.com
+    /// CC — the inspector, not NexGenSpec, is liable for their reports.
     private var ccEmails: [String] {
         var list: [String] = []
         if ccBuyersAgent, !buyersAgentEmail.isEmpty { list.append(buyersAgentEmail) }
         if ccListingAgent, !listingAgentEmail.isEmpty { list.append(listingAgentEmail) }
+        let inspectorEmail = profile.email.trimmingCharacters(in: .whitespaces)
+        if !inspectorEmail.isEmpty, !list.contains(inspectorEmail) {
+            list.append(inspectorEmail)
+        }
         return list
     }
 
@@ -314,11 +323,32 @@ struct InvoiceAndSendView: View {
         let companyName = InspectorProfile.shared.companyName
         let inspectorLine = companyName.isEmpty ? inspection.inspectorName : "\(inspection.inspectorName) — \(companyName)"
 
+        // The client-facing email is the inspector's brand, not ours. Header
+        // subtitle and footer use the company name (falling back to the
+        // inspector's name) plus the inspector's own contact details — never
+        // a NexGenSpec address.
+        let brandName = companyName.trimmingCharacters(in: .whitespaces).isEmpty
+            ? inspection.inspectorName
+            : companyName
+        let profileEmail = InspectorProfile.shared.email.trimmingCharacters(in: .whitespaces)
+        let profilePhone = InspectorProfile.shared.phone.trimmingCharacters(in: .whitespaces)
+        var footerBits: [String] = []
+        if !brandName.trimmingCharacters(in: .whitespaces).isEmpty { footerBits.append(brandName) }
+        if !profileEmail.isEmpty { footerBits.append(profileEmail) }
+        if !profilePhone.isEmpty { footerBits.append(profilePhone) }
+        let footerLine = footerBits.joined(separator: " · ")
+        let headerSubtitle = brandName.trimmingCharacters(in: .whitespaces).isEmpty
+            ? ""
+            : "<p style=\"color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;\">\(brandName)</p>"
+        let footerHTML = footerLine.isEmpty
+            ? ""
+            : "<p style=\"margin:0;font-size:12px;color:#999;\">\(footerLine)</p>"
+
         return """
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
           <div style="background:linear-gradient(135deg,#0066cc,#00aaff);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
             <h1 style="color:#fff;margin:0;font-size:22px;">Inspection Report &amp; Invoice</h1>
-            <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">NexGenSpec</p>
+            \(headerSubtitle)
           </div>
           <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:none;">
             <h2 style="font-size:16px;color:#333;margin:0 0 12px;">Client Details</h2>
@@ -340,7 +370,7 @@ struct InvoiceAndSendView: View {
             <p style="margin:20px 0 0;font-size:13px;color:#666;">The full inspection report is attached as a PDF. If no attachment is present, please request it from your inspector.</p>
           </div>
           <div style="background:#f8f9fa;padding:16px;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#999;">Generated by NexGenSpec · contact@nexgenspec.com</p>
+            \(footerHTML)
           </div>
         </div>
         """
