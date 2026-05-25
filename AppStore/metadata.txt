@@ -18,7 +18,7 @@ NexGenSpec
 ───────────────────────────────────────────────────────────────
 SUBTITLE (30 chars max)
 ───────────────────────────────────────────────────────────────
-Home Inspection Reports
+Next-Gen Inspection Reports
 
 ───────────────────────────────────────────────────────────────
 KEYWORDS (100 chars max, comma-separated)
