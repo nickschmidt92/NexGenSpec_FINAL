@@ -230,6 +230,9 @@ struct InspectionOverviewView: View {
                             Task {
                                 await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
                                 if case .success(_, let pdf) = exportService.result, let url = pdf {
+                                    // Mirror into the Files-app folder organized
+                                    // by address for one-tap access outside the app.
+                                    FilesAppPublisher.publish(version: version, pdfURL: url)
                                     shareContent = ShareContent(items: [url])
                                 } else if case .failure = exportService.result {
                                     showExportError = true

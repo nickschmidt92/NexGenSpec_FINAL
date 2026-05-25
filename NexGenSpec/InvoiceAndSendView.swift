@@ -183,6 +183,9 @@ struct InvoiceAndSendView: View {
             if !isExporting {
                 if case .success(_, let pdf?) = exportService.result {
                     exportedPDFURL = pdf
+                    // Mirror into the Files-app folder organized by address so
+                    // the inspector has one-tap PDF access outside the app.
+                    FilesAppPublisher.publish(version: version, pdfURL: pdf)
                     // Warn if PDF exceeds 20 MB — email providers may reject large attachments
                     if let attrs = try? FileManager.default.attributesOfItem(atPath: pdf.path),
                        let fileSize = attrs[.size] as? UInt64,
