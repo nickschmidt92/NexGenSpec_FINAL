@@ -54,7 +54,11 @@ public enum AccountDeletionReceiptService {
     /// via UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace so the user can
     /// retrieve the receipt from the Files app even after deletion.
     public static var receiptFolder: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            // Documents is guaranteed present on iOS; fall back to tmp rather
+            // than force-unwrap so a missing directory can never crash receipt generation.
+            return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
+        }
         return docs.appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
     }
 

@@ -435,8 +435,8 @@ public final class AuthManager: ObservableObject {
         guard let user = Auth.auth().currentUser else {
             throw DeleteAccountError.notSignedIn
         }
-        let coordinator = SignInWithAppleCoordinator()
         do {
+            let coordinator = try SignInWithAppleCoordinator.make()
             let appleCredential = try await coordinator.start()
             guard let tokenData = appleCredential.identityToken,
                   let idTokenString = String(data: tokenData, encoding: .utf8) else {

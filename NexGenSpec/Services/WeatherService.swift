@@ -197,7 +197,12 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         log.info("Calling Open-Meteo forecast …")
         Diagnostics.logInfo("Open-Meteo: request starting")
         do {
-            let (responseData, response) = try await URLSession.shared.data(from: url)
+            // 15s per-request timeout so a flaky/captive network fails fast and
+            // the "Fetching weather…" state clears, rather than hanging on the
+            // 60s URLSession default.
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 15
+            let (responseData, response) = try await URLSession.shared.data(for: request)
 
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
