@@ -27,15 +27,11 @@ enum AppCapabilities {
     static var canUseLiDAR: Bool { true }
     static var canUseAISummary: Bool { false }
 
-    /// Weather auto-logging via WeatherKit. The `com.apple.developer.weatherkit`
-    /// entitlement is present in code, but on-device testing on 2026-05-25
-    /// returned no data — the symptom of an App ID that has NOT yet been
-    /// registered for the WeatherKit service on the Apple Developer portal
-    /// (a server-side step, ~30 min to propagate, that also requires the
-    /// provisioning profile to be regenerated). Until that is confirmed
-    /// working on a real device, this stays `false` so we don't ship a
-    /// visibly broken feature: the weather UI is hidden everywhere and no
-    /// WeatherKit fetch is attempted. Flip to `true` once WeatherKit returns
-    /// live data on device. See the WeatherKit registration blocker in NickOS.
-    static var weatherLoggingEnabled: Bool { false }
+    /// Weather auto-logging via WeatherKit. The App ID is now registered for
+    /// the WeatherKit service on the Apple Developer portal and the JWT issue
+    /// is resolved — WeatherKit returns live data on device, so the feature is
+    /// enabled. The weather UI appears in the inspection menu/overview and the
+    /// report, and a WeatherKit fetch is attempted when an inspection is created
+    /// without weather data.
+    static var weatherLoggingEnabled: Bool { true }
 }

@@ -146,7 +146,7 @@ struct InspectionView: View {
                             // with no set location, WeatherKit entitlement missing, etc.)
                             // so the user can fix whichever is the real problem.
                             Label(weatherService.errorMessage ?? "Weather unavailable",
-                                  systemImage: "cloud.slash")
+                                  systemImage: "icloud.slash")
                                 .disabled(true)
                             Button {
                                 weatherService.retry { data in

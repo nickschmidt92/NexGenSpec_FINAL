@@ -792,7 +792,7 @@ struct InspectionOverviewView: View {
                         Button {
                             showLiDARCapture = true
                         } label: {
-                            Label("Capture", systemImage: "square.viewfinder")
+                            Label("Capture", systemImage: "dot.viewfinder")
                                 .font(.subheadline.weight(.semibold))
                         }
                         .accessibilityLabel("Capture room with LiDAR")
