@@ -330,6 +330,21 @@ struct AppSettingsView: View {
                     }
                     #endif
 
+                    // Open-Meteo requires visible attribution for use of their
+                    // free weather API (see their Terms of Use). Kept as a
+                    // subtle centered footnote linking to their site.
+                    if let openMeteoURL = URL(string: "https://open-meteo.com/") {
+                        Link(destination: openMeteoURL) {
+                            Text("Weather data provided by Open-Meteo.com")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                                .underline()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, Spacing.sm)
+                        .accessibilityHint("Opens open-meteo.com in your browser")
+                    }
+
                 }
                 .frame(maxWidth: 860)
                 .padding(.horizontal, Spacing.md)
