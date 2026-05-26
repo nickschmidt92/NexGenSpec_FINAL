@@ -30,18 +30,7 @@ struct DashboardView: View {
     @StateObject private var locationService = LocationService()
     @State private var showTemplatePicker = false
     @State private var selectedTemplateId: String?
-    // Contact-field validation on the new-inspection form. We flag invalid
-    // phone/email only after the field has lost focus (so the inspector isn't
-    // warned mid-type), and never block submission — the fields may be left
-    // blank intentionally.
-    @FocusState private var focusedNewField: NewInspectionField?
-    @State private var emailFieldTouched = false
-    @State private var phoneFieldTouched = false
     @EnvironmentObject private var router: TabRouter
-
-    private enum NewInspectionField: Hashable {
-        case email, phone
-    }
 
     // MARK: - Derived state
     //
@@ -305,8 +294,6 @@ struct DashboardView: View {
         newInspectionDate = Self.defaultInspectionDate()
         inspectorConfirmed = false
         selectedTemplateId = nil
-        emailFieldTouched = false
-        phoneFieldTouched = false
 
         let customTemplates = CustomTemplateStore.shared.templates
         if customTemplates.isEmpty {
@@ -328,24 +315,9 @@ struct DashboardView: View {
                     TextField("Email",              text: $newClientEmail)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($focusedNewField, equals: .email)
-                    if emailFieldTouched, !newClientEmail.isEmpty, !isValidEmail(newClientEmail) {
-                        Text("Enter a valid email address (e.g. name@example.com).")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
                     TextField("Phone",              text: $newClientPhone)
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
-                        .phoneFormatted($newClientPhone)
-                        .focused($focusedNewField, equals: .phone)
-                    if phoneFieldTouched, !newClientPhone.isEmpty, !isValidUSPhone(newClientPhone) {
-                        Text("Enter a 10-digit phone number.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
                 }
                 Section("Property & Inspector") {
                     TextField("Property Address",   text: $newPropertyAddress)
@@ -400,12 +372,6 @@ struct DashboardView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            // Mark a field "touched" once focus leaves it, so the inline
-            // warning only appears after the inspector finishes editing.
-            .onChange(of: focusedNewField) { previous, _ in
-                if previous == .email { emailFieldTouched = true }
-                if previous == .phone { phoneFieldTouched = true }
-            }
             .navigationTitle("New Inspection")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
