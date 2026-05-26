@@ -443,6 +443,7 @@ struct InspectionView: View {
                     }
                     .accessibilityLabel(section.title)
                     .accessibilityHint("\(section.items.count) items")
+                    .accessibilityIdentifier("sectionRow")   // UI-test hook (autosave E2E)
                     .hoverEffect(.lift)
                 }
             }
@@ -603,6 +604,7 @@ private struct SectionItemsListView: View {
                     InspectionItemRowLabel(item: item)
                 }
                 .buttonStyle(.plain).hoverEffect(.lift)
+                .accessibilityIdentifier("itemRow")   // UI-test hook (autosave E2E)
             }
             // Beta-requested (2026-04-22): let the inspector add a custom
             // item on the fly rather than only editing the pre-loaded

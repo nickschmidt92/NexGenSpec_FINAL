@@ -62,7 +62,12 @@ struct ScreenshotHost: View {
             PaywallView()
         case "inspection":
             if let id = primaryVersionID {
-                InspectionRootView(versionID: id)
+                // Wrap in a NavigationStack exactly as DashboardView does in the
+                // real app — InspectionView's iPhone `sectionSidebar` uses
+                // NavigationLinks that are inert (disabled) without an enclosing
+                // navigation container. Required for the autosave UI test to be
+                // able to drill into a section → item → comment field.
+                NavigationStack { InspectionRootView(versionID: id) }
             } else {
                 Text("No demo inspection seeded")
             }

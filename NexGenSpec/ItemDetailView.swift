@@ -96,6 +96,7 @@ struct ItemDetailView: View {
             Section {
                 TextEditor(text: bind(\.observed))
                     .frame(minHeight: 88)
+                    .accessibilityIdentifier("observedEditor")   // UI-test hook (autosave E2E)
                     .overlay(alignment: .topLeading) {
                         if item.observed.isEmpty && !isLocked {
                             Text("Describe what you observed (e.g. crack, leak, wear).")
