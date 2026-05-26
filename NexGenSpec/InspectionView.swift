@@ -575,6 +575,9 @@ struct InspectionView: View {
                     selectedPane = .invoice
                     if updatedVersion.state.isFinalized {
                         showExportZIPPrompt = true
+                        // Ask for an App Store review at the 2nd successful
+                        // finalization (one-shot, production-only).
+                        ReviewPromptService.recordFinalizationAndMaybeRequestReview()
                     }
                 }
             }
