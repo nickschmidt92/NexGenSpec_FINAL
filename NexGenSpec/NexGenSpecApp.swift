@@ -42,8 +42,10 @@ struct NexGenSpecApp: App {
                     // the retry flag. clearAllLocalData() also resets the store's
                     // in-memory metadata loaded during init().
                     if UserDefaults.standard.bool(forKey: "deletion-pending-wipe") {
-                        store.clearAllLocalData()
-                        UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
+                        Task {
+                            await store.clearAllLocalData()
+                            UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
+                        }
                     }
                     subscriptions.applyCurrentUser(email: authManager.currentUsername)
                     // Re-confirm DeviceCheck trial bit on every cold launch so

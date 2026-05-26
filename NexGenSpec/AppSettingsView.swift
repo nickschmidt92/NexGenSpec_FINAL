@@ -494,7 +494,7 @@ struct AppSettingsView: View {
             isPresented: $showDeletionReceiptShareSheet,
             onDismiss: {
                 AuditLog.log(event: "Account deletion receipt share sheet dismissed")
-                finishLocalWipeAndDismiss()
+                Task { await finishLocalWipeAndDismiss() }
             }
         ) {
             if let url = pendingDeletionReceiptURL {
@@ -611,7 +611,7 @@ struct AppSettingsView: View {
         // next launch if this flow is interrupted).
         UserDefaults.standard.set(true, forKey: "deletion-pending-wipe")
         guard let snapshot else {
-            finishLocalWipeAndDismiss()
+            await finishLocalWipeAndDismiss()
             return
         }
         AuditLog.log(event: "Account deletion receipt requested for \(snapshot.firebaseUID)")
@@ -625,13 +625,13 @@ struct AppSettingsView: View {
             showDeletionReceiptShareSheet = true
         } catch {
             Diagnostics.logError(context: "Deletion receipt PDF generation failed", error: error)
-            finishLocalWipeAndDismiss()
+            await finishLocalWipeAndDismiss()
         }
     }
 
     @MainActor
-    private func finishLocalWipeAndDismiss() {
-        store.clearAllLocalData()
+    private func finishLocalWipeAndDismiss() async {
+        await store.clearAllLocalData()
         // The wipe completed in-flow, so the next-launch retry guard set in
         // proceedAfterFirebaseDelete is no longer owed (T-01412).
         UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
