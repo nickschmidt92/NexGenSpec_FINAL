@@ -494,7 +494,7 @@ struct AppSettingsView: View {
             isPresented: $showDeletionReceiptShareSheet,
             onDismiss: {
                 AuditLog.log(event: "Account deletion receipt share sheet dismissed")
-                Task { await finishLocalWipeAndDismiss() }
+                finishLocalWipeAndDismiss()
             }
         ) {
             if let url = pendingDeletionReceiptURL {
@@ -611,7 +611,7 @@ struct AppSettingsView: View {
         // next launch if this flow is interrupted).
         UserDefaults.standard.set(true, forKey: "deletion-pending-wipe")
         guard let snapshot else {
-            await finishLocalWipeAndDismiss()
+            finishLocalWipeAndDismiss()
             return
         }
         AuditLog.log(event: "Account deletion receipt requested for \(snapshot.firebaseUID)")
@@ -625,21 +625,28 @@ struct AppSettingsView: View {
             showDeletionReceiptShareSheet = true
         } catch {
             Diagnostics.logError(context: "Deletion receipt PDF generation failed", error: error)
-            await finishLocalWipeAndDismiss()
+            finishLocalWipeAndDismiss()
         }
     }
 
     @MainActor
-    private func finishLocalWipeAndDismiss() async {
-        await store.clearAllLocalData()
-        // The wipe completed in-flow, so the next-launch retry guard set in
-        // proceedAfterFirebaseDelete is no longer owed (T-01412).
-        UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
+    private func finishLocalWipeAndDismiss() {
+        // Reset in-memory state + gate writes synchronously, then run the heavy
+        // disk wipe in the BACKGROUND. We deliberately do NOT await it: flipping
+        // auth and dismissing immediately means the user never sits on an
+        // authenticated screen for an account that no longer exists. `store` is
+        // captured directly so the background wipe survives this view's teardown.
+        let store = self.store
+        store.beginWipe()
+        Task {
+            await store.performDiskWipe()
+            // Retry guard cleared only AFTER the wipe actually completes, so an
+            // interrupted background wipe still retries on next launch (T-01412).
+            UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
+        }
         // finalizeDeletion releases the auth-state hold set by deleteAccount()
         // and flips isAuthenticated to false, triggering RootView to swap in
-        // LoginView. Call this AFTER any post-delete UI (receipt share sheet)
-        // has finished presenting — otherwise the host view tears down mid-
-        // present and the share sheet pops up and immediately disappears.
+        // LoginView.
         authManager.finalizeDeletion()
         dismiss()
     }

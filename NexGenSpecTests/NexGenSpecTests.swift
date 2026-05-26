@@ -1221,7 +1221,7 @@ final class CalendarIntegrationFlowsTests: XCTestCase {
 @MainActor
 final class ClearAllLocalDataWipeTests: XCTestCase {
 
-    func testClearAllLocalDataRemovesAppRootEntirely() throws {
+    func testClearAllLocalDataRemovesAppRootEntirely() async throws {
         let store = InspectionStore()
         let jobId = UUID()
         try FilePaths.ensureAppStructure(jobId: jobId)
@@ -1232,7 +1232,7 @@ final class ClearAllLocalDataWipeTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: FilePaths.appRoot.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: evidence.path))
 
-        store.clearAllLocalData()
+        await store.clearAllLocalData()
 
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: FilePaths.appRoot.path),
@@ -1241,12 +1241,12 @@ final class ClearAllLocalDataWipeTests: XCTestCase {
         XCTAssertEqual(store.metadataList.count, 0)
     }
 
-    func testClearAllLocalDataIsIdempotent() {
+    func testClearAllLocalDataIsIdempotent() async {
         // Calling twice in succession must not throw; the second call is a
         // no-op since appRoot is already gone.
         let store = InspectionStore()
-        store.clearAllLocalData()
-        store.clearAllLocalData()
+        await store.clearAllLocalData()
+        await store.clearAllLocalData()
         XCTAssertFalse(FileManager.default.fileExists(atPath: FilePaths.appRoot.path))
     }
 }

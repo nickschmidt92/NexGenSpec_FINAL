@@ -5,7 +5,7 @@ enum Diagnostics {
     private static let maxBytes = 512 * 1024
     private static let queue = DispatchQueue(label: "com.nexgenspec.diagnostics")
 
-    static func logError(context: String, error: Error? = nil) {
+    static func logError(context: String, error: Error? = nil, persistToDisk: Bool = true) {
         // Report to Crashlytics for remote monitoring
         if let error {
             Crashlytics.crashlytics().record(error: error, userInfo: ["context": context])
@@ -13,6 +13,11 @@ enum Diagnostics {
             Crashlytics.crashlytics().log("ERROR: \(context)")
         }
 
+        // The Crashlytics calls above touch no app directory. The on-disk
+        // diagnostics.log, however, lives INSIDE FilePaths.appRoot (see
+        // append()), so callers running during a Delete-Account wipe pass
+        // persistToDisk: false to avoid re-creating the directory being deleted.
+        guard persistToDisk else { return }
         queue.async {
             let timestamp = ISO8601DateFormatter().string(from: Date())
             let message: String

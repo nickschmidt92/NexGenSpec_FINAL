@@ -39,6 +39,12 @@ public final class InspectionStore: ObservableObject {
     private let saveDebounceInterval: DispatchTimeInterval = .milliseconds(400)
     private let ioQueue = DispatchQueue(label: "com.nexgenspec.inspectionstore.io")
 
+    /// True from the moment a Delete-Account wipe begins (`beginWipe()`) until
+    /// the off-main disk wipe finishes (`performDiskWipe()`). While set, every
+    /// disk-write path (`save`, `writeVersionToFile`, `writeVersionFileOnlyForAutoSave`)
+    /// no-ops so nothing can re-create the directory being deleted mid-wipe.
+    public private(set) var isWiping = false
+
     public init() {
         load()
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -95,6 +101,9 @@ public final class InspectionStore: ObservableObject {
     }
 
     private func save() {
+        // No persistence while a wipe is in progress: a save here would
+        // re-create appRoot/inspections.json after the wipe (see beginWipe()).
+        guard !isWiping else { return }
         saveError = nil
         isSaving = true
         defer { isSaving = false }
@@ -119,6 +128,7 @@ public final class InspectionStore: ObservableObject {
     }
 
     private func writeVersionToFile(_ version: InspectionVersion) throws {
+        guard !isWiping else { return }
         let url = FilePaths.currentVersionFile(jobId: version.id)
         try ioQueue.sync {
             try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
@@ -181,36 +191,48 @@ public final class InspectionStore: ObservableObject {
     public func clearSaveError() { saveError = nil }
     public func clearLoadError() { loadError = nil }
 
-    /// Wipes ALL local inspection data from disk and clears in-memory state.
-    /// Called as part of Delete Account to satisfy App Store Guideline 5.1.1(v).
-    /// After this runs, the next launch starts with a clean slate.
-    ///
-    /// `async` (T-01413): the recursive wipe of every photo / video / LiDAR file
-    /// can take a long time on a large account. Running it via `ioQueue.sync` on
-    /// the `@MainActor` (as before) blocked the main thread and risked a
-    /// 0x8badf00d watchdog kill during Delete Account, so the wipe now runs off
-    /// the main thread and is awaited.
-    public func clearAllLocalData() async {
-        // Cancel any pending save so it doesn't race the delete.
+    /// Synchronously gates all further writes and clears in-memory state — no
+    /// disk I/O. Call on the main actor BEFORE the async disk wipe so that
+    /// (a) the UI never renders rows backed by files we're about to delete, and
+    /// (b) no save / autosave / version write can re-persist data into the
+    /// directory mid-wipe. Pair with `performDiskWipe()`. Idempotent.
+    public func beginWipe() {
+        // Cancel any pending debounced save and gate every write path.
         saveWorkItem?.cancel()
         saveWorkItem = nil
+        isWiping = true
+        // Clear in-memory state up front so the Dashboard can't render stale
+        // rows for inspections whose files are about to be deleted.
+        metadataList = []
+        saveError = nil
+        loadError = nil
+        lastSavedAt = nil
+    }
 
-        // Heavy recursive delete runs OFF the main thread. Dispatched to the
-        // same serial `ioQueue` as every other store write, so it is FIFO-
-        // ordered after any in-flight async autosave write and never races a
-        // half-written file.
+    /// Runs the heavy recursive disk wipe OFF the main thread, then re-opens the
+    /// write gate. Call AFTER `beginWipe()`. Safe to run detached in the
+    /// background while the UI has already moved on (Delete Account dismiss).
+    /// Dispatched to the serial `ioQueue`, so it is FIFO-ordered after any
+    /// in-flight write and never races a half-written file.
+    public func performDiskWipe() async {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             ioQueue.async {
                 Self.wipeAppRoot()
                 cont.resume()
             }
         }
+        isWiping = false
+    }
 
-        // Back on the main actor: clear in-memory state.
-        metadataList = []
-        saveError = nil
-        loadError = nil
-        lastSavedAt = nil
+    /// Wipes ALL local inspection data from disk and clears in-memory state.
+    /// Satisfies App Store Guideline 5.1.1(v); the next launch starts clean.
+    /// Convenience pairing the synchronous `beginWipe()` reset with the off-main
+    /// `performDiskWipe()`. Callers that must react before the disk wipe finishes
+    /// (immediate dismiss, synchronous-before-Task UI reset) call the two halves
+    /// directly instead.
+    public func clearAllLocalData() async {
+        beginWipe()
+        await performDiskWipe()
     }
 
     /// Recursively removes `FilePaths.appRoot`. Runs on `ioQueue` only and
@@ -228,7 +250,8 @@ public final class InspectionStore: ObservableObject {
         } catch {
             Diagnostics.logError(
                 context: "clearAllLocalData: recursive removeItem failed for \(root.path); falling back to per-file walk",
-                error: error
+                error: error,
+                persistToDisk: false
             )
             // Fallback: walk the contents and remove each entry, capturing
             // failures per item rather than aborting the whole wipe. This
@@ -247,7 +270,8 @@ public final class InspectionStore: ObservableObject {
                     } catch {
                         Diagnostics.logError(
                             context: "clearAllLocalData: failed to remove \(url.lastPathComponent)",
-                            error: error
+                            error: error,
+                            persistToDisk: false
                         )
                     }
                 }
@@ -258,14 +282,15 @@ public final class InspectionStore: ObservableObject {
 
         // Post-condition check. If the root still exists, the wipe was
         // incomplete and the user's data persists past Delete Account.
-        // Goes through Firebase Crashlytics — does NOT write to disk, so
-        // it can't accidentally re-create the directory we just removed.
-        // (For the same reason there is no AuditLog success entry here:
-        // AuditLog writes to appRoot/audit_log.txt and would defeat the
-        // wipe by recreating the directory.)
+        // Logged to Crashlytics ONLY (persistToDisk: false): Diagnostics' own
+        // on-disk diagnostics.log lives INSIDE appRoot, so a normal log here
+        // would re-create the very directory we just deleted. (Same reason
+        // there is no AuditLog success entry — AuditLog writes
+        // appRoot/audit_log.txt and would defeat the wipe.)
         if fm.fileExists(atPath: root.path) {
             Diagnostics.logError(
-                context: "clearAllLocalData: appRoot still exists after wipe attempts: \(root.path). Data NOT fully deleted."
+                context: "clearAllLocalData: appRoot still exists after wipe attempts: \(root.path). Data NOT fully deleted.",
+                persistToDisk: false
             )
         }
     }
@@ -291,6 +316,7 @@ public final class InspectionStore: ObservableObject {
     /// the on-disk index need to be refreshed for the Dashboard UI.
     public func writeVersionFileOnlyForAutoSave(_ version: InspectionVersion) {
         guard InspectionStateMachine.allowsEdit(version.state) else { return }
+        guard !isWiping else { return }
         // Foreground per-edit autosave: encode + write OFF the main thread so
         // typing/editing never blocks on JSON encoding + disk I/O. Dispatched
         // to the same serial `ioQueue` as every other store write, so it stays
