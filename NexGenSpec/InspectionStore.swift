@@ -143,6 +143,10 @@ public final class InspectionStore: ObservableObject {
     }
 
     /// Loads full version from disk. Returns nil if not found or decode fails.
+    /// Synchronous: retained for callers that need the value inline (delete /
+    /// revision / purge / finalize). For the inspection-OPEN path use
+    /// `loadFullVersionAsync` so the decode of a large inspection doesn't block
+    /// the main thread.
     public func loadFullVersion(id: UUID) -> InspectionVersion? {
         let url = FilePaths.currentVersionFile(jobId: id)
         return ioQueue.sync {
@@ -150,6 +154,27 @@ public final class InspectionStore: ObservableObject {
                   let data = try? Data(contentsOf: url),
                   let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else { return nil }
             return version
+        }
+    }
+
+    /// Off-main async variant of `loadFullVersion` for the inspection-open path.
+    /// The disk read + full JSON decode run on the serial `ioQueue` (ordered
+    /// with every write, so it never observes a half-written file) while the
+    /// main thread stays free — opening a large inspection no longer freezes the
+    /// UI. `InspectionVersion` is a `Sendable` value type, so handing it back
+    /// across the continuation is race-free.
+    nonisolated public func loadFullVersionAsync(id: UUID) async -> InspectionVersion? {
+        let url = FilePaths.currentVersionFile(jobId: id)
+        return await withCheckedContinuation { (cont: CheckedContinuation<InspectionVersion?, Never>) in
+            ioQueue.async {
+                guard FileManager.default.fileExists(atPath: url.path),
+                      let data = try? Data(contentsOf: url),
+                      let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else {
+                    cont.resume(returning: nil)
+                    return
+                }
+                cont.resume(returning: version)
+            }
         }
     }
 
@@ -244,7 +269,25 @@ public final class InspectionStore: ObservableObject {
     /// the on-disk index need to be refreshed for the Dashboard UI.
     public func writeVersionFileOnlyForAutoSave(_ version: InspectionVersion) {
         guard InspectionStateMachine.allowsEdit(version.state) else { return }
-        try? writeVersionToFile(version)
+        // Foreground per-edit autosave: encode + write OFF the main thread so
+        // typing/editing never blocks on JSON encoding + disk I/O. Dispatched
+        // to the same serial `ioQueue` as every other store write, so it stays
+        // strictly ordered relative to the authoritative flush (which remains
+        // synchronous on disappear / background / logout — see `save()` and the
+        // willResignActive observer). `version` is a value type captured by
+        // copy; no `@MainActor` state is touched on the queue, so there is no
+        // data race. A pending async write here is flushed-after by the next
+        // synchronous `ioQueue.sync` (FIFO), so backgrounding never loses it.
+        let url = FilePaths.currentVersionFile(jobId: version.id)
+        ioQueue.async {
+            do {
+                try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+                let data = try JSONEncoder().encode(version)
+                try FileSecurity.writeProtected(data, to: url)
+            } catch {
+                Diagnostics.logError(context: "autosave writeVersionFileOnly failed", error: error)
+            }
+        }
     }
 
     /// Schedules a single save after a short delay. Use for draft updates to avoid hammering disk.

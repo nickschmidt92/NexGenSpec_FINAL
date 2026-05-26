@@ -93,11 +93,16 @@ struct InspectionOverviewView: View {
     /// Short, human-friendly job identifier displayed on the Overview.
     /// Matches the `NGS-YYYYMMDD-XXXX` format used on the PDF cover page
     /// so the inspector can reference either surface interchangeably.
-    private var shortJobId: String {
-        let datePart: String
+    // Cached once — `shortJobId` is read from `body`, so building a new
+    // DateFormatter on every render is pure waste.
+    private static let shortJobIdDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd"
-        datePart = f.string(from: version.inspection.inspectionDate)
+        return f
+    }()
+
+    private var shortJobId: String {
+        let datePart = Self.shortJobIdDateFormatter.string(from: version.inspection.inspectionDate)
         let shortHash = String(version.inspection.inspectionId.replacingOccurrences(of: "-", with: "").prefix(4)).uppercased()
         return "NGS-\(datePart)-\(shortHash)"
     }
@@ -1049,45 +1054,15 @@ struct InspectionOverviewView: View {
                     .zIndex(1)   // ensure buttons always above the image
                 }
             }
-            if let img = loadCoverPhotoPreview() {
-                Image(uiImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 180)
-                    .clipped()   // CRITICAL: clips hit testing, not just paint
-                    .contentShape(Rectangle())   // belt-and-suspenders hit-test boundary
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .allowsHitTesting(false)   // the image itself is not interactive
-                    .accessibilityLabel("Cover photo of the property")
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.systemGray6))
-                        .frame(height: 120)
-                    VStack(spacing: 4) {
-                        Image(systemName: "house.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        Text("No cover photo")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .allowsHitTesting(false)   // placeholder is not interactive
-            }
+            // Cover photo decodes OFF the main thread (was a synchronous
+            // Data(contentsOf:)+UIImage decode in `body` on every render, which
+            // hitched the overview while editing). `coverPhotoTick` invalidates
+            // the load after a change; the placeholder reserves the image height
+            // while decoding so the layout doesn't jump when it arrives.
+            OverviewCoverPhoto(jobId: jobId,
+                               fileName: version.inspection.coverPhotoFileName,
+                               tick: coverPhotoTick)
         }
-    }
-
-    /// Re-reads the cover photo from disk on each render; cheap because the
-    /// JPEG is downscaled at write time. `coverPhotoTick` is used to
-    /// invalidate any UI cache after a change so SwiftUI re-renders.
-    private func loadCoverPhotoPreview() -> UIImage? {
-        guard let name = version.inspection.coverPhotoFileName else { return nil }
-        _ = coverPhotoTick   // dependency for re-render
-        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
     }
 
     /// Handles camera-captured images for the cover photo. Mirrors
@@ -1899,5 +1874,73 @@ private struct TodoRow: View {
         .padding(8)
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+// MARK: - Cover Photo (async)
+
+/// Loads the inspection cover photo off the main thread and shows a
+/// height-reserving placeholder while it decodes, so the Overview no longer
+/// does a synchronous disk read + image decode in `body` on every render.
+/// `tick` is the parent's `coverPhotoTick` — bumping it re-runs the load after
+/// the cover photo is changed or removed.
+private struct OverviewCoverPhoto: View {
+    let jobId: UUID
+    let fileName: String?
+    let tick: Int
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .clipped()   // CRITICAL: clips hit testing, not just paint
+                    .contentShape(Rectangle())   // belt-and-suspenders hit-test boundary
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .allowsHitTesting(false)   // the image itself is not interactive
+                    .accessibilityLabel("Cover photo of the property")
+            } else if fileName != nil {
+                // A cover exists and is decoding off-main — reserve its final
+                // height so the layout doesn't jump when the image lands.
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.systemGray6))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .overlay { ProgressView() }
+                    .allowsHitTesting(false)
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.systemGray6))
+                        .frame(height: 120)
+                    VStack(spacing: 4) {
+                        Image(systemName: "house.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("No cover photo")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .allowsHitTesting(false)   // placeholder is not interactive
+            }
+        }
+        .task(id: "\(fileName ?? "∅")#\(tick)") {
+            await load()
+        }
+    }
+
+    private func load() async {
+        guard let fileName else { image = nil; return }
+        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
+        let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }.value
+        image = loaded
     }
 }

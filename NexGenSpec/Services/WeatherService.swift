@@ -15,7 +15,7 @@ import os
 // MARK: - Weather Data Model
 
 /// Stores weather conditions captured at inspection time.
-public struct WeatherData: Codable, Equatable {
+public struct WeatherData: Codable, Equatable, Sendable {
     public var temperature: Double      // Fahrenheit
     public var conditions: String       // e.g. "Sunny", "Cloudy", "Rain"
     public var humidity: Double         // 0–100 percentage

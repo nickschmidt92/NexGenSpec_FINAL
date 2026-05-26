@@ -122,12 +122,14 @@ struct ArchivedInspectionsView: View {
 private struct ArchivedRow: View {
     let metadata: VersionMetadata
 
-    private var dateFormatter: DateFormatter {
+    // Cached once, not rebuilt per row per render — DateFormatter init is
+    // expensive (~1ms) and this row lives in a lazy List that re-renders on scroll.
+    private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .none
         return f
-    }
+    }()
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.md) {
@@ -149,7 +151,7 @@ private struct ArchivedRow: View {
 
                 HStack(spacing: Spacing.sm) {
                     InspectionInfoPill(
-                        title: dateFormatter.string(from: metadata.inspectionDate),
+                        title: Self.dateFormatter.string(from: metadata.inspectionDate),
                         systemImage: "calendar"
                     )
                     let badge = metadata.badge

@@ -555,6 +555,32 @@ public struct SummaryCounts {
     public var minor: Int
 }
 
+// MARK: - Sendable conformance
+//
+// Every inspection model below is a pure value type with only value-type
+// members (String/Int/Double/Bool/Date/UUID/Data/enums and arrays/optionals
+// thereof — no classes, closures, or reference types). Declaring Sendable in
+// the same file as the types lets the compiler verify this member-wise.
+//
+// This is what lets `InspectionStore` hand an `InspectionVersion` across its
+// background I/O queue (off-main autosave write + off-main `loadFullVersionAsync`)
+// without a data race, and it future-proofs the models for Swift 6 strict
+// concurrency. (`WeatherData` gets the same treatment in WeatherService.swift.)
+extension ItemStatus: Sendable {}
+extension Severity: Sendable {}
+extension VersionStatus: Sendable {}
+extension AnnotationColor: Sendable {}
+extension InspectionPhoto: Sendable {}
+extension InspectionVideo: Sendable {}
+extension InspectionItem: Sendable {}
+extension InspectionSection: Sendable {}
+extension RealEstateAgent: Sendable {}
+extension InspectionReminder: Sendable {}
+extension InspectionTodo: Sendable {}
+extension InspectionSignature: Sendable {}
+extension Inspection: Sendable {}
+extension InspectionVersion: Sendable {}
+
 public extension Inspection {
     func summaryCounts() -> SummaryCounts {
         var c = SummaryCounts(safety: 0, major: 0, marginal: 0, minor: 0)
