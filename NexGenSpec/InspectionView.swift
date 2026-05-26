@@ -120,15 +120,23 @@ struct InspectionView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    // Static snapshot of the timer at the moment the menu
-                    // opens. Beta feedback 2026-04-24: the live-ticking
-                    // TimelineView inside the menu was visually distracting.
-                    // The ticking is unnecessary anyway — the inspector
-                    // doesn't need second-by-second updates while the menu
-                    // is open. Reopening the menu refreshes the value.
-                    Label("Timer: \(formattedTimer(at: Date()))",
-                          systemImage: "timer")
-                        .disabled(true)
+                    // Self-updating timer display. A TimelineView ticks the
+                    // label at 1Hz so the elapsed time keeps counting while the
+                    // menu is open. It re-renders ONLY this label's subtree, not
+                    // InspectionView's body, so the ellipsis.circle toolbar icon
+                    // does not blink (the old Timer.scheduledTimer + @State
+                    // approach invalidated the whole body and did blink).
+                    //
+                    // Do NOT collapse this back to a static
+                    // `formattedTimer(at: Date())` snapshot: a Menu's content is
+                    // built only when the parent body renders — not when the
+                    // menu is reopened — so the captured Date() froze and the
+                    // timer appeared to stop counting (regression in f42a831e).
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Label("Timer: \(formattedTimer(at: context.date))",
+                              systemImage: "timer")
+                            .disabled(true)
+                    }
                     // Weather menu items are gated behind
                     // AppCapabilities.weatherLoggingEnabled (currently enabled).
                     // The underlying reason (location denied, no fix, Open-Meteo
