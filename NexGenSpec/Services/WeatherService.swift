@@ -2,13 +2,14 @@
 //  WeatherService.swift
 //  NexGenSpec
 //
-//  Fetches current weather conditions at inspection time using WeatherKit.
-//  Gracefully degrades when WeatherKit or location permission is unavailable.
+//  Fetches current weather conditions at inspection time from the Open-Meteo API.
+//  Gracefully degrades when the network or location permission is unavailable.
+//
+//  Weather data by Open-Meteo.com
 //
 
 import Foundation
 import CoreLocation
-import WeatherKit
 import os
 
 // MARK: - Weather Data Model
@@ -59,12 +60,12 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
     /// Dedicated logger so the full weather fetch path is visible live in
     /// Console.app on a real device (filter subsystem = bundle id, category
-    /// = "WeatherKit"). Dynamic values are logged `.public` because this is a
-    /// diagnostic aid for an on-device failure we can't reproduce in the
+    /// = "Weather"). Dynamic values are logged `.public` because this is a
+    /// diagnostic aid for on-device failures we can't reproduce in the
     /// simulator — see the catch block in `fetchWeather(at:)`.
     private let log = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.nexgenspec",
-        category: "WeatherKit"
+        category: "Weather"
     )
 
     private func authString(_ status: CLAuthorizationStatus) -> String {
@@ -92,7 +93,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
         let status = locationManager.authorizationStatus
         log.info("fetchCurrentWeather: location auth = \(self.authString(status), privacy: .public)")
-        Diagnostics.logInfo("WeatherKit: fetch start (auth=\(authString(status)))")
+        Diagnostics.logInfo("Weather: fetch start (auth=\(authString(status)))")
 
         switch status {
         case .notDetermined:
@@ -103,7 +104,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             locationManager.requestLocation()
         case .denied, .restricted:
             log.error("Location permission denied/restricted — cannot fetch weather")
-            Diagnostics.logError(context: "WeatherKit: location permission denied/restricted")
+            Diagnostics.logError(context: "Weather: location permission denied/restricted")
             isFetching = false
             errorMessage = "Location permission denied"
             self.weatherData = nil
@@ -157,7 +158,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         let errDesc = error.localizedDescription
         Task { @MainActor in
             log.error("Location request failed: \(errDesc, privacy: .public)")
-            Diagnostics.logError(context: "WeatherKit: location request failed", error: error)
+            Diagnostics.logError(context: "Weather: location request failed", error: error)
             isFetching = false
             errorMessage = "Location error: \(errDesc)"
             completion?(nil)
@@ -165,82 +166,121 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         }
     }
 
-    // MARK: - WeatherKit fetch
+    // MARK: - Open-Meteo fetch
 
+    // Weather data by Open-Meteo.com — free, key-less forecast API used as a
+    // drop-in replacement for WeatherKit, whose JWT auth has been failing
+    // server-side on Apple's end for over a month with no fix available to us.
     private func fetchWeather(at location: CLLocation) async {
-        log.info("Calling WeatherKit weather(for:) …")
-        Diagnostics.logInfo("WeatherKit: weather(for:) call starting")
+        let lat = location.coordinate.latitude
+        let lon = location.coordinate.longitude
+
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        components?.queryItems = [
+            URLQueryItem(name: "latitude", value: String(lat)),
+            URLQueryItem(name: "longitude", value: String(lon)),
+            URLQueryItem(name: "current", value: "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code"),
+            URLQueryItem(name: "temperature_unit", value: "fahrenheit"),
+            URLQueryItem(name: "wind_speed_unit", value: "mph")
+        ]
+
+        guard let url = components?.url else {
+            log.error("Open-Meteo: failed to build request URL")
+            Diagnostics.logError(context: "Weather: failed to build Open-Meteo URL")
+            isFetching = false
+            errorMessage = "Weather: invalid request"
+            completion?(nil)
+            completion = nil
+            return
+        }
+
+        log.info("Calling Open-Meteo forecast …")
+        Diagnostics.logInfo("Open-Meteo: request starting")
         do {
-            let weatherService = WeatherService_Kit()
-            let weather = try await weatherService.weather(for: location)
-            let current = weather.currentWeather
+            let (responseData, response) = try await URLSession.shared.data(from: url)
+
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                log.error("Open-Meteo: unexpected HTTP status \(code, privacy: .public)")
+                Diagnostics.logError(context: "Weather: Open-Meteo HTTP status \(code)")
+                isFetching = false
+                errorMessage = "Weather: server returned \(code)"
+                completion?(nil)
+                completion = nil
+                return
+            }
+
+            let decoded = try JSONDecoder().decode(OpenMeteoResponse.self, from: responseData)
+            let current = decoded.current
 
             let data = WeatherData(
-                temperature: current.temperature.converted(to: .fahrenheit).value,
-                conditions: mapCondition(current.condition),
-                humidity: current.humidity * 100,
-                windSpeed: current.wind.speed.converted(to: .milesPerHour).value,
+                temperature: current.temperature_2m,
+                conditions: mapWeatherCode(current.weather_code),
+                humidity: current.relative_humidity_2m,
+                windSpeed: current.wind_speed_10m,
                 capturedAt: Date()
             )
 
-            log.info("WeatherKit success: \(data.temperatureString, privacy: .public) \(data.conditions, privacy: .public)")
-            Diagnostics.logInfo("WeatherKit: success \(data.temperatureString) \(data.conditions)")
+            log.info("Open-Meteo success: \(data.temperatureString, privacy: .public) \(data.conditions, privacy: .public)")
+            Diagnostics.logInfo("Open-Meteo: success \(data.temperatureString) \(data.conditions)")
             self.weatherData = data
             isFetching = false
             completion?(data)
         } catch {
-            // WeatherKit errors are notoriously opaque (`localizedDescription`
-            // is often just "The operation couldn't be completed"). Log the
-            // full error, its Swift type, and the underlying NSError
-            // domain/code so the real on-device cause — missing entitlement,
-            // JWT/auth failure, or network — is identifiable in Console.app
-            // and the persistent diagnostics log. This is the failure that
-            // was previously swallowed silently.
+            // Surface the full error so the on-device cause — network failure,
+            // decode mismatch, or a malformed response — is identifiable in
+            // Console.app and the persistent diagnostics log.
             let ns = error as NSError
-            log.error("WeatherKit FAILED: \(String(describing: error), privacy: .public) | type=\(String(describing: type(of: error)), privacy: .public) | domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) | \(error.localizedDescription, privacy: .public)")
-            Diagnostics.logError(context: "WeatherKit: weather(for:) failed [domain=\(ns.domain) code=\(ns.code) type=\(type(of: error))]", error: error)
+            log.error("Open-Meteo FAILED: \(String(describing: error), privacy: .public) | type=\(String(describing: type(of: error)), privacy: .public) | domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) | \(error.localizedDescription, privacy: .public)")
+            Diagnostics.logError(context: "Weather: Open-Meteo fetch failed [domain=\(ns.domain) code=\(ns.code) type=\(type(of: error))]", error: error)
             isFetching = false
-            errorMessage = "WeatherKit: \(error.localizedDescription)"
+            errorMessage = "Weather: \(error.localizedDescription)"
             completion?(nil)
         }
         completion = nil
     }
 
-    private func mapCondition(_ condition: WeatherCondition) -> String {
-        switch condition {
-        case .clear, .mostlyClear:
-            return "Sunny"
-        case .partlyCloudy:
+    /// Maps an Open-Meteo WMO weather code to a human-readable condition string.
+    /// Reference: https://open-meteo.com/en/docs (WMO Weather interpretation codes)
+    private func mapWeatherCode(_ code: Int) -> String {
+        switch code {
+        case 0:
+            return "Clear"
+        case 1:
+            return "Mainly Clear"
+        case 2:
             return "Partly Cloudy"
-        case .mostlyCloudy, .cloudy:
-            return "Cloudy"
-        case .rain, .heavyRain:
+        case 3:
+            return "Overcast"
+        case 45, 48:
+            return "Fog"
+        case 51...67:
             return "Rain"
-        case .drizzle:
-            return "Drizzle"
-        case .snow, .heavySnow, .flurries:
+        case 71...77:
             return "Snow"
-        case .sleet, .freezingRain, .freezingDrizzle:
-            return "Sleet"
-        case .thunderstorms, .strongStorms:
-            return "Thunderstorms"
-        case .windy, .breezy:
-            return "Windy"
-        case .foggy, .haze, .smoky:
-            return "Foggy"
-        case .blowingDust:
-            return "Dusty"
+        case 80...82:
+            return "Showers"
+        case 95...99:
+            return "Thunderstorm"
         default:
-            return "Cloudy"
+            return "Unknown"
         }
     }
 }
 
-/// Wrapper to avoid name conflict with our WeatherService class.
-private struct WeatherService_Kit {
-    private let service = WeatherKit.WeatherService.shared
+// MARK: - Open-Meteo Response
 
-    func weather(for location: CLLocation) async throws -> Weather {
-        try await service.weather(for: location)
+/// Minimal decodable shape of the Open-Meteo `/v1/forecast` `current` block.
+/// Temperature and wind arrive pre-converted to Fahrenheit / mph via the
+/// request's `temperature_unit` and `wind_speed_unit` parameters, and
+/// `relative_humidity_2m` is already a 0–100 percentage.
+private struct OpenMeteoResponse: Decodable {
+    let current: Current
+
+    struct Current: Decodable {
+        let temperature_2m: Double
+        let relative_humidity_2m: Double
+        let wind_speed_10m: Double
+        let weather_code: Int
     }
 }

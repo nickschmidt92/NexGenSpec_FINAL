@@ -27,13 +27,11 @@ enum AppCapabilities {
     static var canUseLiDAR: Bool { true }
     static var canUseAISummary: Bool { false }
 
-    /// Weather auto-logging via WeatherKit. Enabled: the App ID is registered
-    /// for the WeatherKit service on the Apple Developer portal and it returns
-    /// live data in the simulator. On-device fetches are still under
-    /// investigation (data does not populate on a real device despite the
-    /// entitlement + manual profiles) — the full fetch path is now
-    /// instrumented (os_log category "WeatherKit" + Diagnostics log) so the
-    /// exact failure is visible from a device. The weather UI appears in the
+    /// Weather auto-logging via the Open-Meteo API (replaced WeatherKit, whose
+    /// JWT auth has been failing server-side on Apple's end). Enabled: a
+    /// key-less URLSession request returns live data on device. The full fetch
+    /// path is instrumented (os_log category "Weather" + Diagnostics log) so
+    /// any failure is visible from a device. The weather UI appears in the
     /// inspection menu/overview and the report, and a fetch is attempted when
     /// an inspection is created without weather data. See WeatherService.swift.
     static var weatherLoggingEnabled: Bool { true }

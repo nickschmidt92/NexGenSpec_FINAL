@@ -131,9 +131,9 @@ struct InspectionView: View {
                         .disabled(true)
                     // Weather menu items are gated behind
                     // AppCapabilities.weatherLoggingEnabled (currently enabled).
-                    // The underlying reason (location denied, no fix, WeatherKit
-                    // auth failure on device) is surfaced below and logged via
-                    // os_log (category "WeatherKit") so on-device failures are
+                    // The underlying reason (location denied, no fix, Open-Meteo
+                    // request failure) is surfaced below and logged via
+                    // os_log (category "Weather") so on-device failures are
                     // diagnosable rather than silently swallowed.
                     if AppCapabilities.weatherLoggingEnabled {
                         if let w = draft.inspection.weather {
@@ -144,7 +144,7 @@ struct InspectionView: View {
                                 .disabled(true)
                         } else {
                             // Surface the underlying reason (location denied, simulator
-                            // with no set location, WeatherKit entitlement missing, etc.)
+                            // with no set location, network/Open-Meteo failure, etc.)
                             // so the user can fix whichever is the real problem.
                             Label(weatherService.errorMessage ?? "Weather unavailable",
                                   systemImage: "icloud.slash")

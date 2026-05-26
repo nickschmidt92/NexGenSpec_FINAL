@@ -173,9 +173,9 @@ struct InspectionOverviewView: View {
                     }
                     
                     // Weather info — gated behind AppCapabilities.weatherLoggingEnabled
-                    // (currently enabled). Only renders once a WeatherKit fetch has
+                    // (currently enabled). Only renders once an Open-Meteo fetch has
                     // populated `weather`; on-device fetch failures are logged via
-                    // os_log (category "WeatherKit") for diagnosis.
+                    // os_log (category "Weather") for diagnosis.
                     if AppCapabilities.weatherLoggingEnabled, let weather = version.inspection.weather {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Weather at Inspection")
