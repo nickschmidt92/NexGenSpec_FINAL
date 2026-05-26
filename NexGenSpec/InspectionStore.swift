@@ -184,68 +184,90 @@ public final class InspectionStore: ObservableObject {
     /// Wipes ALL local inspection data from disk and clears in-memory state.
     /// Called as part of Delete Account to satisfy App Store Guideline 5.1.1(v).
     /// After this runs, the next launch starts with a clean slate.
-    public func clearAllLocalData() {
+    ///
+    /// `async` (T-01413): the recursive wipe of every photo / video / LiDAR file
+    /// can take a long time on a large account. Running it via `ioQueue.sync` on
+    /// the `@MainActor` (as before) blocked the main thread and risked a
+    /// 0x8badf00d watchdog kill during Delete Account, so the wipe now runs off
+    /// the main thread and is awaited.
+    public func clearAllLocalData() async {
         // Cancel any pending save so it doesn't race the delete.
         saveWorkItem?.cancel()
         saveWorkItem = nil
 
-        ioQueue.sync {
-            let fm = FileManager.default
-            let root = FilePaths.appRoot
-            guard fm.fileExists(atPath: root.path) else { return }
-
-            // First attempt: a single recursive delete. Fast path.
-            do {
-                try fm.removeItem(at: root)
-            } catch {
-                Diagnostics.logError(
-                    context: "clearAllLocalData: recursive removeItem failed for \(root.path); falling back to per-file walk",
-                    error: error
-                )
-                // Fallback: walk the contents and remove each entry, capturing
-                // failures per item rather than aborting the whole wipe. This
-                // recovers the case where one file (e.g. an open audit-log
-                // FileHandle, an iCloud-coordinating file, or a stuck temp
-                // export) prevented the recursive remove from completing.
-                let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
-                if let enumerator = fm.enumerator(
-                    at: root,
-                    includingPropertiesForKeys: resourceKeys,
-                    options: [.skipsSubdirectoryDescendants]
-                ) {
-                    for case let url as URL in enumerator {
-                        do {
-                            try fm.removeItem(at: url)
-                        } catch {
-                            Diagnostics.logError(
-                                context: "clearAllLocalData: failed to remove \(url.lastPathComponent)",
-                                error: error
-                            )
-                        }
-                    }
-                }
-                // Try removing the (now hopefully empty) root one more time.
-                try? fm.removeItem(at: root)
-            }
-
-            // Post-condition check. If the root still exists, the wipe was
-            // incomplete and the user's data persists past Delete Account.
-            // Goes through Firebase Crashlytics — does NOT write to disk, so
-            // it can't accidentally re-create the directory we just removed.
-            // (For the same reason there is no AuditLog success entry here:
-            // AuditLog writes to appRoot/audit_log.txt and would defeat the
-            // wipe by recreating the directory.)
-            if fm.fileExists(atPath: root.path) {
-                Diagnostics.logError(
-                    context: "clearAllLocalData: appRoot still exists after wipe attempts: \(root.path). Data NOT fully deleted."
-                )
+        // Heavy recursive delete runs OFF the main thread. Dispatched to the
+        // same serial `ioQueue` as every other store write, so it is FIFO-
+        // ordered after any in-flight async autosave write and never races a
+        // half-written file.
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            ioQueue.async {
+                Self.wipeAppRoot()
+                cont.resume()
             }
         }
 
+        // Back on the main actor: clear in-memory state.
         metadataList = []
         saveError = nil
         loadError = nil
         lastSavedAt = nil
+    }
+
+    /// Recursively removes `FilePaths.appRoot`. Runs on `ioQueue` only and
+    /// touches no `@MainActor` state, so it is `nonisolated` and safe off the
+    /// main thread. Extracted from `clearAllLocalData()` so the heavy delete can
+    /// be awaited off-main (T-01413).
+    nonisolated private static func wipeAppRoot() {
+        let fm = FileManager.default
+        let root = FilePaths.appRoot
+        guard fm.fileExists(atPath: root.path) else { return }
+
+        // First attempt: a single recursive delete. Fast path.
+        do {
+            try fm.removeItem(at: root)
+        } catch {
+            Diagnostics.logError(
+                context: "clearAllLocalData: recursive removeItem failed for \(root.path); falling back to per-file walk",
+                error: error
+            )
+            // Fallback: walk the contents and remove each entry, capturing
+            // failures per item rather than aborting the whole wipe. This
+            // recovers the case where one file (e.g. an open audit-log
+            // FileHandle, an iCloud-coordinating file, or a stuck temp
+            // export) prevented the recursive remove from completing.
+            let resourceKeys: [URLResourceKey] = [.isDirectoryKey]
+            if let enumerator = fm.enumerator(
+                at: root,
+                includingPropertiesForKeys: resourceKeys,
+                options: [.skipsSubdirectoryDescendants]
+            ) {
+                for case let url as URL in enumerator {
+                    do {
+                        try fm.removeItem(at: url)
+                    } catch {
+                        Diagnostics.logError(
+                            context: "clearAllLocalData: failed to remove \(url.lastPathComponent)",
+                            error: error
+                        )
+                    }
+                }
+            }
+            // Try removing the (now hopefully empty) root one more time.
+            try? fm.removeItem(at: root)
+        }
+
+        // Post-condition check. If the root still exists, the wipe was
+        // incomplete and the user's data persists past Delete Account.
+        // Goes through Firebase Crashlytics — does NOT write to disk, so
+        // it can't accidentally re-create the directory we just removed.
+        // (For the same reason there is no AuditLog success entry here:
+        // AuditLog writes to appRoot/audit_log.txt and would defeat the
+        // wipe by recreating the directory.)
+        if fm.fileExists(atPath: root.path) {
+            Diagnostics.logError(
+                context: "clearAllLocalData: appRoot still exists after wipe attempts: \(root.path). Data NOT fully deleted."
+            )
+        }
     }
 
     /// Flushes any pending debounced save and writes to disk immediately. Use for ⌘S.
