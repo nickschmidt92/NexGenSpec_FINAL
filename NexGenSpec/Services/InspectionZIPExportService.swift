@@ -36,7 +36,11 @@ public enum InspectionZIPExportService {
     /// Folder where exported ZIPs land. Lives at Documents/NexGenSpecExports/
     /// so it is OUTSIDE `FilePaths.appRoot` and reachable from the Files app.
     public static var exportFolder: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            // Documents is guaranteed present on iOS; fall back to tmp rather
+            // than force-unwrap so a missing directory can never crash export.
+            return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("NexGenSpecExports", isDirectory: true)
+        }
         return docs.appendingPathComponent("NexGenSpecExports", isDirectory: true)
     }
 

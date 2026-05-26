@@ -76,7 +76,6 @@ struct PrivacyPolicyView: View {
                             • Camera: Capture inspection photos and video. Saved only to NexGenSpec's secure storage — never written to your iPhone/iPad Photos app.
                             • Photo Library (read-only): Import existing photos and video into a specific inspection (e.g. drone or thermal imagery you AirDropped). NexGenSpec never writes back to your Photo Library, never scans it in the background, and never accesses photos outside picker actions you initiate.
                             • Calendar (optional): Writes scheduled inspection events to a calendar of your choice. Only on your device.
-                            • Microphone: Recorded only when you capture in-app video with audio.
                             • Notifications (optional): Inspection reminders.
 
                             Revoke any permission anytime in iOS Settings → NexGenSpec.
@@ -320,7 +319,7 @@ struct TermsOfServiceView: View {
                             • The accuracy, completeness, or quality of any inspection report you create. Those are the licensed inspector's professional work product and professional liability.
                             • Defects, damages, or losses at a property — whether identified, missed, or misclassified.
                             • Decisions made by buyers, sellers, agents, lenders, or any other party based on a NexGenSpec-generated report.
-                            • Third-party services (Apple's iOS, WeatherKit, StoreKit, Firebase, your email provider, Apple Pay). Each is governed by its own terms.
+                            • Third-party services (Apple's iOS, Open-Meteo, StoreKit, Firebase, your email provider, Apple Pay). Each is governed by its own terms. Weather data provided by Open-Meteo.com (https://open-meteo.com/).
                             • Any payment dispute between an inspector and a client. NexGenSpec does not process payments.
                             • Loss of inspection data caused by any of the events listed in Section 8.
                             • Retention of email-delivered reports once the email has left your device.
@@ -447,7 +446,7 @@ struct TermsOfServiceContent: View {
                         • The accuracy, completeness, or quality of any inspection report you create. Those are the licensed inspector's professional work product and professional liability.
                         • Defects, damages, or losses at a property — whether identified, missed, or misclassified during an inspection.
                         • Decisions made by buyers, sellers, agents, lenders, or any other party based on a NexGenSpec-generated report.
-                        • Third-party services the app integrates with (Apple's iOS, WeatherKit, StoreKit, Firebase, your email provider, Apple Pay, etc.). Each is governed by its own terms.
+                        • Third-party services the app integrates with (Apple's iOS, Open-Meteo, StoreKit, Firebase, your email provider, Apple Pay, etc.). Each is governed by its own terms. Weather data provided by Open-Meteo.com (https://open-meteo.com/).
                         • Any payment dispute between an inspector and a client. NexGenSpec does not process payments.
                         • Loss of inspection data caused by device failure, accidental deletion, OS upgrades, lost or stolen devices, or anything outside our direct control. NexGenSpec does not maintain server-side copies of inspection content and cannot recover it.
                         • Indirect, consequential, incidental, special, or punitive damages, including lost revenue, lost profits, lost business opportunities, or loss of goodwill.

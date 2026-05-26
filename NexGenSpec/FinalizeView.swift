@@ -32,6 +32,26 @@ struct FinalizeView: View {
                     }
                 }
                 Section(
+                    header: Text("Sections in Report"),
+                    footer: Text("Sections with no defects reported (orange) will be omitted from the PDF. If a section is missing, it will not appear in the report. Review before finalizing.")
+                        .font(.footnote)
+                ) {
+                    ForEach(version.inspection.sections) { section in
+                        let defectCount = section.items.filter { $0.isDefect && $0.includeInReport }.count
+                        HStack(spacing: 10) {
+                            Image(systemName: defectCount > 0 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(defectCount > 0 ? .green : .orange)
+                            Text(section.title)
+                            Spacer()
+                            Text("\(defectCount) defect\(defectCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(section.title), \(defectCount) defect\(defectCount == 1 ? "" : "s")")
+                    }
+                }
+                Section(
                     header: Text("Signatures"),
                     footer: signaturesFooter
                 ) {

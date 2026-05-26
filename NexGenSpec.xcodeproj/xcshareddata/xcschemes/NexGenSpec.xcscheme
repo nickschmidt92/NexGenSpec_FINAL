@@ -39,6 +39,16 @@
                ReferencedContainer = "container:NexGenSpec.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "U1B2C3D4E5F6000000000006"
+               BuildableName = "NexGenSpecUITests.xctest"
+               BlueprintName = "NexGenSpecUITests"
+               ReferencedContainer = "container:NexGenSpec.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

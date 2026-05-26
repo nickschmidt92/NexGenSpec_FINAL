@@ -309,6 +309,12 @@ public final class AuthManager: ObservableObject {
         do {
             try Auth.auth().signOut()
             applyUser(nil)
+            // Clear the device-local inspector profile so the next user to log
+            // in on this device doesn't inherit the previous inspector's email
+            // (auto-CC'd on invoices) or name/license/company (printed on the
+            // client report). The profile is not account-scoped, so logout is
+            // the boundary where it must be reset.
+            InspectorProfile.shared.clear()
         } catch {
             authErrorMessage = Self.friendlyMessage(for: error)
         }
@@ -429,8 +435,8 @@ public final class AuthManager: ObservableObject {
         guard let user = Auth.auth().currentUser else {
             throw DeleteAccountError.notSignedIn
         }
-        let coordinator = SignInWithAppleCoordinator()
         do {
+            let coordinator = try SignInWithAppleCoordinator.make()
             let appleCredential = try await coordinator.start()
             guard let tokenData = appleCredential.identityToken,
                   let idTokenString = String(data: tokenData, encoding: .utf8) else {

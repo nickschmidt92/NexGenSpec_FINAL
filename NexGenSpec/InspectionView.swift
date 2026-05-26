@@ -120,37 +120,53 @@ struct InspectionView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    // Static snapshot of the timer at the moment the menu
-                    // opens. Beta feedback 2026-04-24: the live-ticking
-                    // TimelineView inside the menu was visually distracting.
-                    // The ticking is unnecessary anyway — the inspector
-                    // doesn't need second-by-second updates while the menu
-                    // is open. Reopening the menu refreshes the value.
-                    Label("Timer: \(formattedTimer(at: Date()))",
-                          systemImage: "timer")
-                        .disabled(true)
-                    if let w = draft.inspection.weather {
-                        Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
+                    // Self-updating timer display. A TimelineView ticks the
+                    // label at 1Hz so the elapsed time keeps counting while the
+                    // menu is open. It re-renders ONLY this label's subtree, not
+                    // InspectionView's body, so the ellipsis.circle toolbar icon
+                    // does not blink (the old Timer.scheduledTimer + @State
+                    // approach invalidated the whole body and did blink).
+                    //
+                    // Do NOT collapse this back to a static
+                    // `formattedTimer(at: Date())` snapshot: a Menu's content is
+                    // built only when the parent body renders — not when the
+                    // menu is reopened — so the captured Date() froze and the
+                    // timer appeared to stop counting (regression in f42a831e).
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Label("Timer: \(formattedTimer(at: context.date))",
+                              systemImage: "timer")
                             .disabled(true)
-                    } else if weatherService.isFetching {
-                        Label("Fetching weather…", systemImage: "cloud")
-                            .disabled(true)
-                    } else {
-                        // Surface the underlying reason (location denied, simulator
-                        // with no set location, WeatherKit entitlement missing, etc.)
-                        // so the user can fix whichever is the real problem.
-                        Label(weatherService.errorMessage ?? "Weather unavailable",
-                              systemImage: "cloud.slash")
-                            .disabled(true)
-                        Button {
-                            weatherService.retry { data in
-                                if let data { draft.inspection.weather = data }
-                            }
-                        } label: {
-                            Label("Retry weather", systemImage: "arrow.clockwise")
-                        }
                     }
-                    Divider()
+                    // Weather menu items are gated behind
+                    // AppCapabilities.weatherLoggingEnabled (currently enabled).
+                    // The underlying reason (location denied, no fix, Open-Meteo
+                    // request failure) is surfaced below and logged via
+                    // os_log (category "Weather") so on-device failures are
+                    // diagnosable rather than silently swallowed.
+                    if AppCapabilities.weatherLoggingEnabled {
+                        if let w = draft.inspection.weather {
+                            Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
+                                .disabled(true)
+                        } else if weatherService.isFetching {
+                            Label("Fetching weather…", systemImage: "cloud")
+                                .disabled(true)
+                        } else {
+                            // Surface the underlying reason (location denied, simulator
+                            // with no set location, network/Open-Meteo failure, etc.)
+                            // so the user can fix whichever is the real problem.
+                            Label(weatherService.errorMessage ?? "Weather unavailable",
+                                  systemImage: "icloud.slash")
+                                .disabled(true)
+                            Button {
+                                weatherService.retry { data in
+                                    if let data { draft.inspection.weather = data }
+                                }
+                            } label: {
+                                Label("Retry weather", systemImage: "arrow.clockwise")
+                            }
+                        }
+                        Divider()
+                    }
                     if store.isSaving {
                         Label("Saving…", systemImage: "arrow.triangle.2.circlepath")
                             .disabled(true)
@@ -237,8 +253,10 @@ struct InspectionView: View {
             }
             // Start timer
             startTimer()
-            // Fetch weather if not already captured
-            if draft.inspection.weather == nil {
+            // Fetch weather if not already captured. The fetch path is
+            // instrumented (see WeatherService) so the on-device failure can
+            // be diagnosed from Console.app / the diagnostics log.
+            if AppCapabilities.weatherLoggingEnabled, draft.inspection.weather == nil {
                 weatherService.fetchCurrentWeather { data in
                     if let data {
                         draft.inspection.weather = data
@@ -425,6 +443,7 @@ struct InspectionView: View {
                     }
                     .accessibilityLabel(section.title)
                     .accessibilityHint("\(section.items.count) items")
+                    .accessibilityIdentifier("sectionRow")   // UI-test hook (autosave E2E)
                     .hoverEffect(.lift)
                 }
             }
@@ -556,6 +575,9 @@ struct InspectionView: View {
                     selectedPane = .invoice
                     if updatedVersion.state.isFinalized {
                         showExportZIPPrompt = true
+                        // Ask for an App Store review at the 2nd successful
+                        // finalization (one-shot, production-only).
+                        ReviewPromptService.recordFinalizationAndMaybeRequestReview()
                     }
                 }
             }
@@ -585,6 +607,7 @@ private struct SectionItemsListView: View {
                     InspectionItemRowLabel(item: item)
                 }
                 .buttonStyle(.plain).hoverEffect(.lift)
+                .accessibilityIdentifier("itemRow")   // UI-test hook (autosave E2E)
             }
             // Beta-requested (2026-04-22): let the inspector add a custom
             // item on the fly rather than only editing the pre-loaded

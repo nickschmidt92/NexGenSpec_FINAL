@@ -86,6 +86,64 @@ final class InspectionStoreTests: XCTestCase {
         XCTAssertTrue(store.deleteVersion(id: jobId))
         XCTAssertFalse(FileManager.default.fileExists(atPath: FilePaths.inspectionFolder(jobId: jobId).path))
     }
+
+    /// Perf-pass regression guard: the off-main autosave write
+    /// (`writeVersionFileOnlyForAutoSave` → `ioQueue.async`) must still persist
+    /// an edit durably across a process restart. A brand-new `InspectionStore`
+    /// re-reads from disk in `init()`, exactly like a fresh process after a
+    /// force-kill + relaunch; `writeProtected` is atomic, so a kill mid-write
+    /// can only leave the complete old or complete new file (never a torn one).
+    func testAutosaveWritePersistsEditAcrossRelaunch() throws {
+        let store = InspectionStore()
+        let jobId = UUID()
+        let marker = "AUTOSAVE-PERSIST-\(UUID().uuidString)"
+
+        let item = InspectionItem(templateItemId: "t1", title: "Roof covering")
+        let section = InspectionSection(id: UUID(), title: "Roof", items: [item])
+        let inspection = Inspection(
+            id: jobId,
+            clientName: "Autosave Test",
+            clientEmail: "",
+            clientPhone: "",
+            propertyAddress: "1 Persistence Way",
+            inspectionDate: Date(),
+            inspectorName: "Inspector",
+            sections: [section]
+        )
+        let version = InspectionVersion(
+            id: jobId,
+            versionNumber: 1,
+            status: .draft,
+            finalizedAt: nil,
+            locked: false,
+            inspection: inspection
+        )
+        store.insert(version: version)
+        defer { _ = store.deleteVersion(id: jobId) }
+
+        // Edit a finding comment and drive the exact off-main autosave path.
+        var edited = version
+        edited.inspection.sections[0].items[0].observed = marker
+        store.writeVersionFileOnlyForAutoSave(edited)
+
+        // loadFullVersion uses ioQueue.sync, which blocks behind the queued
+        // async write (serial FIFO) — this confirms the write reached disk and
+        // mirrors "edit, wait 2s for autosave to complete" before the kill.
+        XCTAssertEqual(
+            store.loadFullVersion(id: jobId)?.inspection.sections.first?.items.first?.observed,
+            marker,
+            "autosave write did not reach disk"
+        )
+
+        // Force-kill + relaunch simulation: a brand-new store reads from disk
+        // in init(), exactly like a fresh process after the app is killed.
+        let relaunched = InspectionStore()
+        XCTAssertEqual(
+            relaunched.loadFullVersion(id: jobId)?.inspection.sections.first?.items.first?.observed,
+            marker,
+            "edit did NOT persist across relaunch"
+        )
+    }
 }
 
 @MainActor

@@ -21,9 +21,16 @@ final class SignInWithAppleCoordinator: NSObject,
     let rawNonce: String
     private var continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>?
 
-    override init() {
-        self.rawNonce = Self.makeNonce()
+    private init(rawNonce: String) {
+        self.rawNonce = rawNonce
         super.init()
+    }
+
+    /// Creates a coordinator with a freshly generated secure nonce. Throws
+    /// (rather than crashing) if the system secure RNG is unavailable — see
+    /// `makeNonce`. Use this instead of a plain initializer.
+    static func make() throws -> SignInWithAppleCoordinator {
+        SignInWithAppleCoordinator(rawNonce: try makeNonce())
     }
 
     func start() async throws -> ASAuthorizationAppleIDCredential {
@@ -82,7 +89,13 @@ final class SignInWithAppleCoordinator: NSObject,
     // hashed) without duplicating the implementation. Reauth still uses the
     // coordinator path; new sign-in goes through SignInWithAppleButton.
 
-    static func makeNonce(length: Int = 32) -> String {
+    /// Thrown when the system secure RNG is unavailable. Realistically never
+    /// happens on iOS, but `SecRandomCopyBytes` can fail in principle, so we
+    /// surface it as a handled error instead of crashing the sign-in flow
+    /// (`precondition` is NOT stripped from release builds).
+    enum NonceError: Error { case secureRandomUnavailable }
+
+    static func makeNonce(length: Int = 32) throws -> String {
         precondition(length > 0)
         let charset: [Character] =
             Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._")
@@ -91,7 +104,9 @@ final class SignInWithAppleCoordinator: NSObject,
         while remaining > 0 {
             var randoms = [UInt8](repeating: 0, count: 16)
             let status = SecRandomCopyBytes(kSecRandomDefault, randoms.count, &randoms)
-            precondition(status == errSecSuccess, "Unable to generate secure nonce.")
+            guard status == errSecSuccess else {
+                throw NonceError.secureRandomUnavailable
+            }
             for byte in randoms where remaining > 0 {
                 if byte < charset.count {
                     result.append(charset[Int(byte) % charset.count])

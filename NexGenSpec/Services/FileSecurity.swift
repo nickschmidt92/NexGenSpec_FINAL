@@ -1,7 +1,7 @@
 import Foundation
 
 enum FileSecurity {
-    static let fileProtection: FileProtectionType = .completeUntilFirstUserAuthentication
+    static let fileProtection: FileProtectionType = .completeUnlessOpen
 
     static func ensureProtectedDirectory(_ url: URL) throws {
         try FileManager.default.createDirectory(

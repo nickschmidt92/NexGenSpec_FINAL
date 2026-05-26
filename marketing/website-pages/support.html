@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support - NexGenSpec</title>
+  <meta name="description" content="NexGenSpec support and help. Contact us, manage your subscription, export inspections, and find answers to common questions about the iPad home inspection app.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.nexgenspec.com/support.html">
+  <meta property="og:title" content="Support - NexGenSpec">
+  <meta property="og:description" content="Get help with NexGenSpec. Contact support, manage your subscription, and find answers to common questions.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexgenspec.com/support.html">
+  <meta property="og:image" content="https://nexgenspec.com/logo.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Support - NexGenSpec">
+  <meta name="twitter:description" content="Contact NexGenSpec support, manage subscriptions, and find answers to common questions about the iPad home inspection app.">
+  <meta name="twitter:image" content="https://nexgenspec.com/logo.jpg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- FAQ Page structured data — lets Google show rich FAQ results in search -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I contact NexGenSpec support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Email contact@nexgenspec.com. We respond within one business day, US Mountain time, Monday through Friday."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I manage or cancel my subscription?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Subscriptions are managed through Apple, not NexGenSpec. Open iOS Settings, tap your name, then Subscriptions, then NexGenSpec, then Cancel Subscription. Cancellation takes effect at the end of the current billing period."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I delete my account?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Open the NexGenSpec app, go to Settings, then Account, then Delete Account. The flow asks you to reauthenticate, then permanently deletes your login and all locally stored inspections. A deletion receipt is saved to your Files app for your records."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I export an inspection report?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Open the inspection, tap Finalize and complete the signatures, then tap Invoice and Send. The app generates a branded PDF and opens an email composer with the client and inspector copies attached."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do my inspections sync between iPads?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. NexGenSpec is local-first. Inspections live on the device they were created on. To move an inspection between your own devices, use the Files-app export from within the inspection."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What if my subscription is cancelled, do I lose my inspections?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Inspections you have already created remain readable and exportable on the device. Subscription only gates new inspections beyond the free trial and removes the watermark on PDF reports."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #e2e8f0; background: #0a0e1a; line-height: 1.6;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    img { max-width: 100%; height: auto; display: block; }
+    a { color: #3b82f6; text-decoration: none; transition: color 0.2s; }
+    a:hover { color: #60a5fa; }
+
+    /* Background */
+    .bg-glow { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+    .bg-glow::before, .bg-glow::after {
+      content: ''; position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.12;
+      animation: float 20s ease-in-out infinite;
+    }
+    .bg-glow::before { width: 500px; height: 500px; background: #3b82f6; top: -200px; left: -100px; }
+    .bg-glow::after { width: 400px; height: 400px; background: #06b6d4; bottom: -150px; right: -100px; animation-delay: -10s; animation-direction: reverse; }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(100px, -50px) scale(1.1); }
+      66% { transform: translate(-50px, 80px) scale(0.9); }
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* Header */
+    #header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10, 14, 26, 0.8); backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; height: 80px;
+    }
+    .logo-link {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: #fff;
+      font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em;
+    }
+    .logo-icon { width: 42px; height: 42px; transition: transform 0.3s; }
+    .logo-link:hover .logo-icon { transform: scale(1.05); }
+    .back-link {
+      font-weight: 500; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .back-link:hover { color: #fff; }
+
+    @media (max-width: 768px) {
+      .header-inner { height: 70px; }
+      .logo-icon { width: 36px; height: 36px; }
+      .logo-link { font-size: 1rem; }
+    }
+
+    /* Content */
+    .content {
+      max-width: 780px; margin: 0 auto; padding: 4rem 1.5rem 6rem;
+    }
+    .content h1 {
+      font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; color: #fff;
+      letter-spacing: -0.03em; margin-bottom: 0.5rem;
+    }
+    .effective-date {
+      font-size: 0.9rem; color: #64748b; margin-bottom: 3rem;
+      padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .content h3 {
+      font-size: 1.2rem; font-weight: 700; color: #f1f5f9;
+      margin-top: 2.5rem; margin-bottom: 1rem;
+      padding-left: 1rem; border-left: 3px solid #3b82f6;
+    }
+    .content p {
+      color: #94a3b8; line-height: 1.8; margin-bottom: 1rem; font-size: 0.95rem;
+    }
+    .content ul {
+      list-style: none; margin-bottom: 1rem; padding-left: 0;
+    }
+    .content ul li {
+      color: #94a3b8; line-height: 1.8; font-size: 0.95rem;
+      padding: 0.4rem 0 0.4rem 1.5rem; position: relative;
+    }
+    .content ul li::before {
+      content: ''; position: absolute; left: 0; top: 0.9rem;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    }
+    .content strong { color: #e2e8f0; }
+
+    /* Contact card */
+    .contact-card {
+      margin: 2rem 0; padding: 1.75rem 2rem;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 1rem;
+    }
+    .contact-card strong { display: block; color: #f1f5f9; font-size: 1.05rem; margin-bottom: 0.4rem; }
+    .contact-card p { color: #94a3b8; margin-bottom: 0.4rem; font-size: 0.95rem; }
+    .contact-card .email { font-size: 1.05rem; }
+    .contact-card .response { color: #64748b; font-size: 0.85rem; margin-top: 0.4rem; }
+    .contact-card a { color: #3b82f6; }
+
+    /* FAQ items — styled summary/details for keyboard/touch access */
+    .faq { margin-bottom: 0.75rem; }
+    .faq details {
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 0.75rem; padding: 0;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .faq details[open] {
+      background: rgba(255,255,255,0.04); border-color: rgba(59,130,246,0.25);
+    }
+    .faq summary {
+      cursor: pointer; padding: 1rem 1.25rem;
+      font-weight: 600; color: #e2e8f0; font-size: 0.98rem;
+      list-style: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after {
+      content: ''; flex-shrink: 0; width: 12px; height: 12px;
+      border-right: 2px solid #64748b; border-bottom: 2px solid #64748b;
+      transform: rotate(45deg); transition: transform 0.2s, border-color 0.2s;
+    }
+    .faq details[open] summary::after {
+      transform: rotate(-135deg); border-color: #3b82f6;
+    }
+    .faq summary:hover { color: #fff; }
+    .faq .answer {
+      padding: 0 1.25rem 1.25rem; color: #94a3b8;
+      line-height: 1.75; font-size: 0.93rem;
+    }
+    .faq .answer p { color: #94a3b8; margin-bottom: 0.6rem; font-size: 0.93rem; }
+    .faq .answer code {
+      background: rgba(59,130,246,0.12); color: #93c5fd;
+      padding: 0.1rem 0.4rem; border-radius: 0.3rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+    }
+
+    /* Footer */
+    #footer {
+      background: rgba(3,7,18,0.8); color: #64748b; padding: 1.5rem 0;
+      border-top: 1px solid rgba(255,255,255,0.04); font-size: 0.8rem;
+    }
+    .footer-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 600; color: #94a3b8; font-size: 0.9rem;
+    }
+    .footer-logo-icon { width: 28px; height: 28px; }
+    .footer-copy { font-size: 0.78rem; color: #64748b; }
+    @media (max-width: 600px) {
+      .footer-inner { justify-content: center; text-align: center; }
+    }
+
+    @media print {
+      #header, .bg-glow, .faq summary::after { display: none; }
+      body { color: #000; background: #fff; }
+      .content h1, .content h3 { color: #000; }
+      .content p, .content ul li, .faq .answer p { color: #333; }
+      .faq details { border: 1px solid #ccc; page-break-inside: avoid; }
+      .faq details[open] { background: none; }
+      .faq .answer { display: block !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header id="header">
+    <div class="header-inner">
+      <a href="/" class="logo-link" aria-label="NexGenSpec Home">
+        <picture>
+          <source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x">
+          <img src="icon-hex.png?v=3" alt="NexGenSpec" class="logo-icon" width="42" height="42" decoding="async">
+        </picture>
+        NexGenSpec
+      </a>
+      <a href="/" class="back-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to Home
+      </a>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>Support</h1>
+    <p class="effective-date">For NexGenSpec users on iPhone and iPad.</p>
+
+    <h3>Contact Us</h3>
+    <p>The fastest way to reach support is email. We read every message personally and respond within one business day, US Mountain time.</p>
+
+    <div class="contact-card">
+      <strong>NexGenSpec Support</strong>
+      <p class="email">Email: <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a></p>
+      <p class="response">Response time: within 1 business day, Monday&ndash;Friday, US Mountain time.</p>
+    </div>
+
+    <p>Please include in your email:</p>
+    <ul>
+      <li>Your iPad or iPhone model and iOS version (Settings &rarr; General &rarr; About)</li>
+      <li>NexGenSpec version (Settings inside the app, bottom of the screen)</li>
+      <li>A short description of what you were doing and what you expected</li>
+      <li>If a report or photo is involved, a screenshot helps a lot</li>
+    </ul>
+
+    <h3>Common Questions</h3>
+
+    <div class="faq">
+      <details>
+        <summary>How do I manage or cancel my subscription?</summary>
+        <div class="answer">
+          <p>Subscriptions are managed through Apple, not through NexGenSpec.</p>
+          <p>Open iOS <strong>Settings</strong> &rarr; tap your name at the top &rarr; <strong>Subscriptions</strong> &rarr; <strong>NexGenSpec</strong> &rarr; tap <strong>Cancel Subscription</strong>. Cancellation takes effect at the end of the current billing period; you retain Pro access until then.</p>
+          <p>To change tier (Monthly &harr; Annual), tap the other plan in the same Subscriptions screen.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>How do I delete my account?</summary>
+        <div class="answer">
+          <p>Open NexGenSpec &rarr; <strong>Settings</strong> &rarr; <strong>Account</strong> &rarr; <strong>Delete Account</strong>. The app asks you to reauthenticate (password or Sign in with Apple), then permanently:</p>
+          <ul>
+            <li>Deletes your Firebase authentication record.</li>
+            <li>Erases every inspection, photo, signature, and PDF stored on the device.</li>
+            <li>Saves a deletion receipt to your Files app under <code>On My iPad &rarr; NexGenSpec &rarr; NexGenSpecReceipts</code> so you have a record.</li>
+          </ul>
+          <p>This action cannot be undone. NexGenSpec keeps no server-side copy of inspection content.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>How do I export a finished inspection report?</summary>
+        <div class="answer">
+          <p>Open the inspection &rarr; tap <strong>Finalize</strong> and collect both signatures &rarr; tap <strong>Invoice &amp; Send</strong>. The app generates a branded PDF with your company logo on every page and opens a mail composer with the client and inspector copies attached.</p>
+          <p>You can also export the full inspection package (PDF + photos + LiDAR USDZ files) as a .zip via the Files app: tap the share icon on the inspection &rarr; <strong>Save to Files</strong>.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>Do my inspections sync between iPads?</summary>
+        <div class="answer">
+          <p>No. NexGenSpec is intentionally local-first &mdash; your inspection content never leaves your device. Inspections live on the iPad or iPhone they were created on.</p>
+          <p>To move an inspection between your own devices: open the inspection, tap the share icon, choose <strong>Save to Files</strong>, then transfer the resulting .zip via AirDrop, iCloud Drive, or any file-sharing method you prefer.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>What if I cancel my subscription &mdash; do I lose past inspections?</summary>
+        <div class="answer">
+          <p>No. Inspections you have already created remain on your device and stay readable and exportable. Subscription only gates the creation of new inspections beyond the free trial allowance and removes the watermark on freshly generated PDF reports.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>The app crashed. What information should I send?</summary>
+        <div class="answer">
+          <p>If the app crashed, anonymized crash reports are automatically sent to Firebase Crashlytics so we can fix the bug. These reports contain no inspection content or personal information.</p>
+          <p>It also helps if you email <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a> with: the iPad/iPhone model, iOS version, NexGenSpec version, and a short description of what you were doing when the crash happened.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>How do I back up my inspections?</summary>
+        <div class="answer">
+          <p>NexGenSpec relies on iCloud Backup. Make sure iCloud Backup is turned on under iOS <strong>Settings</strong> &rarr; your name &rarr; <strong>iCloud</strong> &rarr; <strong>iCloud Backup</strong>. Your inspection data is included in the device backup.</p>
+          <p>For an explicit copy of a specific inspection, use <strong>Save to Files</strong> from the inspection's share menu to write a .zip archive to iCloud Drive (or any provider you choose).</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="faq">
+      <details>
+        <summary>Does NexGenSpec work without an internet connection?</summary>
+        <div class="answer">
+          <p>Yes. Inspections are created, captured, finalized, and exported entirely on-device. Internet is only required for sign-in (one time per device), subscription validation, the weather stamp at the start of an inspection, and sending the final PDF via email.</p>
+          <p>If you go offline mid-inspection, the app continues to work. Pro entitlement is cached for up to 7 days offline so a subscriber on a remote job site does not lose Pro features.</p>
+        </div>
+      </details>
+    </div>
+
+    <h3>Account &amp; Privacy</h3>
+    <p>NexGenSpec is local-first and stores all inspection content on your device. We do not host your reports, photos, or client information on our servers. See the <a href="privacy.html">Privacy Policy</a> for the full data-handling story and the <a href="terms.html">Terms of Service</a> for usage terms.</p>
+
+    <h3>System Requirements</h3>
+    <ul>
+      <li><strong>iPad:</strong> iPadOS 17 or later. LiDAR room scanning requires iPad Pro 11" / 12.9" / 13" with LiDAR sensor.</li>
+      <li><strong>iPhone:</strong> iOS 17 or later. LiDAR room scanning requires iPhone Pro or Pro Max with LiDAR sensor.</li>
+      <li><strong>Storage:</strong> ~150 MB for the app itself, plus space for your inspections (typical inspection with 60&ndash;100 photos is 200&ndash;400 MB).</li>
+      <li><strong>Network:</strong> Required for sign-in, subscription validation, weather stamp, and emailing reports. Not required during the inspection itself.</li>
+    </ul>
+
+    <h3>Still Stuck?</h3>
+    <p>Email <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a>. We are a small team and read every message personally.</p>
+
+  </main>
+
+  <footer id="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <picture>
+          <source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x">
+          <img src="icon-hex.png?v=3" alt="NexGenSpec" class="footer-logo-icon" loading="lazy" decoding="async" width="28" height="28">
+        </picture>
+        NexGenSpec
+      </div>
+      <p class="footer-copy">&copy; 2026 NexGenSpec. All rights reserved.</p>
+    </div>
+  </footer>
+
+</body>
+</html>

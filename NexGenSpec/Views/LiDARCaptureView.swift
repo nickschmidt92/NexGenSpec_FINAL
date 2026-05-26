@@ -174,7 +174,7 @@ struct LiDARCaptureView: View {
                     #endif
                     showRoomPlanCapture = true
                 } label: {
-                    Label("Capture room with LiDAR", systemImage: "square.viewfinder")
+                    Label("Capture room with LiDAR", systemImage: "dot.viewfinder")
                         .font(.headline)
                 }
                 .accessibilityLabel("Capture room with LiDAR")
@@ -210,7 +210,7 @@ struct LiDARCaptureView: View {
         // Show this message only on platforms where iPhone LiDAR availability matters.
         // Update this comment and conditions if new iPhone models gain LiDAR support.
         VStack(spacing: 24) {
-            Image(systemName: "square.viewfinder")
+            Image(systemName: "dot.viewfinder")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
             Text("LiDAR room capture is not available on iPhone. This feature is only supported on iPad Pro and iPhone Pro models with LiDAR sensors.")

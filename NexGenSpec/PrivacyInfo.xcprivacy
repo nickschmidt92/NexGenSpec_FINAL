@@ -87,11 +87,13 @@
 				<string>NSPrivacyCollectedDataTypePurposeAuthentication</string>
 			</array>
 		</dict>
-		<!-- Coarse location: WeatherKit fetch for the inspection weather
-		     stamp. Not linked to a persistent identity. -->
+		<!-- Precise location: WeatherKit weather stamp + reverse-geocoded
+		     property-address auto-fill. desiredAccuracy is
+		     kCLLocationAccuracyHundredMeters (LocationService.swift), which
+		     is "Precise" in Apple's label taxonomy. Not linked to identity. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>

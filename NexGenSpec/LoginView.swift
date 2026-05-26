@@ -132,10 +132,18 @@ struct LoginView: View {
                             // per HIG so App Store review can't flag the SIWA
                             // surface. .white style matches the navy login bg.
                             SignInWithAppleButton(.signIn) { request in
-                                let nonce = SignInWithAppleCoordinator.makeNonce()
-                                siwaRawNonce = nonce
                                 request.requestedScopes = [.fullName, .email]
-                                request.nonce = SignInWithAppleCoordinator.sha256(nonce)
+                                do {
+                                    let nonce = try SignInWithAppleCoordinator.makeNonce()
+                                    siwaRawNonce = nonce
+                                    request.nonce = SignInWithAppleCoordinator.sha256(nonce)
+                                } catch {
+                                    // Secure RNG unavailable (effectively never on iOS).
+                                    // Leave the nonce unset so the downstream Firebase
+                                    // exchange fails with a handled error instead of crashing.
+                                    siwaRawNonce = ""
+                                    Diagnostics.logError(context: "SIWA: secure nonce generation failed", error: error)
+                                }
                             } onCompletion: { result in
                                 Task { @MainActor in
                                     let ok = await authManager.handleAppleSignIn(

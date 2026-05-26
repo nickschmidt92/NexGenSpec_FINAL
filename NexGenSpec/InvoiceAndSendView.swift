@@ -2,7 +2,8 @@
 //  InvoiceAndSendView.swift
 //  NexGenSpec
 //
-//  Post-finalize: customer contact, report link/PDF, invoice form, send to client and contact@nexgenspec.com.
+//  Post-finalize: customer contact, report link/PDF, invoice form, send to the
+//  client (CC the inspector's own profile email and any selected agents).
 //
 
 import SwiftUI
@@ -32,10 +33,14 @@ struct InvoiceAndSendView: View {
     @State private var invoiceSentAt: Date?
     @State private var invoicePaidAt: Date?
 
-    private let nexGenSpecEmail = "contact@nexgenspec.com"
-
     private var sentAtKey: String { "invoice.sentAt.\(version.inspection.inspectionId)" }
     private var paidAtKey: String { "invoice.paidAt.\(version.inspection.inspectionId)" }
+
+    /// Once the invoice has been emailed to the client, the dollar amounts and
+    /// services description are locked. Editing them after send would let the
+    /// inspector show a different invoice in-app than the one the client
+    /// received — i.e. an audit-trail break (T-01384).
+    private var isInvoiceLocked: Bool { invoiceSentAt != nil }
 
     var body: some View {
         Form {
@@ -96,11 +101,12 @@ struct InvoiceAndSendView: View {
                     }
                 }
             }
-            Section(header: Text("Invoice")) {
+            Section {
                 HStack(spacing: 2) {
                     Text("$")
                     TextField("Price", text: $invoicePrice)
                         .keyboardType(.decimalPad)
+                        .decimalFiltered($invoicePrice)
                 }
                 TextField("Additional services", text: $additionalServices, axis: .vertical)
                     .lineLimit(3...6)
@@ -108,8 +114,18 @@ struct InvoiceAndSendView: View {
                     Text("$")
                     TextField("Total", text: $invoiceTotal)
                         .keyboardType(.decimalPad)
+                        .decimalFiltered($invoiceTotal)
+                }
+            } header: {
+                Text("Invoice")
+            } footer: {
+                if isInvoiceLocked {
+                    Text("Locked after the invoice was emailed to the client.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .disabled(isInvoiceLocked)
             // Legal / liability disclaimer — NexGenSpec is a reporting
             // tool, not a payment processor. Client pays the inspector
             // directly via whatever method the two agree on outside
@@ -167,6 +183,9 @@ struct InvoiceAndSendView: View {
             if !isExporting {
                 if case .success(_, let pdf?) = exportService.result {
                     exportedPDFURL = pdf
+                    // Mirror into the Files-app folder organized by address so
+                    // the inspector has one-tap PDF access outside the app.
+                    FilesAppPublisher.publish(version: version, pdfURL: pdf)
                     // Warn if PDF exceeds 20 MB — email providers may reject large attachments
                     if let attrs = try? FileManager.default.attributesOfItem(atPath: pdf.path),
                        let fileSize = attrs[.size] as? UInt64,
@@ -214,33 +233,43 @@ struct InvoiceAndSendView: View {
 
     @ViewBuilder
     private var mailComposeSheet: some View {
-        let recipients = [version.inspection.clientEmail, nexGenSpecEmail].filter { !$0.isEmpty }
-        if !recipients.isEmpty {
-            MailComposeView(
-                toRecipients: recipients,
-                ccRecipients: ccEmails,
-                subject: invoiceSubject,
-                body: invoiceEmailHTML,
-                isHTML: true,
-                attachmentURL: exportedPDFURL,
-                extraAttachmentURLs: lidarUSDZAttachmentURLs(),
-                onDismiss: { showMailCompose = false },
-                onResult: { result in
-                    if result == .sent {
-                        let now = Date()
-                        invoiceSentAt = now
-                        UserDefaults.standard.set(now, forKey: sentAtKey)
-                    }
+        // To: the client only. NexGenSpec is the tool, not the inspector of
+        // record — it must never be a recipient on a client-facing report.
+        // The inspector keeps their own copy via the CC below (their profile
+        // email) plus their mail account's Sent folder. If the client email
+        // is blank the composer still opens so the inspector can type it.
+        let recipients = [version.inspection.clientEmail].filter { !$0.isEmpty }
+        MailComposeView(
+            toRecipients: recipients,
+            ccRecipients: ccEmails,
+            subject: invoiceSubject,
+            body: invoiceEmailHTML,
+            isHTML: true,
+            attachmentURL: exportedPDFURL,
+            extraAttachmentURLs: lidarUSDZAttachmentURLs(),
+            onDismiss: { showMailCompose = false },
+            onResult: { result in
+                if result == .sent {
+                    let now = Date()
+                    invoiceSentAt = now
+                    UserDefaults.standard.set(now, forKey: sentAtKey)
                 }
-            )
-        }
+            }
+        )
     }
 
-    /// Auto-populated CC list based on which agent toggles are on.
+    /// Auto-populated CC list: any selected agents, plus the inspector's own
+    /// address from their profile so they retain a copy of exactly what the
+    /// client received. This replaces the former hardcoded contact@nexgenspec.com
+    /// CC — the inspector, not NexGenSpec, is liable for their reports.
     private var ccEmails: [String] {
         var list: [String] = []
         if ccBuyersAgent, !buyersAgentEmail.isEmpty { list.append(buyersAgentEmail) }
         if ccListingAgent, !listingAgentEmail.isEmpty { list.append(listingAgentEmail) }
+        let inspectorEmail = profile.email.trimmingCharacters(in: .whitespaces)
+        if !inspectorEmail.isEmpty, !list.contains(inspectorEmail) {
+            list.append(inspectorEmail)
+        }
         return list
     }
 
@@ -292,38 +321,59 @@ struct InvoiceAndSendView: View {
         let priceDisplay = invoicePrice.isEmpty ? "—" : "$\(invoicePrice)"
         let totalDisplay = invoiceTotal.isEmpty ? "—" : "$\(invoiceTotal)"
         let additionalRow = additionalServices.isEmpty ? "" : """
-            <tr><td style="padding:8px 12px;color:#666;">Additional Services</td><td style="padding:8px 12px;text-align:right;">\(additionalServices)</td></tr>
+            <tr><td style="padding:8px 12px;color:#666;">Additional Services</td><td style="padding:8px 12px;text-align:right;">\(additionalServices.htmlEscaped)</td></tr>
             """
         let companyName = InspectorProfile.shared.companyName
         let inspectorLine = companyName.isEmpty ? inspection.inspectorName : "\(inspection.inspectorName) — \(companyName)"
+
+        // The client-facing email is the inspector's brand, not ours. Header
+        // subtitle and footer use the company name (falling back to the
+        // inspector's name) plus the inspector's own contact details — never
+        // a NexGenSpec address.
+        let brandName = companyName.trimmingCharacters(in: .whitespaces).isEmpty
+            ? inspection.inspectorName
+            : companyName
+        let profileEmail = InspectorProfile.shared.email.trimmingCharacters(in: .whitespaces)
+        let profilePhone = InspectorProfile.shared.phone.trimmingCharacters(in: .whitespaces)
+        var footerBits: [String] = []
+        if !brandName.trimmingCharacters(in: .whitespaces).isEmpty { footerBits.append(brandName) }
+        if !profileEmail.isEmpty { footerBits.append(profileEmail) }
+        if !profilePhone.isEmpty { footerBits.append(profilePhone) }
+        let footerLine = footerBits.joined(separator: " · ")
+        let headerSubtitle = brandName.trimmingCharacters(in: .whitespaces).isEmpty
+            ? ""
+            : "<p style=\"color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;\">\(brandName.htmlEscaped)</p>"
+        let footerHTML = footerLine.isEmpty
+            ? ""
+            : "<p style=\"margin:0;font-size:12px;color:#999;\">\(footerLine.htmlEscaped)</p>"
 
         return """
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;">
           <div style="background:linear-gradient(135deg,#0066cc,#00aaff);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
             <h1 style="color:#fff;margin:0;font-size:22px;">Inspection Report &amp; Invoice</h1>
-            <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">NexGenSpec</p>
+            \(headerSubtitle)
           </div>
           <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-top:none;">
             <h2 style="font-size:16px;color:#333;margin:0 0 12px;">Client Details</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:6px 0;color:#666;width:140px;">Name</td><td>\(inspection.clientName)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Email</td><td>\(inspection.clientEmail)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Phone</td><td>\(inspection.clientPhone)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Property</td><td>\(inspection.propertyAddress)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;width:140px;">Name</td><td>\(inspection.clientName.htmlEscaped)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Email</td><td>\(inspection.clientEmail.htmlEscaped)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Phone</td><td>\(inspection.clientPhone.htmlEscaped)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Property</td><td>\(inspection.propertyAddress.htmlEscaped)</td></tr>
               <tr><td style="padding:6px 0;color:#666;">Date</td><td>\(dateStr)</td></tr>
-              <tr><td style="padding:6px 0;color:#666;">Inspector</td><td>\(inspectorLine)</td></tr>
+              <tr><td style="padding:6px 0;color:#666;">Inspector</td><td>\(inspectorLine.htmlEscaped)</td></tr>
             </table>
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;">
             <h2 style="font-size:16px;color:#333;margin:0 0 12px;">Invoice</h2>
             <table style="width:100%;border-collapse:collapse;font-size:14px;background:#f8f9fa;border-radius:8px;">
-              <tr><td style="padding:8px 12px;color:#666;">Inspection Fee</td><td style="padding:8px 12px;text-align:right;font-weight:600;">\(priceDisplay)</td></tr>
+              <tr><td style="padding:8px 12px;color:#666;">Inspection Fee</td><td style="padding:8px 12px;text-align:right;font-weight:600;">\(priceDisplay.htmlEscaped)</td></tr>
               \(additionalRow)
-              <tr style="border-top:2px solid #0066cc;"><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:right;font-weight:700;color:#0066cc;font-size:16px;">\(totalDisplay)</td></tr>
+              <tr style="border-top:2px solid #0066cc;"><td style="padding:10px 12px;font-weight:700;">Total</td><td style="padding:10px 12px;text-align:right;font-weight:700;color:#0066cc;font-size:16px;">\(totalDisplay.htmlEscaped)</td></tr>
             </table>
             <p style="margin:20px 0 0;font-size:13px;color:#666;">The full inspection report is attached as a PDF. If no attachment is present, please request it from your inspector.</p>
           </div>
           <div style="background:#f8f9fa;padding:16px;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#999;">Generated by NexGenSpec · contact@nexgenspec.com</p>
+            \(footerHTML)
           </div>
         </div>
         """

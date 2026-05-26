@@ -2,10 +2,21 @@ import Foundation
 import Security
 import CryptoKit
 
+/// Stores a SHA-256 digest of the user's password in the Keychain only.
+///
+/// There is deliberately no UserDefaults (or any other device-readable)
+/// fallback: a plist-backed credential digest is exposed in device backups
+/// and is not protected by the Secure Enclave / Data Protection class the way
+/// a Keychain item is. If the Keychain write or read fails, the correct
+/// recovery is full re-authentication against Firebase — callers must treat a
+/// `false` from `save`/`verify` as "credential unavailable", never as a cue to
+/// consult a softer store.
 enum KeychainCredentialsStore {
     private static let service = "com.nexgenspec.credentials"
-    private static let fallbackKey = "com.nexgenspec.credentials.fallback"
 
+    /// Persists the password digest in the Keychain. Returns `true` only when
+    /// the Keychain write succeeds; on failure the caller should require
+    /// re-authentication rather than persisting the credential anywhere else.
     static func save(username: String, password: String) -> Bool {
         guard !username.isEmpty, !password.isEmpty else { return false }
         let digest = SHA256.hash(data: Data(password.utf8))
@@ -20,16 +31,17 @@ enum KeychainCredentialsStore {
 
         SecItemDelete(query as CFDictionary)
         let status = SecItemAdd(query as CFDictionary, nil)
-        let fallbackSaved = saveFallbackDigest(digestData, for: username)
-
         if status != errSecSuccess {
             Diagnostics.logError(context: "Failed to save credentials for account", error: KeychainError(status: status))
         }
-        return status == errSecSuccess || fallbackSaved
+        return status == errSecSuccess
     }
 
+    /// Verifies a password against the Keychain-stored digest. Returns `false`
+    /// when nothing is stored or the Keychain read fails — the caller resolves
+    /// that by re-authenticating, not by trusting a fallback copy.
     static func verify(username: String, password: String) -> Bool {
-        guard let stored = readDigest(username: username) ?? readFallbackDigest(username: username) else {
+        guard let stored = readDigest(username: username) else {
             return false
         }
         let candidate = Data(SHA256.hash(data: Data(password.utf8)))
@@ -49,24 +61,6 @@ enum KeychainCredentialsStore {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess else { return nil }
         return item as? Data
-    }
-
-    private static func saveFallbackDigest(_ digest: Data, for username: String) -> Bool {
-        var storedDigests = UserDefaults.standard.dictionary(forKey: fallbackKey) as? [String: String] ?? [:]
-        storedDigests[username] = digest.base64EncodedString()
-        UserDefaults.standard.set(storedDigests, forKey: fallbackKey)
-        return true
-    }
-
-    private static func readFallbackDigest(username: String) -> Data? {
-        guard
-            let storedDigests = UserDefaults.standard.dictionary(forKey: fallbackKey) as? [String: String],
-            let encoded = storedDigests[username]
-        else {
-            return nil
-        }
-
-        return Data(base64Encoded: encoded)
     }
 }
 

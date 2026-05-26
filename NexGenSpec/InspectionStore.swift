@@ -17,8 +17,23 @@ public final class InspectionStore: ObservableObject {
     @Published public private(set) var lastSavedAt: Date?
     @Published public private(set) var isSaving = false
     /// True when the inspection template failed to load (e.g. missing JSON). Create inspection will no-op.
+    /// Accessing this lazily loads the template (see `heavyTemplate`).
     public var templateLoadFailed: Bool { heavyTemplate == nil }
-    private var heavyTemplate: HeavyTemplate?
+
+    /// The ~115 KB bundled inspection template, parsed lazily on first use.
+    /// It is only needed when *creating* an inspection, so parsing it in
+    /// `init()` taxed every cold launch with a synchronous main-thread JSON
+    /// decode for no reason. Backed by `heavyTemplateCache` + a loaded flag so
+    /// a parse failure (nil) is cached too and not retried on every access.
+    private var heavyTemplateCache: HeavyTemplate?
+    private var heavyTemplateLoaded = false
+    private var heavyTemplate: HeavyTemplate? {
+        if !heavyTemplateLoaded {
+            heavyTemplateLoaded = true
+            heavyTemplateCache = Self.loadHeavyTemplateFromBundle()
+        }
+        return heavyTemplateCache
+    }
     private let indexURL = FilePaths.inspectionsIndex
     private var saveWorkItem: DispatchWorkItem?
     private let saveDebounceInterval: DispatchTimeInterval = .milliseconds(400)
@@ -26,7 +41,6 @@ public final class InspectionStore: ObservableObject {
 
     public init() {
         load()
-        loadHeavyTemplate()
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.saveWorkItem?.cancel()
@@ -36,14 +50,13 @@ public final class InspectionStore: ObservableObject {
         }
     }
 
-    private func loadHeavyTemplate() {
+    private static func loadHeavyTemplateFromBundle() -> HeavyTemplate? {
         let name = "InspectionTemplate"
         if let url = Bundle.main.url(forResource: name, withExtension: "json")
             ?? Bundle(for: Self.self).url(forResource: name, withExtension: "json") {
-            heavyTemplate = HeavyTemplateImporter.load(from: url)
-        } else {
-            heavyTemplate = InspectionStore.fallbackTemplate
+            return HeavyTemplateImporter.load(from: url)
         }
+        return InspectionStore.fallbackTemplate
     }
 
     private func load() {
@@ -130,6 +143,10 @@ public final class InspectionStore: ObservableObject {
     }
 
     /// Loads full version from disk. Returns nil if not found or decode fails.
+    /// Synchronous: retained for callers that need the value inline (delete /
+    /// revision / purge / finalize). For the inspection-OPEN path use
+    /// `loadFullVersionAsync` so the decode of a large inspection doesn't block
+    /// the main thread.
     public func loadFullVersion(id: UUID) -> InspectionVersion? {
         let url = FilePaths.currentVersionFile(jobId: id)
         return ioQueue.sync {
@@ -137,6 +154,27 @@ public final class InspectionStore: ObservableObject {
                   let data = try? Data(contentsOf: url),
                   let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else { return nil }
             return version
+        }
+    }
+
+    /// Off-main async variant of `loadFullVersion` for the inspection-open path.
+    /// The disk read + full JSON decode run on the serial `ioQueue` (ordered
+    /// with every write, so it never observes a half-written file) while the
+    /// main thread stays free — opening a large inspection no longer freezes the
+    /// UI. `InspectionVersion` is a `Sendable` value type, so handing it back
+    /// across the continuation is race-free.
+    nonisolated public func loadFullVersionAsync(id: UUID) async -> InspectionVersion? {
+        let url = FilePaths.currentVersionFile(jobId: id)
+        return await withCheckedContinuation { (cont: CheckedContinuation<InspectionVersion?, Never>) in
+            ioQueue.async {
+                guard FileManager.default.fileExists(atPath: url.path),
+                      let data = try? Data(contentsOf: url),
+                      let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else {
+                    cont.resume(returning: nil)
+                    return
+                }
+                cont.resume(returning: version)
+            }
         }
     }
 
@@ -231,7 +269,25 @@ public final class InspectionStore: ObservableObject {
     /// the on-disk index need to be refreshed for the Dashboard UI.
     public func writeVersionFileOnlyForAutoSave(_ version: InspectionVersion) {
         guard InspectionStateMachine.allowsEdit(version.state) else { return }
-        try? writeVersionToFile(version)
+        // Foreground per-edit autosave: encode + write OFF the main thread so
+        // typing/editing never blocks on JSON encoding + disk I/O. Dispatched
+        // to the same serial `ioQueue` as every other store write, so it stays
+        // strictly ordered relative to the authoritative flush (which remains
+        // synchronous on disappear / background / logout — see `save()` and the
+        // willResignActive observer). `version` is a value type captured by
+        // copy; no `@MainActor` state is touched on the queue, so there is no
+        // data race. A pending async write here is flushed-after by the next
+        // synchronous `ioQueue.sync` (FIFO), so backgrounding never loses it.
+        let url = FilePaths.currentVersionFile(jobId: version.id)
+        ioQueue.async {
+            do {
+                try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+                let data = try JSONEncoder().encode(version)
+                try FileSecurity.writeProtected(data, to: url)
+            } catch {
+                Diagnostics.logError(context: "autosave writeVersionFileOnly failed", error: error)
+            }
+        }
     }
 
     /// Schedules a single save after a short delay. Use for draft updates to avoid hammering disk.
@@ -395,12 +451,12 @@ public extension InspectionStore {
             offset != idx && other.inspectionId == metadata.inspectionId
         }
 
-        // Cascade: if this inspection has a mirrored calendar event, try to
-        // delete it before we lose the identifier. We load the full version
-        // to read the `calendarEventIdentifier` — the metadata list only
-        // carries the lightweight fields.
-        if let full = loadFullVersion(id: id),
-           let eventIdentifier = full.inspection.calendarEventIdentifier {
+        // Load the full version once: we need it both to cascade-delete a
+        // mirrored calendar event (before we lose the identifier) and to
+        // resolve the property address for the published Files-app folder.
+        // The metadata list only carries the lightweight fields.
+        let full = loadFullVersion(id: id)
+        if let eventIdentifier = full?.inspection.calendarEventIdentifier {
             try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
         }
 
@@ -413,6 +469,14 @@ public extension InspectionStore {
         } catch {
             saveError = "Could not remove inspection files: \(error.localizedDescription)"
             return false
+        }
+
+        // Also remove the published Files-app mirror (NexGenSpec/[Address]/)
+        // if one was exported, so the report + _data don't outlive the
+        // inspection. No-op when nothing was published.
+        if let inspection = full?.inspection, !hasRemainingInspectionReferences {
+            let jobId = UUID(uuidString: inspection.inspectionId) ?? metadata.id
+            FilesAppPublisher.removePublished(for: inspection, jobId: jobId)
         }
 
         metadataList.remove(at: idx)

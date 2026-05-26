@@ -26,7 +26,7 @@ struct NexGenSpecApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            rootContent
                 .environmentObject(store)
                 .environmentObject(authManager)
                 .environmentObject(subscriptions)
@@ -35,6 +35,16 @@ struct NexGenSpecApp: App {
                 // Keep SubscriptionManager in sync with the signed-in Firebase user
                 // so whitelisted admin emails get premium access automatically.
                 .onAppear {
+                    // T-01412: If a prior account deletion was interrupted before
+                    // its local wipe finished (e.g. the user abandoned the receipt
+                    // share sheet by killing the app), the Firebase account is gone
+                    // but local data may remain. Complete the wipe now, then clear
+                    // the retry flag. clearAllLocalData() also resets the store's
+                    // in-memory metadata loaded during init().
+                    if UserDefaults.standard.bool(forKey: "deletion-pending-wipe") {
+                        store.clearAllLocalData()
+                        UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
+                    }
                     subscriptions.applyCurrentUser(email: authManager.currentUsername)
                     // Re-confirm DeviceCheck trial bit on every cold launch so
                     // a Delete App + reinstall is detected immediately rather
@@ -52,5 +62,19 @@ struct NexGenSpecApp: App {
                     }
                 }
         }
+    }
+
+    /// Production launches always go through RootView. Only a `-screenshotMode`
+    /// DEBUG launch is routed to the screenshot host (compiled out of Release).
+    @ViewBuilder private var rootContent: some View {
+        #if DEBUG
+        if ScreenshotMode.isActive {
+            ScreenshotHost()
+        } else {
+            RootView()
+        }
+        #else
+        RootView()
+        #endif
     }
 }

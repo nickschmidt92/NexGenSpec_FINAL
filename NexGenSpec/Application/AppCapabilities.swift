@@ -26,4 +26,13 @@ enum AppCapabilities {
     static var syncContext: SyncContext { SyncContext() }
     static var canUseLiDAR: Bool { true }
     static var canUseAISummary: Bool { false }
+
+    /// Weather auto-logging via the Open-Meteo API (replaced WeatherKit, whose
+    /// JWT auth has been failing server-side on Apple's end). Enabled: a
+    /// key-less URLSession request returns live data on device. The full fetch
+    /// path is instrumented (os_log category "Weather" + Diagnostics log) so
+    /// any failure is visible from a device. The weather UI appears in the
+    /// inspection menu/overview and the report, and a fetch is attempted when
+    /// an inspection is created without weather data. See WeatherService.swift.
+    static var weatherLoggingEnabled: Bool { true }
 }

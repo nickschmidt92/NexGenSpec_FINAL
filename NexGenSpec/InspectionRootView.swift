@@ -44,9 +44,12 @@ struct InspectionRootView: View {
                 }
             }
         }
-        .onAppear {
+        // Load off the main thread so opening a large inspection shows the
+        // "Loading…" placeholder for a beat instead of freezing the UI while
+        // the full version JSON decodes. `.task(id:)` re-runs if the row changes.
+        .task(id: versionID) {
             if loadedVersion?.id != versionID {
-                loadedVersion = store.loadFullVersion(id: versionID)
+                loadedVersion = await store.loadFullVersionAsync(id: versionID)
             }
         }
     }

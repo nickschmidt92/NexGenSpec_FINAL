@@ -27,7 +27,18 @@ struct InspectionOverviewView: View {
     @State private var showShareSheet = false
     @State private var shareItems: [Any] = []
     @State private var showLiDARCapture = false
+    /// Saved LiDAR scans for this inspection, loaded from disk. Refreshed on
+    /// appear and after the capture sheet closes so scans show up on the
+    /// overview alongside photos and videos (previously they were only
+    /// visible inside the capture sheet and the final report).
+    @State private var lidarScans: [LiDARScan] = []
     @State private var selectedVideoItems: [PhotosPickerItem] = []
+    /// Drives the video-library picker. A `PhotosPicker` placed directly
+    /// inside a `Menu` never presents on iOS — the menu dismisses before the
+    /// picker can open, so the row appeared to "do nothing". Instead the menu
+    /// row is a plain Button that sets this flag, and a `.photosPicker(isPresented:)`
+    /// modifier on the section presents the picker outside the menu lifecycle.
+    @State private var showVideoLibraryPicker = false
     /// Drives the cover-photo picker. When non-nil, a fullScreenCover
     /// presents the appropriate UIImagePickerController. Set to nil
     /// from inside the onFinish callback to dismiss.
@@ -44,6 +55,19 @@ struct InspectionOverviewView: View {
     /// the old tap-does-nothing behavior where an uploaded video row
     /// was inert — a top complaint from the first TestFlight cohort.
     @State private var videoToPlay: InspectionVideo?
+    /// Drives the rename alert for a video. When non-nil, an alert with a
+    /// text field lets the inspector give the recording a friendly name
+    /// (stored as the video's caption). TestFlight finding 2026-05-25:
+    /// videos couldn't be renamed after capture.
+    @State private var videoToRename: InspectionVideo?
+    @State private var renameText: String = ""
+    /// A clip that was just recorded and is waiting for the naming prompt.
+    /// We don't present the prompt directly from the recorder's onRecorded
+    /// callback because the recorder sheet is still dismissing — presenting
+    /// then races the dismissal (the same class of bug that broke the cover
+    /// photo flow). Instead we stash the video here and present the rename
+    /// prompt from the sheet's onDismiss, mirroring the LiDAR naming flow.
+    @State private var justRecordedVideo: InspectionVideo?
     /// Unified sheet router. Cover photo is NOT in this enum — it's
     /// driven separately by coverPhotoSource (see above) because the
     /// cover-photo path was rewritten to use UIImagePickerController
@@ -69,11 +93,16 @@ struct InspectionOverviewView: View {
     /// Short, human-friendly job identifier displayed on the Overview.
     /// Matches the `NGS-YYYYMMDD-XXXX` format used on the PDF cover page
     /// so the inspector can reference either surface interchangeably.
-    private var shortJobId: String {
-        let datePart: String
+    // Cached once — `shortJobId` is read from `body`, so building a new
+    // DateFormatter on every render is pure waste.
+    private static let shortJobIdDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyyMMdd"
-        datePart = f.string(from: version.inspection.inspectionDate)
+        return f
+    }()
+
+    private var shortJobId: String {
+        let datePart = Self.shortJobIdDateFormatter.string(from: version.inspection.inspectionDate)
         let shortHash = String(version.inspection.inspectionId.replacingOccurrences(of: "-", with: "").prefix(4)).uppercased()
         return "NGS-\(datePart)-\(shortHash)"
     }
@@ -148,8 +177,11 @@ struct InspectionOverviewView: View {
                         }
                     }
                     
-                    // Weather info
-                    if let weather = version.inspection.weather {
+                    // Weather info — gated behind AppCapabilities.weatherLoggingEnabled
+                    // (currently enabled). Only renders once an Open-Meteo fetch has
+                    // populated `weather`; on-device fetch failures are logged via
+                    // os_log (category "Weather") for diagnosis.
+                    if AppCapabilities.weatherLoggingEnabled, let weather = version.inspection.weather {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Weather at Inspection")
                                 .font(.headline)
@@ -170,6 +202,9 @@ struct InspectionOverviewView: View {
                     // Drone / Video
                     droneVideoSection
 
+                    // Room Scans (LiDAR) — loaded from disk
+                    roomScansSection
+
                     // Reminders + To-Do (per-inspection scratchpads)
                     remindersSection
                     todosSection
@@ -179,6 +214,7 @@ struct InspectionOverviewView: View {
                 .padding()
             }
             .scrollDismissesKeyboard(.interactively)
+            .onAppear { loadLiDARScans() }
             .onChange(of: selectedVideoItems) { _, newItems in
                 guard let item = newItems.first else { return }
                 Task {
@@ -213,6 +249,9 @@ struct InspectionOverviewView: View {
                             Task {
                                 await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
                                 if case .success(_, let pdf) = exportService.result, let url = pdf {
+                                    // Mirror into the Files-app folder organized
+                                    // by address for one-tap access outside the app.
+                                    FilesAppPublisher.publish(version: version, pdfURL: url)
                                     shareContent = ShareContent(items: [url])
                                 } else if case .failure = exportService.result {
                                     showExportError = true
@@ -244,7 +283,7 @@ struct InspectionOverviewView: View {
             } message: {
                 Text(exportService.errorMessage ?? "The report could not be exported as PDF. It may be too large.")
             }
-            .sheet(isPresented: $showLiDARCapture) {
+            .sheet(isPresented: $showLiDARCapture, onDismiss: { loadLiDARScans() }) {
                 LiDARCaptureView(jobId: UUID(uuidString: version.inspection.inspectionId) ?? version.id)
             }
             .sheet(item: $videoToPlay) { video in
@@ -252,6 +291,19 @@ struct InspectionOverviewView: View {
                     url: FilePaths.videosFolder(jobId: jobId).appendingPathComponent(video.fileName),
                     caption: video.caption.isEmpty ? video.fileName : video.caption
                 )
+            }
+            .alert(
+                "Rename Video",
+                isPresented: Binding(
+                    get: { videoToRename != nil },
+                    set: { if !$0 { videoToRename = nil } }
+                )
+            ) {
+                TextField("Video name", text: $renameText)
+                Button("Save") { commitVideoRename() }
+                Button("Cancel", role: .cancel) { videoToRename = nil }
+            } message: {
+                Text("Give this recording a name so it's easy to identify in the report.")
             }
             // fullScreenCover (not sheet) because UIImagePickerController
             // with sourceType = .camera wants the entire screen — using
@@ -273,13 +325,25 @@ struct InspectionOverviewView: View {
                 .ignoresSafeArea()
             }
             // Remaining sheet router: video recorder + inspection date.
-            .sheet(item: $activeSheet) { sheet in
+            // onDismiss presents the naming prompt for a freshly-recorded clip
+            // after the recorder sheet has fully dismissed (mirrors the LiDAR
+            // naming flow, which presents in its capture cover's onDismiss to
+            // avoid a present-during-dismiss race).
+            .sheet(item: $activeSheet, onDismiss: {
+                if let recorded = justRecordedVideo {
+                    justRecordedVideo = nil
+                    renameText = recorded.caption
+                    videoToRename = recorded
+                }
+            }) { sheet in
                 switch sheet {
                 case .videoRecorder:
                     VideoRecorderView(
                         onRecorded: { tempURL in
+                            // Save first, stash the result, then dismiss — the
+                            // naming prompt fires from onDismiss above.
+                            justRecordedVideo = addVideoFromRecordedURL(tempURL)
                             activeSheet = nil
-                            addVideoFromRecordedURL(tempURL)
                         },
                         onCancel: { activeSheet = nil }
                     )
@@ -450,9 +514,9 @@ struct InspectionOverviewView: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color.blue.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // No card wrapper: keeps the "Reminders" header flush-left with the
+        // other top-level sections (Drone / Video, Room Scans) so it reads as
+        // a peer, not a sub-item nested under them.
     }
 
     // MARK: - To-Do
@@ -496,9 +560,8 @@ struct InspectionOverviewView: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color.blue.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // No card wrapper — see remindersSection: keeps "To Do" flush-left as a
+        // top-level peer of Drone / Video and Room Scans rather than a sub-item.
     }
 
     private func reminderBinding(_ id: UUID) -> Binding<InspectionReminder> {
@@ -570,10 +633,13 @@ struct InspectionOverviewView: View {
                                 Label("Record Video", systemImage: "video.fill")
                             }
                         }
-                        PhotosPicker(
-                            selection: $selectedVideoItems,
-                            maxSelectionCount: 1, matching: .videos
-                        ) {
+                        // Plain Button, NOT a PhotosPicker — a PhotosPicker
+                        // inside a Menu never presents (the menu dismisses
+                        // first). The picker is presented via the
+                        // .photosPicker(isPresented:) modifier below.
+                        Button {
+                            showVideoLibraryPicker = true
+                        } label: {
                             Label("Choose from Library", systemImage: "photo.on.rectangle")
                         }
                     } label: {
@@ -624,6 +690,15 @@ struct InspectionOverviewView: View {
                         }
                         .buttonStyle(.plain).hoverEffect(.lift)
                         if isEditable {
+                            Button {
+                                renameText = video.caption
+                                videoToRename = video
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain).hoverEffect(.lift)
+                            .accessibilityLabel("Rename video")
                             Button(role: .destructive) {
                                 removeVideo(video)
                             } label: {
@@ -642,6 +717,14 @@ struct InspectionOverviewView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Drone and video footage")
+        // Presented outside the Menu so it actually opens. Result is handled
+        // by the existing .onChange(of: selectedVideoItems) on the body.
+        .photosPicker(
+            isPresented: $showVideoLibraryPicker,
+            selection: $selectedVideoItems,
+            maxSelectionCount: 1,
+            matching: .videos
+        )
     }
 
     /// Handles a freshly-recorded video. UIImagePickerController hands
@@ -649,7 +732,10 @@ struct InspectionOverviewView: View {
     /// this inspection's videos folder with a stable filename and
     /// append an InspectionVideo row to the model. Mirrors the
     /// library-upload path so both sources land the same way.
-    private func addVideoFromRecordedURL(_ tempURL: URL) {
+    /// Returns the created `InspectionVideo` so the caller can hand it to the
+    /// post-recording naming prompt (nil if the copy failed).
+    @discardableResult
+    private func addVideoFromRecordedURL(_ tempURL: URL) -> InspectionVideo? {
         let fileName = "\(UUID().uuidString).mov"
         let videosDir = FilePaths.videosFolder(jobId: jobId)
         let destURL = videosDir.appendingPathComponent(fileName)
@@ -672,9 +758,26 @@ struct InspectionOverviewView: View {
             var v = version
             v.inspection = insp
             version = v
+            return video
         } catch {
             Diagnostics.logError(context: "addVideoFromRecordedURL failed", error: error)
+            return nil
         }
+    }
+
+    /// Applies the pending rename to the video's caption. Empty input clears
+    /// the caption (the row then falls back to showing the file name).
+    private func commitVideoRename() {
+        guard let target = videoToRename else { return }
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var insp = version.inspection
+        if let idx = insp.videos.firstIndex(where: { $0.id == target.id }) {
+            insp.videos[idx].caption = trimmed
+            var v = version
+            v.inspection = insp
+            version = v
+        }
+        videoToRename = nil
     }
 
     /// Removes a video from both the inspection model and the file
@@ -711,6 +814,127 @@ struct InspectionOverviewView: View {
             Diagnostics.logError(context: "addVideoFromPickerItem failed", error: error)
         }
         await MainActor.run { selectedVideoItems = [] }
+    }
+
+    // MARK: - Room Scans (LiDAR)
+
+    /// Lists LiDAR scans saved for this inspection. Scans are persisted to
+    /// disk by the capture flow (not stored in the Inspection JSON), so this
+    /// section reads them from `LiDARScanStore` and shows each scan's name,
+    /// capture date, and floor-plan thumbnail when one was rendered. This is
+    /// what makes captured scans visible on the project page — they used to
+    /// only surface inside the capture sheet and the final PDF.
+    @ViewBuilder
+    private var roomScansSection: some View {
+        // Hide the whole section on devices that can't scan AND have no saved
+        // scans — nothing to show or do there.
+        if LiDARCapability.isSupported || !lidarScans.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Room Scans (LiDAR)")
+                        .font(.headline)
+                    Spacer()
+                    if isEditable && LiDARCapability.isSupported {
+                        Button {
+                            showLiDARCapture = true
+                        } label: {
+                            Label("Capture", systemImage: "dot.viewfinder")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .accessibilityLabel("Capture room with LiDAR")
+                    }
+                }
+                if lidarScans.isEmpty {
+                    Text(LiDARCapability.isSupported
+                         ? "No room scans yet. Tap Capture to scan a room with LiDAR."
+                         : "No room scans attached.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(lidarScans) { scan in
+                        roomScanRow(scan)
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Room scans captured with LiDAR")
+        }
+    }
+
+    @ViewBuilder
+    private func roomScanRow(_ scan: LiDARScan) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let thumb = loadFloorplanThumbnail(scan) {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 64, height: 64)
+                    .background(Color(.systemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color(.separator), lineWidth: 0.5)
+                    )
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(.systemBackground))
+                        .frame(width: 64, height: 64)
+                    Image(systemName: "cube.transparent")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(scan.displayName)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+                Text(scan.capturedAt, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("3D model (USDZ) saved with this inspection")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            if isEditable {
+                Button(role: .destructive) {
+                    deleteLiDARScan(scan)
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain).hoverEffect(.lift)
+                .accessibilityLabel("Delete room scan")
+            }
+        }
+        .padding(8)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+    }
+
+    private func loadLiDARScans() {
+        lidarScans = LiDARScanStore.loadScans(jobId: jobId)
+            .sorted { $0.capturedAt < $1.capturedAt }
+    }
+
+    private func loadFloorplanThumbnail(_ scan: LiDARScan) -> UIImage? {
+        guard let pngName = scan.floorplanPNGFileName else { return nil }
+        let url = FilePaths.lidarFolder(jobId: jobId).appendingPathComponent(pngName)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// Removes a scan's record plus its USDZ and floor-plan files from disk.
+    private func deleteLiDARScan(_ scan: LiDARScan) {
+        let dir = FilePaths.lidarFolder(jobId: jobId)
+        let fm = FileManager.default
+        try? fm.removeItem(at: dir.appendingPathComponent("\(scan.id.uuidString).json"))
+        try? fm.removeItem(at: dir.appendingPathComponent(scan.usdzFileName))
+        if let png = scan.floorplanPNGFileName {
+            try? fm.removeItem(at: dir.appendingPathComponent(png))
+        }
+        loadLiDARScans()
     }
 
     private func binding<T>(_ keyPath: WritableKeyPath<Inspection, T>) -> Binding<T> {
@@ -830,45 +1054,15 @@ struct InspectionOverviewView: View {
                     .zIndex(1)   // ensure buttons always above the image
                 }
             }
-            if let img = loadCoverPhotoPreview() {
-                Image(uiImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 180)
-                    .clipped()   // CRITICAL: clips hit testing, not just paint
-                    .contentShape(Rectangle())   // belt-and-suspenders hit-test boundary
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .allowsHitTesting(false)   // the image itself is not interactive
-                    .accessibilityLabel("Cover photo of the property")
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.systemGray6))
-                        .frame(height: 120)
-                    VStack(spacing: 4) {
-                        Image(systemName: "house.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        Text("No cover photo")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .allowsHitTesting(false)   // placeholder is not interactive
-            }
+            // Cover photo decodes OFF the main thread (was a synchronous
+            // Data(contentsOf:)+UIImage decode in `body` on every render, which
+            // hitched the overview while editing). `coverPhotoTick` invalidates
+            // the load after a change; the placeholder reserves the image height
+            // while decoding so the layout doesn't jump when it arrives.
+            OverviewCoverPhoto(jobId: jobId,
+                               fileName: version.inspection.coverPhotoFileName,
+                               tick: coverPhotoTick)
         }
-    }
-
-    /// Re-reads the cover photo from disk on each render; cheap because the
-    /// JPEG is downscaled at write time. `coverPhotoTick` is used to
-    /// invalidate any UI cache after a change so SwiftUI re-renders.
-    private func loadCoverPhotoPreview() -> UIImage? {
-        guard let name = version.inspection.coverPhotoFileName else { return nil }
-        _ = coverPhotoTick   // dependency for re-render
-        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
     }
 
     /// Handles camera-captured images for the cover photo. Mirrors
@@ -1680,5 +1874,73 @@ private struct TodoRow: View {
         .padding(8)
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+// MARK: - Cover Photo (async)
+
+/// Loads the inspection cover photo off the main thread and shows a
+/// height-reserving placeholder while it decodes, so the Overview no longer
+/// does a synchronous disk read + image decode in `body` on every render.
+/// `tick` is the parent's `coverPhotoTick` — bumping it re-runs the load after
+/// the cover photo is changed or removed.
+private struct OverviewCoverPhoto: View {
+    let jobId: UUID
+    let fileName: String?
+    let tick: Int
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .clipped()   // CRITICAL: clips hit testing, not just paint
+                    .contentShape(Rectangle())   // belt-and-suspenders hit-test boundary
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .allowsHitTesting(false)   // the image itself is not interactive
+                    .accessibilityLabel("Cover photo of the property")
+            } else if fileName != nil {
+                // A cover exists and is decoding off-main — reserve its final
+                // height so the layout doesn't jump when the image lands.
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.systemGray6))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .overlay { ProgressView() }
+                    .allowsHitTesting(false)
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.systemGray6))
+                        .frame(height: 120)
+                    VStack(spacing: 4) {
+                        Image(systemName: "house.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("No cover photo")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .allowsHitTesting(false)   // placeholder is not interactive
+            }
+        }
+        .task(id: "\(fileName ?? "∅")#\(tick)") {
+            await load()
+        }
+    }
+
+    private func load() async {
+        guard let fileName else { image = nil; return }
+        let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
+        let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }.value
+        image = loaded
     }
 }

@@ -55,6 +55,23 @@ final class InspectorProfile: ObservableObject {
         self.companyLogo = loadLogoFromDisk()
     }
 
+    /// Wipes all stored profile data. Called from `AuthManager.logout()` so a
+    /// shared device never carries one inspector's identity into the next
+    /// user's session. This matters beyond convenience: the profile email is
+    /// auto-CC'd on invoices, and the name / company / license are printed on
+    /// the client-facing report — none of which should belong to a previous
+    /// user. The `didSet` observers persist the cleared values to UserDefaults,
+    /// and setting `companyLogo = nil` removes the logo file from disk.
+    @MainActor
+    func clear() {
+        inspectorName = ""
+        companyName = ""
+        licenseNumber = ""
+        phone = ""
+        email = ""
+        companyLogo = nil
+    }
+
     /// Base64-encoded PNG of the company logo (for embedding in HTML reports).
     var companyLogoBase64: String? {
         guard let logo = companyLogo,
@@ -70,7 +87,8 @@ final class InspectorProfile: ObservableObject {
     // MARK: - Disk persistence
 
     private static var logoURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         return docs.appendingPathComponent("company_logo.png")
     }
 
