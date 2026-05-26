@@ -41,9 +41,16 @@ struct NexGenSpecApp: App {
                     // but local data may remain. Complete the wipe now, then clear
                     // the retry flag. clearAllLocalData() also resets the store's
                     // in-memory metadata loaded during init().
-                    if UserDefaults.standard.bool(forKey: "deletion-pending-wipe") {
+                    if UserDefaults.standard.bool(forKey: "deletion-pending-wipe"), !store.isWiping {
+                        // Reset in-memory state + gate writes synchronously (before
+                        // the view renders) so the Dashboard never shows rows for
+                        // files we're about to delete. The !isWiping guard makes a
+                        // re-entrant onAppear a no-op (no double-fire). The retry
+                        // flag is cleared only AFTER the disk wipe completes, so an
+                        // interrupted wipe still retries on the next launch (T-01412).
+                        store.beginWipe()
                         Task {
-                            await store.clearAllLocalData()
+                            await store.performDiskWipe()
                             UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
                         }
                     }
