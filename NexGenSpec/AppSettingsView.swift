@@ -17,6 +17,10 @@ struct AppSettingsView: View {
     @State private var showStatus = false
     @State private var purgeSummary = ""
     @State private var showPurgeResult = false
+    /// True while an encrypted backup create/restore is running off the main
+    /// actor. Drives the inline progress indicator and disables the buttons so
+    /// the operation can't be re-triggered mid-flight.
+    @State private var isBackupBusy = false
 
     @EnvironmentObject private var subscriptions: SubscriptionManager
     @ObservedObject private var profile = InspectorProfile.shared
@@ -273,10 +277,10 @@ struct AppSettingsView: View {
                             )
 
                             Button("Create Encrypted Backup") {
-                                createEncryptedBackup()
+                                Task { await createEncryptedBackup() }
                             }
                             .buttonStyle(AppPrimaryButtonStyle())
-                            .disabled(backupPassphrase.count < 8)
+                            .disabled(backupPassphrase.count < 8 || isBackupBusy)
 
                             SettingsSecureFieldRow(
                                 title: "Restore passphrase",
@@ -285,10 +289,22 @@ struct AppSettingsView: View {
                             )
 
                             Button("Restore Latest Backup") {
-                                restoreLatestBackup()
+                                Task { await restoreLatestBackup() }
                             }
                             .buttonStyle(AppSecondaryButtonStyle())
-                            .disabled(restorePassphrase.count < 8)
+                            .disabled(restorePassphrase.count < 8 || isBackupBusy)
+
+                            if isBackupBusy {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                    Text("Working… keep the app open until this finishes.")
+                                        .font(.footnote)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("Backup in progress")
+                            }
                         }
 
                         SettingsSectionCard(
@@ -633,10 +649,22 @@ struct AppSettingsView: View {
         return subscriptions.isPro ? "Pro" : "Free"
     }
 
-    private func createEncryptedBackup() {
+    /// Reads every file under the app root, encrypts it, and writes the
+    /// envelope to disk. The encryption + bulk file I/O run on a detached
+    /// background task so a large inspection library can't freeze the UI (or
+    /// trip the watchdog); only the loading flag and the final status update
+    /// stay on the main actor. `passphrase` and `destination` are `Sendable`
+    /// value types, so handing them to the detached task is race-free.
+    @MainActor
+    private func createEncryptedBackup() async {
+        let passphrase = backupPassphrase
+        let destination = backupDirectory().appendingPathComponent("backup-\(timestamp()).backup.enc")
+        isBackupBusy = true
+        defer { isBackupBusy = false }
         do {
-            let destination = backupDirectory().appendingPathComponent("backup-\(timestamp()).backup.enc")
-            try EncryptedBackupService.createEncryptedBackup(passphrase: backupPassphrase, destinationURL: destination)
+            try await Task.detached(priority: .userInitiated) {
+                try EncryptedBackupService.createEncryptedBackup(passphrase: passphrase, destinationURL: destination)
+            }.value
             statusMessage = "Encrypted backup created at \(destination.lastPathComponent)."
             showStatus = true
             backupPassphrase = ""
@@ -647,14 +675,24 @@ struct AppSettingsView: View {
         }
     }
 
-    private func restoreLatestBackup() {
+    /// Decrypts the latest backup envelope and writes its files back to disk on
+    /// a detached background task, then reloads the store on the main actor.
+    /// Decryption + file I/O stay off-main; the final `reloadFromDisk()` and
+    /// status update are the only main-actor work.
+    @MainActor
+    private func restoreLatestBackup() async {
+        guard let latest = latestBackupURL() else {
+            statusMessage = "No encrypted backups found."
+            showStatus = true
+            return
+        }
+        let passphrase = restorePassphrase
+        isBackupBusy = true
+        defer { isBackupBusy = false }
         do {
-            guard let latest = latestBackupURL() else {
-                statusMessage = "No encrypted backups found."
-                showStatus = true
-                return
-            }
-            try EncryptedBackupService.restoreEncryptedBackup(passphrase: restorePassphrase, sourceURL: latest)
+            try await Task.detached(priority: .userInitiated) {
+                try EncryptedBackupService.restoreEncryptedBackup(passphrase: passphrase, sourceURL: latest)
+            }.value
             store.reloadFromDisk()
             statusMessage = "Backup restored from \(latest.lastPathComponent)."
             showStatus = true
