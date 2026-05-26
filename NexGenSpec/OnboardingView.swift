@@ -73,9 +73,11 @@ private struct WelcomeScreen: View {
                 BrandMark(size: 180)
 
                 Text("NexGenSpec")
-                    .font(AppFont.hero)
+                    // Plain system .largeTitle to match the nav-bar titles and
+                    // the other onboarding screens ("What You Can Do", "Terms &
+                    // Privacy"), rather than the rounded AppFont.hero wordmark.
+                    .font(.largeTitle.bold())
                     .foregroundStyle(.white)
-                    .kerning(-1.2)
 
                 Text("The future of inspections is here.\nLet's get you set up.")
                     .font(.title3)

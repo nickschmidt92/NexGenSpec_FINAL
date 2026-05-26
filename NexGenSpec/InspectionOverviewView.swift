@@ -33,6 +33,12 @@ struct InspectionOverviewView: View {
     /// visible inside the capture sheet and the final report).
     @State private var lidarScans: [LiDARScan] = []
     @State private var selectedVideoItems: [PhotosPickerItem] = []
+    /// Drives the video-library picker. A `PhotosPicker` placed directly
+    /// inside a `Menu` never presents on iOS — the menu dismisses before the
+    /// picker can open, so the row appeared to "do nothing". Instead the menu
+    /// row is a plain Button that sets this flag, and a `.photosPicker(isPresented:)`
+    /// modifier on the section presents the picker outside the menu lifecycle.
+    @State private var showVideoLibraryPicker = false
     /// Drives the cover-photo picker. When non-nil, a fullScreenCover
     /// presents the appropriate UIImagePickerController. Set to nil
     /// from inside the onFinish callback to dismiss.
@@ -55,6 +61,13 @@ struct InspectionOverviewView: View {
     /// videos couldn't be renamed after capture.
     @State private var videoToRename: InspectionVideo?
     @State private var renameText: String = ""
+    /// A clip that was just recorded and is waiting for the naming prompt.
+    /// We don't present the prompt directly from the recorder's onRecorded
+    /// callback because the recorder sheet is still dismissing — presenting
+    /// then races the dismissal (the same class of bug that broke the cover
+    /// photo flow). Instead we stash the video here and present the rename
+    /// prompt from the sheet's onDismiss, mirroring the LiDAR naming flow.
+    @State private var justRecordedVideo: InspectionVideo?
     /// Unified sheet router. Cover photo is NOT in this enum — it's
     /// driven separately by coverPhotoSource (see above) because the
     /// cover-photo path was rewritten to use UIImagePickerController
@@ -160,8 +173,9 @@ struct InspectionOverviewView: View {
                     }
                     
                     // Weather info — gated behind AppCapabilities.weatherLoggingEnabled
-                    // so a half-working WeatherKit integration stays hidden until
-                    // the App ID is registered for WeatherKit on the dev portal.
+                    // (currently enabled). Only renders once a WeatherKit fetch has
+                    // populated `weather`; on-device fetch failures are logged via
+                    // os_log (category "WeatherKit") for diagnosis.
                     if AppCapabilities.weatherLoggingEnabled, let weather = version.inspection.weather {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Weather at Inspection")
@@ -306,13 +320,25 @@ struct InspectionOverviewView: View {
                 .ignoresSafeArea()
             }
             // Remaining sheet router: video recorder + inspection date.
-            .sheet(item: $activeSheet) { sheet in
+            // onDismiss presents the naming prompt for a freshly-recorded clip
+            // after the recorder sheet has fully dismissed (mirrors the LiDAR
+            // naming flow, which presents in its capture cover's onDismiss to
+            // avoid a present-during-dismiss race).
+            .sheet(item: $activeSheet, onDismiss: {
+                if let recorded = justRecordedVideo {
+                    justRecordedVideo = nil
+                    renameText = recorded.caption
+                    videoToRename = recorded
+                }
+            }) { sheet in
                 switch sheet {
                 case .videoRecorder:
                     VideoRecorderView(
                         onRecorded: { tempURL in
+                            // Save first, stash the result, then dismiss — the
+                            // naming prompt fires from onDismiss above.
+                            justRecordedVideo = addVideoFromRecordedURL(tempURL)
                             activeSheet = nil
-                            addVideoFromRecordedURL(tempURL)
                         },
                         onCancel: { activeSheet = nil }
                     )
@@ -483,9 +509,9 @@ struct InspectionOverviewView: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color.blue.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // No card wrapper: keeps the "Reminders" header flush-left with the
+        // other top-level sections (Drone / Video, Room Scans) so it reads as
+        // a peer, not a sub-item nested under them.
     }
 
     // MARK: - To-Do
@@ -529,9 +555,8 @@ struct InspectionOverviewView: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color.blue.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // No card wrapper — see remindersSection: keeps "To Do" flush-left as a
+        // top-level peer of Drone / Video and Room Scans rather than a sub-item.
     }
 
     private func reminderBinding(_ id: UUID) -> Binding<InspectionReminder> {
@@ -603,10 +628,13 @@ struct InspectionOverviewView: View {
                                 Label("Record Video", systemImage: "video.fill")
                             }
                         }
-                        PhotosPicker(
-                            selection: $selectedVideoItems,
-                            maxSelectionCount: 1, matching: .videos
-                        ) {
+                        // Plain Button, NOT a PhotosPicker — a PhotosPicker
+                        // inside a Menu never presents (the menu dismisses
+                        // first). The picker is presented via the
+                        // .photosPicker(isPresented:) modifier below.
+                        Button {
+                            showVideoLibraryPicker = true
+                        } label: {
                             Label("Choose from Library", systemImage: "photo.on.rectangle")
                         }
                     } label: {
@@ -684,6 +712,14 @@ struct InspectionOverviewView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Drone and video footage")
+        // Presented outside the Menu so it actually opens. Result is handled
+        // by the existing .onChange(of: selectedVideoItems) on the body.
+        .photosPicker(
+            isPresented: $showVideoLibraryPicker,
+            selection: $selectedVideoItems,
+            maxSelectionCount: 1,
+            matching: .videos
+        )
     }
 
     /// Handles a freshly-recorded video. UIImagePickerController hands
@@ -691,7 +727,10 @@ struct InspectionOverviewView: View {
     /// this inspection's videos folder with a stable filename and
     /// append an InspectionVideo row to the model. Mirrors the
     /// library-upload path so both sources land the same way.
-    private func addVideoFromRecordedURL(_ tempURL: URL) {
+    /// Returns the created `InspectionVideo` so the caller can hand it to the
+    /// post-recording naming prompt (nil if the copy failed).
+    @discardableResult
+    private func addVideoFromRecordedURL(_ tempURL: URL) -> InspectionVideo? {
         let fileName = "\(UUID().uuidString).mov"
         let videosDir = FilePaths.videosFolder(jobId: jobId)
         let destURL = videosDir.appendingPathComponent(fileName)
@@ -714,8 +753,10 @@ struct InspectionOverviewView: View {
             var v = version
             v.inspection = insp
             version = v
+            return video
         } catch {
             Diagnostics.logError(context: "addVideoFromRecordedURL failed", error: error)
+            return nil
         }
     }
 

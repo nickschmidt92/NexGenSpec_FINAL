@@ -427,3 +427,28 @@ extension View {
         modifier(DecimalOnlyFilter(text: text))
     }
 }
+
+// MARK: - Lightweight contact-field validation
+
+/// True when `value` contains exactly 10 digits once non-digit characters
+/// (spaces, parentheses, dashes from `formatPhoneNumber`) are stripped.
+/// Used to warn — not block — on the new-inspection form: an inspector may
+/// intentionally leave the phone blank, but a partially-typed number should
+/// be flagged.
+func isValidUSPhone(_ value: String) -> Bool {
+    value.filter(\.isWholeNumber).count == 10
+}
+
+/// Permissive email check: at least one `@`, and a top-level domain of 2+
+/// letters after the final dot (e.g. .com, .net, .co, .io), with that dot
+/// appearing after the `@`. Intentionally loose — this warns, it does not
+/// block submission, so it only needs to catch obvious typos, not enforce
+/// RFC 5322.
+func isValidEmail(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let atIndex = trimmed.firstIndex(of: "@"),
+          let lastDot = trimmed.lastIndex(of: "."),
+          lastDot > atIndex else { return false }
+    let tld = trimmed[trimmed.index(after: lastDot)...]
+    return tld.count >= 2 && tld.allSatisfy(\.isLetter)
+}

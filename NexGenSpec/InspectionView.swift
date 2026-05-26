@@ -130,10 +130,11 @@ struct InspectionView: View {
                           systemImage: "timer")
                         .disabled(true)
                     // Weather menu items are gated behind
-                    // AppCapabilities.weatherLoggingEnabled. WeatherKit returned
-                    // no data on device (App ID not yet registered for the
-                    // service), so the feature is hidden rather than shipped
-                    // showing a permanent "Weather unavailable" error.
+                    // AppCapabilities.weatherLoggingEnabled (currently enabled).
+                    // The underlying reason (location denied, no fix, WeatherKit
+                    // auth failure on device) is surfaced below and logged via
+                    // os_log (category "WeatherKit") so on-device failures are
+                    // diagnosable rather than silently swallowed.
                     if AppCapabilities.weatherLoggingEnabled {
                         if let w = draft.inspection.weather {
                             Label("\(w.temperatureString) \(w.conditions)", systemImage: "cloud.sun")
@@ -244,8 +245,9 @@ struct InspectionView: View {
             }
             // Start timer
             startTimer()
-            // Fetch weather if not already captured. Gated off until WeatherKit
-            // is confirmed working on device (App ID portal registration).
+            // Fetch weather if not already captured. The fetch path is
+            // instrumented (see WeatherService) so the on-device failure can
+            // be diagnosed from Console.app / the diagnostics log.
             if AppCapabilities.weatherLoggingEnabled, draft.inspection.weather == nil {
                 weatherService.fetchCurrentWeather { data in
                     if let data {
