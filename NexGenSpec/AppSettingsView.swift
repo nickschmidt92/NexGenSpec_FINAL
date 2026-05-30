@@ -280,7 +280,7 @@ struct AppSettingsView: View {
                                 Task { await createEncryptedBackup() }
                             }
                             .buttonStyle(AppPrimaryButtonStyle())
-                            .disabled(backupPassphrase.count < 8 || isBackupBusy)
+                            .disabled(backupPassphrase.count < EncryptedBackupService.minPassphraseLength || isBackupBusy)
 
                             SettingsSecureFieldRow(
                                 title: "Restore passphrase",
@@ -292,7 +292,7 @@ struct AppSettingsView: View {
                                 Task { await restoreLatestBackup() }
                             }
                             .buttonStyle(AppSecondaryButtonStyle())
-                            .disabled(restorePassphrase.count < 8 || isBackupBusy)
+                            .disabled(restorePassphrase.count < EncryptedBackupService.minPassphraseLength || isBackupBusy)
 
                             if isBackupBusy {
                                 HStack(spacing: 8) {
