@@ -139,12 +139,13 @@ private struct TemplateEditorView: View {
             }
 
             Section("Sections") {
-                ForEach(Array(template.sections.enumerated()), id: \.element.id) { index, section in
+                // Bind by element identity (not array index): index-subscript
+                // bindings + .onDelete crash with "Index out of range" when a
+                // surviving row re-evaluates at a stale index after a delete
+                // (T-01435).
+                ForEach($template.sections) { $section in
                     NavigationLink {
-                        SectionEditorView(section: Binding(
-                            get: { template.sections[index] },
-                            set: { template.sections[index] = $0 }
-                        ))
+                        SectionEditorView(section: $section)
                     } label: {
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
                             Text(section.title)
@@ -212,11 +213,9 @@ private struct SectionEditorView: View {
             }
 
             Section("Items") {
-                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, _ in
-                    TextField("Item title", text: Binding(
-                        get: { section.items[index].title },
-                        set: { section.items[index].title = $0 }
-                    ))
+                // Bind by element identity, not array index — see T-01435.
+                ForEach($section.items) { $item in
+                    TextField("Item title", text: $item.title)
                 }
                 .onDelete { offsets in
                     section.items.remove(atOffsets: offsets)
