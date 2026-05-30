@@ -1952,3 +1952,24 @@ final class BackupPathValidationTests: XCTestCase {
         }
     }
 }
+
+/// T-01441 — photos are downscaled before encode/save so a 48MP image isn't
+/// PNG-encoded full-res on the main thread (watchdog + OOM). Tests the shared
+/// downscale helper the save path uses.
+final class ImageDownscaleTests: XCTestCase {
+    func testResizedKeepingAspectCapsLongestSideAndPreservesSmallImages() {
+        let big = UIGraphicsImageRenderer(size: CGSize(width: 4000, height: 3000)).image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 4000, height: 3000))
+        }
+        let small = big.resizedKeepingAspect(maxSide: 1000)
+        XCTAssertLessThanOrEqual(max(small.size.width, small.size.height), 1000,
+                                 "longest side must be capped at maxSide")
+        XCTAssertGreaterThan(small.size.width, 0)
+        // Aspect ratio preserved (4:3 → width is the long side).
+        XCTAssertEqual(small.size.width / small.size.height, 4.0 / 3.0, accuracy: 0.05)
+        // An already-small image is returned unchanged.
+        let unchanged = small.resizedKeepingAspect(maxSide: 5000)
+        XCTAssertEqual(unchanged.size, small.size)
+    }
+}
