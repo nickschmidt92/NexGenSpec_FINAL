@@ -435,6 +435,27 @@ final class LegacyStorageCleanupTests: XCTestCase {
         try EncryptedBackupService.createEncryptedBackup(passphrase: "passphrase-one-aaa", destinationURL: dest)
         // Wrong passphrase derives a different key → AES.GCM tag check fails.
         XCTAssertThrowsError(try EncryptedBackupService.restoreEncryptedBackup(passphrase: "passphrase-two-bbb", sourceURL: dest))
+/// T-01440 — persisted invoice amounts are swept on Account Deletion (the
+/// `invoice.` prefix now covers price/services/total), but the
+/// `deletion-pending-wipe` retry flag must survive.
+final class InspectionFlagsClearAllTests: XCTestCase {
+    func testClearAllSweepsInvoiceAmountsButKeepsDeletionPendingFlag() {
+        let defaults = UserDefaults.standard
+        let id = UUID().uuidString
+        let invoiceKeys = ["invoice.sentAt.\(id)", "invoice.paidAt.\(id)",
+                           "invoice.price.\(id)", "invoice.services.\(id)", "invoice.total.\(id)",
+                           "inspection.archivedAt.\(id)"]
+        invoiceKeys.forEach { defaults.set("x", forKey: $0) }
+        defaults.set(true, forKey: "deletion-pending-wipe")
+        defer { defaults.removeObject(forKey: "deletion-pending-wipe") }
+
+        InspectionFlags.clearAll()
+
+        for key in invoiceKeys {
+            XCTAssertNil(defaults.object(forKey: key), "clearAll did not remove \(key)")
+        }
+        XCTAssertTrue(defaults.bool(forKey: "deletion-pending-wipe"),
+                      "clearAll must not clear the deletion-pending-wipe retry flag")
     }
 }
 

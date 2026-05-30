@@ -35,6 +35,12 @@ struct InvoiceAndSendView: View {
 
     private var sentAtKey: String { "invoice.sentAt.\(version.inspection.inspectionId)" }
     private var paidAtKey: String { "invoice.paidAt.\(version.inspection.inspectionId)" }
+    // The dollar amounts + services text are persisted per-inspection too, so a
+    // pane switch doesn't lose them and a locked Resend re-sends the SAME invoice
+    // the client received rather than a blank one (T-01440).
+    private var priceKey: String { "invoice.price.\(version.inspection.inspectionId)" }
+    private var servicesKey: String { "invoice.services.\(version.inspection.inspectionId)" }
+    private var totalKey: String { "invoice.total.\(version.inspection.inspectionId)" }
 
     /// Once the invoice has been emailed to the client, the dollar amounts and
     /// services description are locked. Editing them after send would let the
@@ -177,6 +183,9 @@ struct InvoiceAndSendView: View {
             }
         }
         .onAppear(perform: loadPersistedState)
+        // One combined onChange (not three) so the large view body still
+        // type-checks; persists all three amounts whenever any of them changes.
+        .onChange(of: invoiceFieldsSnapshot) { _, _ in persistInvoiceFields() }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Invoice & Send")
         .onChange(of: exportService.isExporting) { _, isExporting in
@@ -303,6 +312,21 @@ struct InvoiceAndSendView: View {
     private func loadPersistedState() {
         invoiceSentAt = UserDefaults.standard.object(forKey: sentAtKey) as? Date
         invoicePaidAt = UserDefaults.standard.object(forKey: paidAtKey) as? Date
+        if let price = UserDefaults.standard.string(forKey: priceKey) { invoicePrice = price }
+        if let services = UserDefaults.standard.string(forKey: servicesKey) { additionalServices = services }
+        if let total = UserDefaults.standard.string(forKey: totalKey) { invoiceTotal = total }
+    }
+
+    /// Lightweight combined value so a SINGLE `.onChange` can observe all three
+    /// amount fields — three separate modifiers tip the view-body type-checker.
+    private var invoiceFieldsSnapshot: String {
+        invoicePrice + "\u{1}" + additionalServices + "\u{1}" + invoiceTotal
+    }
+
+    private func persistInvoiceFields() {
+        UserDefaults.standard.set(invoicePrice, forKey: priceKey)
+        UserDefaults.standard.set(additionalServices, forKey: servicesKey)
+        UserDefaults.standard.set(invoiceTotal, forKey: totalKey)
     }
 
     /// Collect USDZ files from any LiDAR scans saved for this inspection so
