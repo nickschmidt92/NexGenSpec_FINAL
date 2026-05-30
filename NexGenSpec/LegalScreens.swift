@@ -27,8 +27,8 @@ struct LegalConstants {
         return URL(string: s) ?? URL(string: fallbackTerms)!
     }()
 
-    static let privacyPolicyEffectiveDate = "Effective Date: April 28, 2026"
-    static let termsOfServiceEffectiveDate = "Effective Date: April 28, 2026"
+    static let privacyPolicyEffectiveDate = "Effective Date: May 30, 2026"
+    static let termsOfServiceEffectiveDate = "Effective Date: May 30, 2026"
 }
 
 // MARK: - PrivacyPolicyView (Full Text + External Link)
@@ -69,13 +69,15 @@ struct PrivacyPolicyView: View {
                             • Account login: Your email and an encrypted password — or, if you use Sign in with Apple, an Apple-issued user identifier and the email Apple chooses to share. Stored in Firebase Authentication.
                             • Optional fallback contact email: If you provide one at signup, used only if your primary email becomes unreachable.
                             • Anonymized crash reports: Sent to Firebase Crashlytics if the app crashes. No inspection content, no client info.
+                            • Inspection weather (automatic): When you create or open an inspection that has no saved weather, the approximate coordinates (~1 km) of your current location are sent to Open-Meteo (open-meteo.com), a free no-account weather service, to fetch current conditions. No account, no identifier, no tracking, and we keep no copy. Deny Location in iOS Settings to turn it off.
 
-                            We do not collect analytics, advertising identifiers, location data, contact lists, or any inspection content.
+                            We do not collect analytics, advertising identifiers, contact lists, or any inspection content. We do not collect or store your location on our servers (see Device Permissions → Location below for the only, on-demand uses of location).
 
                             3. Device Permissions (How & Why)
                             • Camera: Capture inspection photos and video. Saved only to NexGenSpec's secure storage — never written to your iPhone/iPad Photos app.
                             • Photo Library (read-only): Import existing photos and video into a specific inspection (e.g. drone or thermal imagery you AirDropped). NexGenSpec never writes back to your Photo Library, never scans it in the background, and never accesses photos outside picker actions you initiate.
                             • Calendar (optional): Writes scheduled inspection events to a calendar of your choice. Only on your device.
+                            • Location (optional, in-use only): Used two ways. (1) Inspection weather (automatic): when you create or open an inspection that has no weather yet, a one-time fix's approximate coordinates (~1 km) are sent to Open-Meteo (open-meteo.com) to fetch current conditions. (2) Auto-fill property address (only when you tap "Use Current Location"): a one-time fix is resolved into a street address using Apple's location services — those coordinates go to Apple, not to NexGenSpec or Open-Meteo. NexGenSpec never tracks your location in the background, never stores it on our servers, and never links it to your identity. Every other feature works with Location off.
                             • Notifications (optional): Inspection reminders.
 
                             Revoke any permission anytime in iOS Settings → NexGenSpec.
@@ -175,7 +177,7 @@ struct PrivacyPolicyContent: View {
 
                         2. Information Handling
                         Because we do not store your data on our servers, we only interact with the following:
-                        • Device Permissions: The App requires access to your Camera, Photo Library, and Storage solely to allow the App to function locally on your device.
+                        • Device Permissions: The App can request access to your Camera, Photo Library, Calendar, and Location. Location is optional: when you create or open an inspection, the app automatically fetches current weather by sending the approximate coordinates (~1 km) of your location to Open-Meteo (open-meteo.com); and when you tap "Use Current Location," a one-time fix is resolved into a street address using Apple's location services. Location is never stored on our servers, never linked to your identity, and never used for tracking. All other features work without it.
                         • Usage & Diagnostics: We may receive anonymous technical logs (crash reports) via standard developer tools to fix bugs. This data does not contain your inspection content or client personal information.
 
                         3. Data Ownership and Control
@@ -266,7 +268,7 @@ struct TermsOfServiceView: View {
                             NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The "Mark Invoice as Paid" toggle is a record-keeping aid only.
 
                             5. Data & Privacy
-                            Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, and (b) anonymized crash reports. Inspection content never leaves the device unless you choose to email a PDF report.
+                            Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions. Inspection content never leaves the device unless you choose to email a PDF report.
 
                             6. Acceptable Use
                             • Use the app for lawful, professional inspection purposes only.
@@ -423,7 +425,7 @@ struct TermsOfServiceContent: View {
                         NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The "Mark Invoice as Paid" toggle inside the app is a record-keeping aid only.
 
                         5. Data & Privacy
-                        Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, and (b) anonymized crash reports. Inspection content never leaves the device unless you choose to email a PDF report.
+                        Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions. Inspection content never leaves the device unless you choose to email a PDF report.
 
                         6. Acceptable Use
                         • You agree to use the app for lawful, professional inspection purposes only.

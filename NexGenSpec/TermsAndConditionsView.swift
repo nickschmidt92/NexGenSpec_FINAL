@@ -41,8 +41,8 @@ public struct TermsAndConditionsView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                         VStack(spacing: 2) {
-                            Text("Effective Date: April 28, 2026 (Terms of Service)")
-                            Text("Effective Date: April 28, 2026 (Privacy Policy)")
+                            Text("Effective Date: May 30, 2026 (Terms of Service)")
+                            Text("Effective Date: May 30, 2026 (Privacy Policy)")
                         }
                         .font(.footnote)
                         .foregroundColor(.secondary)
@@ -113,7 +113,7 @@ public struct TermsAndConditionsView: View {
                             highlightedText("NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The \"Mark Invoice as Paid\" toggle inside the app is a record-keeping aid only.\n", font: .body)
 
                             highlightedText("4. Data & Privacy", font: .headline, isHeader: true)
-                            highlightedText("Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, and (b) anonymized crash reports. Inspection content never leaves the device unless you choose to email a PDF report. See our Privacy Policy for full details.\n", font: .body)
+                            highlightedText("Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions. Inspection content never leaves the device unless you choose to email a PDF report. See our Privacy Policy for full details.\n", font: .body)
 
                             highlightedText("5. Acceptable Use", font: .headline, isHeader: true)
                             highlightedText("• You agree to use the app for lawful, professional inspection purposes only.\n• You will not attempt to reverse-engineer, decompile, or extract source code from the app.\n• You will not use the app to harass, defame, or harm any third party.\n• You are responsible for maintaining the confidentiality of your account credentials.\n", font: .body)
@@ -255,7 +255,7 @@ public struct TermsAndConditionsView: View {
     public var fullTermsText: String {
         """
         NexGenSpec — Terms of Service & Sample Inspector–Client Agreement
-        Effective Date: April 28, 2026
+        Effective Date: May 30, 2026
 
         ============================================================
         PART A — NEXGENSPEC TERMS OF SERVICE
@@ -277,7 +277,7 @@ public struct TermsAndConditionsView: View {
         NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The "Mark Invoice as Paid" toggle inside the app is a record-keeping aid only.
 
         4. Data & Privacy
-        Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, and (b) anonymized crash reports. Inspection content never leaves the device unless you choose to email a PDF report. See our Privacy Policy for full details.
+        Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions. Inspection content never leaves the device unless you choose to email a PDF report. See our Privacy Policy for full details.
 
         5. Acceptable Use
         • You agree to use the app for lawful, professional inspection purposes only.
@@ -354,9 +354,12 @@ public struct TermsAndConditionsView: View {
 
         NexGenSpec is local-first. Inspection content — defects, photos, signatures, LiDAR scans, notes, client info, agent info, calendar events, invoices, and PDFs — is stored privately on your iPhone or iPad in the app's sandboxed storage. Other apps cannot read it. NexGenSpec LLC does not receive copies and has no server-side database of inspection data.
 
-        The only data sent off-device is: (a) your account login (email and an encrypted password, or your Apple ID identifier if using Sign in with Apple) stored in Firebase Authentication, and (b) anonymized crash reports sent to Firebase Crashlytics if the app crashes. No personal data, no inspection content.
+        The only data sent off-device is: (a) your account login (email and an encrypted password, or your Apple ID identifier if using Sign in with Apple) stored in Firebase Authentication, (b) anonymized crash reports sent to Firebase Crashlytics if the app crashes, and (c) when an inspection captures weather, the approximate coordinates (~1 km) of your current location, sent to Open-Meteo (open-meteo.com) to fetch current conditions (no account, not linked to your identity, no copy retained by us). No personal data, no inspection content, no background tracking.
 
         NexGenSpec LLC does not sell, rent, or share your data. No third-party advertising. No marketing trackers.
+
+        Location (Optional)
+        If you grant Location access, NexGenSpec uses a one-time fix two ways: automatically when you create or open an inspection, to attach current weather (approximate coordinates ~1 km sent to Open-Meteo); and only when you tap "Use Current Location," to auto-fill a property address (resolved using Apple's location services — those coordinates go to Apple, not NexGenSpec or Open-Meteo). Location is never tracked in the background or stored on our servers, and never linked to your identity. All other features work without it.
 
         iCloud (Optional)
         If you enable iCloud Backup in iOS Settings, your device — including NexGenSpec's app data — is backed up to your personal iCloud account. Apple encrypts and manages that backup. NexGenSpec has no access.

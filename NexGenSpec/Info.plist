@@ -18,7 +18,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used for importing/exporting inspection images and annotations.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>NexGenSpec uses your location to auto-fill the property address when creating a new inspection.</string>
+	<string>NexGenSpec uses your location to attach current weather to an inspection (approximate coordinates are sent to Open-Meteo) and, when you tap "Use Current Location", to auto-fill a property address (resolved on your device using Apple's location services). Location is requested only while you use the app and is never tracked in the background.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>NexGenSpec adds inspection appointments to the calendar you choose and reads your other events to flag scheduling conflicts. Calendar access is optional.</string>
 	<key>NSCalendarsUsageDescription</key>
