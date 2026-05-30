@@ -456,6 +456,32 @@ final class InspectionFlagsClearAllTests: XCTestCase {
         }
         XCTAssertTrue(defaults.bool(forKey: "deletion-pending-wipe"),
                       "clearAll must not clear the deletion-pending-wipe retry flag")
+/// T-01439 — report-facing defect counts must exclude defects not flagged
+/// includeInReport, so the header badges match the report body / per-section
+/// counts instead of overstating them.
+final class SummaryCountsTests: XCTestCase {
+    func testSummaryCountsRespectsIncludeInReport() {
+        func defect(_ sev: Severity, include: Bool) -> InspectionItem {
+            InspectionItem(templateItemId: "t", title: "x", includeInReport: include,
+                           status: .inspected, defectSeverity: sev)
+        }
+        let section = InspectionSection(id: UUID(), title: "S", items: [
+            defect(.safety, include: true),
+            defect(.major, include: true),
+            defect(.minor, include: false),
+        ])
+        let inspection = Inspection(id: UUID(), clientName: "C", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "addr", inspectionDate: Date(), inspectorName: "I", sections: [section])
+
+        let all = inspection.summaryCounts()
+        XCTAssertEqual(all.safety, 1)
+        XCTAssertEqual(all.major, 1)
+        XCTAssertEqual(all.minor, 1)
+
+        let report = inspection.summaryCounts(includeInReportOnly: true)
+        XCTAssertEqual(report.safety, 1)
+        XCTAssertEqual(report.major, 1)
+        XCTAssertEqual(report.minor, 0, "a defect not flagged includeInReport must be excluded from report counts")
     }
 }
 

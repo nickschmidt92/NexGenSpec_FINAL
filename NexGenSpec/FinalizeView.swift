@@ -20,7 +20,9 @@ struct FinalizeView: View {
         NavigationStack {
             Form {
                 Section(header: Text("Summary")) {
-                    let counts = version.inspection.summaryCounts()
+                    // Match the per-section counts below + the report body, which
+                    // only include defects flagged includeInReport (T-01439).
+                    let counts = version.inspection.summaryCounts(includeInReportOnly: true)
                     HStack {
                         Text("Safety: \(counts.safety)")
                         Spacer()
