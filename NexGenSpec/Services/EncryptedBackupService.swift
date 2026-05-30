@@ -25,6 +25,7 @@ enum EncryptedBackupService {
         case keyDerivationFailed(status: Int32)
         case unknownKDF(String)
         case weakKDF(iterations: Int)
+        case unsafePath(String)
 
         var errorDescription: String? {
             switch self {
@@ -41,6 +42,8 @@ enum EncryptedBackupService {
                 return "This backup uses an unsupported key-derivation method (\(name)) and cannot be restored."
             case .weakKDF(let iterations):
                 return "This backup's key-derivation strength (\(iterations) iterations) is outside the accepted range and cannot be restored."
+            case .unsafePath(let path):
+                return "This backup contains an unsafe file path (\(path)) and cannot be restored."
             }
         }
     }
@@ -125,10 +128,31 @@ enum EncryptedBackupService {
         let payload = try JSONDecoder().decode(BackupPayload.self, from: clear)
 
         for file in payload.files {
-            let target = FilePaths.appRoot.appendingPathComponent(file.relativePath)
+            // Validate each stored path before writing — a crafted backup could
+            // otherwise use `..`/absolute paths to overwrite files outside the
+            // app's sandboxed store (T-01437).
+            guard let target = safeRestoreTarget(forRelativePath: file.relativePath) else {
+                throw BackupError.unsafePath(file.relativePath)
+            }
             try FileSecurity.writeProtected(file.data, to: target)
         }
         AuditLog.log(event: "Encrypted backup restored (schema v\(currentSchemaVersion), PBKDF2 \(envelope.kdfIterations))")
+    }
+
+    /// Validates a backup's stored relative path before restore (T-01437):
+    /// rejects empty, absolute, NUL-bearing, or `..`-traversing paths, and
+    /// requires the resolved target to stay inside `appRoot`. Returns the safe
+    /// destination URL, or nil if the path is unsafe.
+    static func safeRestoreTarget(forRelativePath relative: String) -> URL? {
+        guard !relative.isEmpty,
+              !relative.hasPrefix("/"),
+              !relative.contains("\0"),
+              !relative.split(separator: "/").contains("..") else { return nil }
+        let appRoot = FilePaths.appRoot
+        let target = appRoot.appendingPathComponent(relative).standardizedFileURL
+        let appRootPath = appRoot.standardizedFileURL.path
+        guard target.path == appRootPath || target.path.hasPrefix(appRootPath + "/") else { return nil }
+        return target
     }
 
     private static func buildPayload() throws -> BackupPayload {

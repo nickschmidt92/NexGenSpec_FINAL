@@ -1936,3 +1936,19 @@ final class DeviceCheckTrialGateTests: XCTestCase {
         }
     }
 }
+
+/// T-01437 — backup restore must reject path-traversal / absolute / unsafe
+/// stored paths so a crafted backup can't overwrite files outside appRoot.
+final class BackupPathValidationTests: XCTestCase {
+    func testSafeRestoreTargetAcceptsInsidePathsAndRejectsUnsafeOnes() {
+        // Safe relative paths resolve to a descendant of appRoot.
+        XCTAssertNotNil(EncryptedBackupService.safeRestoreTarget(forRelativePath: "Inspections/abc/current.json"))
+        XCTAssertNotNil(EncryptedBackupService.safeRestoreTarget(forRelativePath: "inspections.json"))
+
+        // Unsafe paths are rejected.
+        for bad in ["../evil.txt", "../../etc/passwd", "ok/../../escape", "/etc/passwd", "", "a\u{0}b"] {
+            XCTAssertNil(EncryptedBackupService.safeRestoreTarget(forRelativePath: bad),
+                         "expected unsafe path to be rejected: \(bad)")
+        }
+    }
+}
