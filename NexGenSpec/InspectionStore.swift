@@ -322,12 +322,20 @@ public final class InspectionStore: ObservableObject {
     public func clearSaveError() { saveError = nil }
     public func clearLoadError() { loadError = nil }
 
-    /// Synchronously gates all further writes and clears in-memory state — no
-    /// disk I/O. Call on the main actor BEFORE the async disk wipe so that
-    /// (a) the UI never renders rows backed by files we're about to delete, and
-    /// (b) no save / autosave / version write can re-persist data into the
-    /// directory mid-wipe. Pair with `performDiskWipe()`. Idempotent.
+    /// Gates all further writes and clears in-memory state. Call on the main
+    /// actor BEFORE the async disk wipe so that (a) the UI never renders rows
+    /// backed by files we're about to delete, and (b) no save / autosave /
+    /// version write can re-persist data into the directory mid-wipe. Also
+    /// deletes the mirrored calendar events first (one-time read of each version
+    /// before state is cleared). Pair with `performDiskWipe()`. Idempotent.
     public func beginWipe() {
+        // Delete the mirrored calendar events BEFORE clearing state / wiping
+        // files. Scheduled inspections write client name/phone/email + address
+        // into an EKEvent that syncs to the user's iCloud/Google calendar
+        // off-device; the disk wipe only removes appRoot, so without this the
+        // PII survives Account Deletion (T-01436, 5.1.1(v)). Must run while
+        // metadataList + the version files still exist.
+        deleteMirroredCalendarEvents()
         // Cancel any pending debounced save and gate every write path.
         saveWorkItem?.cancel()
         saveWorkItem = nil
@@ -338,6 +346,17 @@ public final class InspectionStore: ObservableObject {
         saveError = nil
         loadError = nil
         lastSavedAt = nil
+    }
+
+    /// Deletes the mirrored EKEvent for every inspection that has one. Best
+    /// effort and idempotent — a missing/already-deleted event identifier just
+    /// throws and is ignored (T-01436).
+    private func deleteMirroredCalendarEvents() {
+        for meta in metadataList {
+            guard let full = loadFullVersion(id: meta.id),
+                  let eventIdentifier = full.inspection.calendarEventIdentifier else { continue }
+            try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
+        }
     }
 
     /// Runs the heavy recursive disk wipe OFF the main thread, then re-opens the
