@@ -40,9 +40,9 @@
 				<string>E174.1</string>
 			</array>
 		</dict>
-		<!-- System boot time: used by system frameworks we depend on
-		     (Firebase, CoreLocation telemetry) — declared for the app
-		     binary since the indirect use still requires disclosure. -->
+		<!-- System boot time: accessed by a transitive Firebase dependency
+		     (gRPC, reason 35F9.1), not by app code. Redundantly declared here
+		     even though gRPC ships its own manifest — harmless belt-and-suspenders. -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
