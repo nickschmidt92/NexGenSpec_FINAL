@@ -582,10 +582,15 @@ extension Inspection: Sendable {}
 extension InspectionVersion: Sendable {}
 
 public extension Inspection {
-    func summaryCounts() -> SummaryCounts {
+    /// Counts defects by severity. Pass `includeInReportOnly: true` for any
+    /// REPORT-facing total (the report body and finalize per-section counts only
+    /// show defects flagged `includeInReport`, so the header badges must match or
+    /// they overstate the count — T-01439). Defaults to all defects for the
+    /// editing/overview screens.
+    func summaryCounts(includeInReportOnly: Bool = false) -> SummaryCounts {
         var c = SummaryCounts(safety: 0, major: 0, marginal: 0, minor: 0)
         for s in sections {
-            for i in s.items where i.isDefect {
+            for i in s.items where i.isDefect && (!includeInReportOnly || i.includeInReport) {
                 guard let sev = i.defectSeverity else { continue }
                 switch sev {
                 case .safety: c.safety += 1

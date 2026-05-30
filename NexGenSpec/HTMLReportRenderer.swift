@@ -29,7 +29,9 @@ enum HTMLReportRenderer {
         watermark: Bool = false
     ) -> String {
         let inspection = version.inspection
-        let counts = inspection.summaryCounts()
+        // Report badges must count only defects that appear in the body
+        // (includeInReport), otherwise they overstate the totals (T-01439).
+        let counts = inspection.summaryCounts(includeInReportOnly: true)
         let jobId = UUID(uuidString: inspection.inspectionId) ?? version.id
         let reportHash = version.state.isFinalized ? FinalizationService.loadReportHash(jobId: jobId, versionId: version.id) : nil
         let isDraft = version.state.isEditable
