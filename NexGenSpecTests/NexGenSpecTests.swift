@@ -2030,3 +2030,34 @@ final class BackupStreamingRoundTripTests: XCTestCase {
         }
     }
 }
+
+/// T-01445 / T-01447 — Account Deletion sweeps the recovery-email PII and the
+/// Documents deliverable folders that live outside appRoot.
+final class DeletionPIICompletenessTests: XCTestCase {
+    func testClearAllSweepsFallbackEmailPrefixButKeepsDeletionPendingFlag() {
+        let defaults = UserDefaults.standard
+        let key = "ngs.fallbackEmail.\(UUID().uuidString)"
+        defaults.set("secret@example.com", forKey: key)
+        defaults.set(true, forKey: "deletion-pending-wipe")
+        defer { defaults.removeObject(forKey: "deletion-pending-wipe") }
+
+        InspectionFlags.clearAll()
+
+        XCTAssertNil(defaults.object(forKey: key), "fallback recovery email (PII) was not cleared")
+        XCTAssertTrue(defaults.bool(forKey: "deletion-pending-wipe"),
+                      "clearAll must not clear the deletion-pending-wipe retry flag")
+    }
+
+    func testRemoveAllExportsDeletesTheExportsFolder() throws {
+        let fm = FileManager.default
+        let marker = InspectionZIPExportService.exportFolder.appendingPathComponent("test-\(UUID().uuidString).zip")
+        try fm.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("zip".utf8).write(to: marker)
+        XCTAssertTrue(fm.fileExists(atPath: marker.path))
+
+        InspectionZIPExportService.removeAllExports()
+
+        XCTAssertFalse(fm.fileExists(atPath: InspectionZIPExportService.exportFolder.path),
+                       "exports folder (client-PII ZIPs) was not removed on deletion")
+    }
+}

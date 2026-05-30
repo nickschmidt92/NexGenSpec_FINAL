@@ -44,6 +44,22 @@ public enum InspectionZIPExportService {
         return docs.appendingPathComponent("NexGenSpecExports", isDirectory: true)
     }
 
+    /// Recursively removes the entire exports folder. Called from the Account
+    /// Deletion wipe: exported ZIPs (full report + photos + videos + client PII)
+    /// live OUTSIDE `FilePaths.appRoot`, so the appRoot-only wipe leaves them
+    /// behind — a 5.1.1(v) "no copies retained" gap (T-01447). Best effort: logs
+    /// (off-disk) but never throws, so a stuck file can't block deletion.
+    static func removeAllExports() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: exportFolder.path) else { return }
+        do {
+            try fm.removeItem(at: exportFolder)
+        } catch {
+            Diagnostics.logError(context: "InspectionZIPExportService.removeAllExports failed",
+                                 error: error, persistToDisk: false)
+        }
+    }
+
     /// Generates a ZIP containing the finalized report + assets. Returns the URL
     /// of the ZIP under `exportFolder`. Caller is responsible for sharing it
     /// (e.g. via `ShareSheet`) and informing the user where it landed.

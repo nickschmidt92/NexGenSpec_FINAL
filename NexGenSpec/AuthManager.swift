@@ -201,7 +201,9 @@ public final class AuthManager: ObservableObject {
             let uid = result.user.uid
             let isNewUser = result.additionalUserInfo?.isNewUser
             let existingFallback = Self.loadFallbackEmail(forUID: uid)
-            AuditLog.log(event: "SIWA decision: uid=\(uid), isNewUser=\(isNewUser.map(String.init(describing:)) ?? "nil"), existingFallback=\(existingFallback ?? "nil")")
+            // Log only whether a fallback email exists, never the address — the
+            // audit log is plaintext and user-exportable (T-01446).
+            AuditLog.log(event: "SIWA decision: uid=\(uid), isNewUser=\(isNewUser.map(String.init(describing:)) ?? "nil"), hasFallback=\(existingFallback != nil)")
             if isNewUser == true, existingFallback == nil {
                 pendingFallbackEmailPrompt = true
                 AuditLog.log(event: "SIWA set pendingFallbackEmailPrompt=true for uid=\(uid)")
