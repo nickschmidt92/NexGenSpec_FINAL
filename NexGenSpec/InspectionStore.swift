@@ -35,6 +35,9 @@ public final class InspectionStore: ObservableObject {
         return heavyTemplateCache
     }
     private let indexURL = FilePaths.inspectionsIndex
+    /// Gates index writes after a failed load so a bad load can never overwrite a
+    /// good primary/backup with an empty in-memory list. See `load()` (B-0044).
+    private var didLoadSucceed = true
     private var saveWorkItem: DispatchWorkItem?
     private let saveDebounceInterval: DispatchTimeInterval = .milliseconds(400)
     private let ioQueue = DispatchQueue(label: "com.nexgenspec.inspectionstore.io")
@@ -65,33 +68,147 @@ public final class InspectionStore: ObservableObject {
         return InspectionStore.fallbackTemplate
     }
 
+    /// Discriminates a missing index file from one that exists but could not be
+    /// READ (e.g. a `.completeUnlessOpen`-protected file while the device is
+    /// locked at launch). Collapsing these into one `nil` is what let a transient
+    /// locked-file launch masquerade as corruption and trigger a destructive
+    /// overwrite (B-0044).
+    private enum IndexFileRead {
+        case missing
+        case unreadable
+        case data(Data)
+    }
+
+    private nonisolated static func readIndexFile(_ url: URL) -> IndexFileRead {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        guard let data = try? Data(contentsOf: url) else { return .unreadable }
+        return .data(data)
+    }
+
+    /// Outcome of rebuilding the index from the per-inspection `current.json`
+    /// source-of-truth files. `.incomplete` means at least one `current.json`
+    /// existed but could not be read/decoded, so the scan is NOT authoritative
+    /// and must never be persisted (it would silently drop those inspections).
+    private enum RebuildResult {
+        case rebuilt([VersionMetadata])
+        case empty
+        case incomplete
+    }
+
     private func load() {
         loadError = nil
-        let data: Data? = ioQueue.sync {
-            var payload: Data?
-            if FileManager.default.fileExists(atPath: indexURL.path) {
-                payload = try? Data(contentsOf: indexURL)
-            }
-            if payload == nil, FileManager.default.fileExists(atPath: FilePaths.inspectionsIndexBackup.path) {
-                payload = try? Data(contentsOf: FilePaths.inspectionsIndexBackup)
-            }
-            return payload
+        // Reset the gate every load so a later healthy launch — or a restored
+        // backup via reloadFromDisk() — re-enables index writes automatically.
+        didLoadSucceed = true
+
+        let (primaryRead, backupRead): (IndexFileRead, IndexFileRead) = ioQueue.sync {
+            (Self.readIndexFile(indexURL), Self.readIndexFile(FilePaths.inspectionsIndexBackup))
         }
-        guard let data = data else { return }
-        if let decoded = Self.decodeIndexData(data) {
-            switch decoded {
-            case .metadata(let metadata):
-                metadataList = metadata
-            case .legacyVersions(let legacy):
-                metadataList = legacy.map { VersionMetadata(from: $0) }
-                for v in legacy {
-                    try? writeVersionToFile(v)
-                }
-                try? saveMetadataIndex()
-            }
-        } else {
+
+        // Clean first launch: neither index nor backup exists.
+        if case .missing = primaryRead, case .missing = backupRead {
             metadataList = []
-            loadError = "Inspection index could not be read. The file may be corrupted."
+            return
+        }
+
+        // Healthy path: the primary decodes. Byte-for-byte the prior behaviour.
+        if case .data(let primaryData) = primaryRead, applyDecodedIndex(primaryData) {
+            return
+        }
+
+        // Primary missing or undecodable: fall back to the backup, and if it
+        // decodes, rewrite a fresh primary from the recovered list.
+        if case .data(let backupData) = backupRead, applyDecodedIndex(backupData) {
+            try? saveMetadataIndex()
+            return
+        }
+
+        // Neither candidate decoded. Distinguish a transient unreadable file
+        // (locked at launch) from real corruption: only a file that READ
+        // successfully but failed to DECODE is corruption.
+        let primaryReadable: Bool = { if case .data = primaryRead { return true } else { return false } }()
+        let backupReadable: Bool = { if case .data = backupRead { return true } else { return false } }()
+
+        if !primaryReadable && !backupReadable {
+            // A file exists but could not be read. Treat as temporary: do NOT
+            // rebuild, do NOT touch disk. Close the write-gate so a backgrounding
+            // save can't overwrite the (intact) on-disk index with an empty list;
+            // the next launch resets the gate and loads normally.
+            metadataList = []
+            didLoadSucceed = false
+            loadError = "Inspections are temporarily unavailable because the device was locked at launch. Reopen the app after unlocking."
+            return
+        }
+
+        // Readable-but-undecodable: real corruption. Rebuild from the
+        // per-inspection current.json files (the source of truth).
+        switch rebuildIndexFromVersionFiles() {
+        case .rebuilt(let recovered):
+            metadataList = recovered
+            didLoadSucceed = true
+            loadError = nil
+            try? saveMetadataIndex()
+        case .empty, .incomplete:
+            metadataList = []
+            didLoadSucceed = false
+            loadError = "Inspection index could not be read and no complete set of inspection files was found to rebuild it. The file may be corrupted; restore a backup before creating new inspections."
+        }
+    }
+
+    /// Applies a decoded index to `metadataList`, preserving the legacy→current
+    /// migration exactly. Returns `false` if the data did not decode.
+    @discardableResult
+    private func applyDecodedIndex(_ data: Data) -> Bool {
+        guard let decoded = Self.decodeIndexData(data) else { return false }
+        switch decoded {
+        case .metadata(let metadata):
+            metadataList = metadata
+        case .legacyVersions(let legacy):
+            metadataList = legacy.map { VersionMetadata(from: $0) }
+            for v in legacy {
+                try? writeVersionToFile(v)
+            }
+            try? saveMetadataIndex()
+        }
+        return true
+    }
+
+    /// Rebuilds the metadata list from `appRoot/Inspections/<id>/current.json`.
+    /// Refuses to return a partial list: if any `current.json` exists but can't
+    /// be read/decoded the scan is `.incomplete` and the caller must not persist
+    /// it (B-0044 review hardening).
+    private func rebuildIndexFromVersionFiles() -> RebuildResult {
+        let inspectionsRoot = FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true)
+        return ioQueue.sync {
+            let fm = FileManager.default
+            guard let entries = try? fm.contentsOfDirectory(
+                at: inspectionsRoot,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                return .empty
+            }
+            var foldersWithCurrentJson = 0
+            var recovered: [InspectionVersion] = []
+            for folder in entries {
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue else { continue }
+                let currentJson = folder.appendingPathComponent("current.json", isDirectory: false)
+                guard fm.fileExists(atPath: currentJson.path) else { continue }
+                foldersWithCurrentJson += 1
+                guard let data = try? Data(contentsOf: currentJson),
+                      let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else {
+                    continue
+                }
+                recovered.append(version)
+            }
+            if foldersWithCurrentJson == 0 { return .empty }
+            if recovered.count < foldersWithCurrentJson { return .incomplete }
+            let sorted = recovered.sorted {
+                ($0.finalizedAt ?? $0.inspection.inspectionDate) > ($1.finalizedAt ?? $1.inspection.inspectionDate)
+            }
+            Diagnostics.logInfo("Rebuilt index from \(sorted.count) current.json files (B-0044)")
+            return .rebuilt(sorted.map { VersionMetadata(from: $0) })
         }
     }
 
@@ -116,12 +233,26 @@ public final class InspectionStore: ObservableObject {
     }
 
     private func saveMetadataIndex() throws {
+        // Refuse to persist while the index is in a failed-load state: writing the
+        // in-memory list now would overwrite the good (but unreadable/corrupt)
+        // on-disk primary/backup with an empty or partial list (B-0044). Plain
+        // return (not throw) so an intentional skip isn't surfaced as a save error.
+        guard didLoadSucceed else {
+            Diagnostics.logError(
+                context: "saveMetadataIndex skipped: index load failed; refusing to overwrite primary/backup with an unverified in-memory list (B-0044)",
+                persistToDisk: false
+            )
+            return
+        }
+        let snapshot = metadataList
         try ioQueue.sync {
             try FileSecurity.ensureProtectedDirectory(indexURL.deletingLastPathComponent())
-            if FileManager.default.fileExists(atPath: indexURL.path) {
+            // Only copy the existing primary over the backup when it currently
+            // DECODES — a corrupt primary must never clobber a still-good backup.
+            if let existing = try? Data(contentsOf: indexURL), Self.decodeIndexData(existing) != nil {
                 try? FileSecurity.copyProtectedItem(from: indexURL, to: FilePaths.inspectionsIndexBackup)
             }
-            let index = MetadataIndex(schemaVersion: 1, metadata: metadataList)
+            let index = MetadataIndex(schemaVersion: 1, metadata: snapshot)
             let data = try JSONEncoder().encode(index)
             try FileSecurity.writeProtected(data, to: indexURL)
         }
@@ -419,6 +550,27 @@ public extension InspectionStore {
             locked: false,
             inspection: inspection
         )
+
+        // If the index failed to load earlier, recover the surviving inspections
+        // from disk BEFORE adding this one, so clearing the write-gate here can
+        // never overwrite the index with a one-entry list that orphans existing
+        // inspections (B-0044).
+        if !didLoadSucceed {
+            switch rebuildIndexFromVersionFiles() {
+            case .rebuilt(let recovered):
+                metadataList = recovered
+                didLoadSucceed = true
+            case .empty:
+                // Provably no other inspection files exist — safe to start fresh.
+                metadataList = []
+                didLoadSucceed = true
+            case .incomplete:
+                // Existing inspections are present but temporarily unreadable
+                // (e.g. device locked). Abort rather than risk orphaning them.
+                saveError = "Can't create a new inspection while existing inspections are temporarily unavailable. Reopen the app after unlocking the device."
+                return
+            }
+        }
 
         try? writeVersionToFile(newVersion)
         metadataList.insert(VersionMetadata(from: newVersion), at: 0)

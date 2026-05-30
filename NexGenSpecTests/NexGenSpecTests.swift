@@ -146,6 +146,151 @@ final class InspectionStoreTests: XCTestCase {
     }
 }
 
+/// B-0044 — corrupt-index recovery / no-clobber. These tests are coupled to the
+/// real on-disk store (`InspectionStore` has no injectable root), so `setUp`
+/// relocates any existing store aside for a clean, deterministic `appRoot` and
+/// `tearDown` restores it.
+@MainActor
+final class InspectionIndexRecoveryTests: XCTestCase {
+
+    private var stashDir: URL!
+    private var inspectionsDir: URL { FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true) }
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-b0044-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        try moveAside(inspectionsDir, named: "Inspections")
+        try moveAside(FilePaths.inspectionsIndex, named: "inspections.json")
+        try moveAside(FilePaths.inspectionsIndexBackup, named: "inspections.json.backup")
+    }
+
+    override func tearDownWithError() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: inspectionsDir)
+        try? fm.removeItem(at: FilePaths.inspectionsIndex)
+        try? fm.removeItem(at: FilePaths.inspectionsIndexBackup)
+        try moveBack(named: "Inspections", to: inspectionsDir)
+        try moveBack(named: "inspections.json", to: FilePaths.inspectionsIndex)
+        try moveBack(named: "inspections.json.backup", to: FilePaths.inspectionsIndexBackup)
+        try? fm.removeItem(at: stashDir)
+        stashDir = nil
+    }
+
+    private func moveAside(_ url: URL, named: String) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        try fm.moveItem(at: url, to: stashDir.appendingPathComponent(named))
+    }
+    private func moveBack(named: String, to dest: URL) throws {
+        let fm = FileManager.default
+        let src = stashDir.appendingPathComponent(named)
+        guard fm.fileExists(atPath: src.path) else { return }
+        try? fm.removeItem(at: dest)
+        try fm.moveItem(at: src, to: dest)
+    }
+
+    // MARK: fixtures
+
+    private func makeVersion(id: UUID = UUID(), client: String) -> InspectionVersion {
+        let inspection = Inspection(id: id, clientName: client, clientEmail: "", clientPhone: "",
+                                    propertyAddress: "addr", inspectionDate: Date(), inspectorName: "Insp", sections: [])
+        return InspectionVersion(id: id, versionNumber: 1, status: .draft, finalizedAt: nil, locked: false, inspection: inspection)
+    }
+    private func writeCurrentJson(_ v: InspectionVersion) throws {
+        try FileSecurity.ensureProtectedDirectory(FilePaths.inspectionFolder(jobId: v.id))
+        try FileSecurity.writeProtected(try JSONEncoder().encode(v), to: FilePaths.currentVersionFile(jobId: v.id))
+    }
+    /// Writes a native `MetadataIndex`-shaped index (so loading it does NOT
+    /// trigger the legacy-array migration's extra saves).
+    private func writeMetadataIndex(_ versions: [InspectionVersion], to url: URL) throws {
+        let metaJSON = try JSONEncoder().encode(versions.map { VersionMetadata(from: $0) })
+        let json = "{\"schemaVersion\":1,\"metadata\":\(String(decoding: metaJSON, as: UTF8.self))}"
+        try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+        try FileSecurity.writeProtected(Data(json.utf8), to: url)
+    }
+    private func writeGarbage(to url: URL) throws {
+        try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+        try FileSecurity.writeProtected(Data("}{ not a valid index ".utf8), to: url)
+    }
+
+    // MARK: tests
+
+    /// A corrupt primary must NOT clobber a good backup: the store recovers from
+    /// the backup AND leaves the backup file byte-identical (the central claim).
+    func testCorruptPrimaryRecoversFromBackupWithoutClobberingIt() throws {
+        let a = makeVersion(client: "Alpha"), b = makeVersion(client: "Bravo")
+        try writeMetadataIndex([a, b], to: FilePaths.inspectionsIndexBackup)
+        try writeGarbage(to: FilePaths.inspectionsIndex)
+        let backupBefore = try Data(contentsOf: FilePaths.inspectionsIndexBackup)
+
+        let store = InspectionStore()
+        let ids = Set(store.metadataList.map(\.id))
+        XCTAssertTrue(ids.contains(a.id) && ids.contains(b.id), "did not recover both entries from backup")
+        XCTAssertNil(store.loadError)
+
+        let backupAfter = try Data(contentsOf: FilePaths.inspectionsIndexBackup)
+        XCTAssertEqual(backupBefore, backupAfter, "corrupt primary clobbered the good backup")
+    }
+
+    /// Both index files corrupt → rebuild from current.json files, and the
+    /// rebuilt index is persisted (a fresh store loads it without rebuilding).
+    func testBothIndexFilesCorruptRebuildsFromVersionFiles() throws {
+        let a = makeVersion(client: "Alpha"), b = makeVersion(client: "Bravo")
+        try writeCurrentJson(a); try writeCurrentJson(b)
+        try writeGarbage(to: FilePaths.inspectionsIndex)
+        try writeGarbage(to: FilePaths.inspectionsIndexBackup)
+
+        let store = InspectionStore()
+        XCTAssertNil(store.loadError)
+        XCTAssertEqual(Set(store.metadataList.map(\.id)), Set([a.id, b.id]))
+
+        let relaunched = InspectionStore()
+        XCTAssertEqual(Set(relaunched.metadataList.map(\.id)), Set([a.id, b.id]),
+                       "rebuilt index was not persisted")
+    }
+
+    /// Both index files corrupt AND no current.json → unrecoverable (gated);
+    /// then creating a new inspection with OTHER survivors on disk must
+    /// rebuild-then-merge and NEVER orphan the survivors.
+    func testUnrecoverableThenCreateDoesNotOrphanSurvivors() throws {
+        try writeGarbage(to: FilePaths.inspectionsIndex)
+        try writeGarbage(to: FilePaths.inspectionsIndexBackup)
+
+        let store = InspectionStore()
+        XCTAssertNotNil(store.loadError, "expected an unrecoverable load error")
+        XCTAssertTrue(store.metadataList.isEmpty)
+
+        let s1 = makeVersion(client: "Survivor1"), s2 = makeVersion(client: "Survivor2")
+        try writeCurrentJson(s1); try writeCurrentJson(s2)
+
+        store.createNewInspection(clientName: "Fresh", clientEmail: "", clientPhone: "",
+                                  propertyAddress: "x", inspectorName: "Insp", inspectorConfirmed: true)
+
+        let ids = Set(store.metadataList.map(\.id))
+        XCTAssertTrue(ids.contains(s1.id), "survivor 1 was orphaned by createNewInspection")
+        XCTAssertTrue(ids.contains(s2.id), "survivor 2 was orphaned by createNewInspection")
+        XCTAssertEqual(store.metadataList.count, 3, "expected 2 survivors + the new inspection")
+    }
+
+    /// A validly-empty index is NOT corruption: it loads clean, with no error,
+    /// and writes are not gated.
+    func testEmptyIndexIsNotTreatedAsCorruption() throws {
+        try writeMetadataIndex([], to: FilePaths.inspectionsIndex)
+
+        let store = InspectionStore()
+        XCTAssertNil(store.loadError)
+        XCTAssertTrue(store.metadataList.isEmpty)
+
+        let v = makeVersion(client: "Persisted")
+        store.insert(version: v)
+        let relaunched = InspectionStore()
+        XCTAssertTrue(relaunched.metadataList.map(\.id).contains(v.id),
+                      "save was incorrectly gated for an empty index")
+    }
+}
+
 @MainActor
 final class StateMachineTests: XCTestCase {
     func testFinalizeRequiresSignatures() {
