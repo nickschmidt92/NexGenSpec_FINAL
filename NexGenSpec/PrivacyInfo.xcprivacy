@@ -87,10 +87,13 @@
 				<string>NSPrivacyCollectedDataTypePurposeAuthentication</string>
 			</array>
 		</dict>
-		<!-- Precise location: WeatherKit weather stamp + reverse-geocoded
-		     property-address auto-fill. desiredAccuracy is
-		     kCLLocationAccuracyHundredMeters (LocationService.swift), which
-		     is "Precise" in Apple's label taxonomy. Not linked to identity. -->
+		<!-- Location, two on-demand uses, one-shot fixes only, never background:
+		     (1) property-address auto-fill — on-device reverse-geocode via Apple
+		     (LocationService.swift, kCLLocationAccuracyHundredMeters = Precise in
+		     Apple's taxonomy); (2) inspection-weather lookup whose approximate
+		     coordinates (~1 km) are sent to Open-Meteo (WeatherService.swift,
+		     kCLLocationAccuracyKilometer). Declared Precise because the address
+		     path is precise. Not linked to identity; not used for tracking. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePreciseLocation</string>

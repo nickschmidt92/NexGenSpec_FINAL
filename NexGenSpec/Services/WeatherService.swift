@@ -172,8 +172,13 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     // drop-in replacement for WeatherKit, whose JWT auth has been failing
     // server-side on Apple's end for over a month with no fix available to us.
     private func fetchWeather(at location: CLLocation) async {
-        let lat = location.coordinate.latitude
-        let lon = location.coordinate.longitude
+        // Coarsen to ~2 decimals (~1 km) before transmission for data
+        // minimization — this is what the privacy surfaces disclose
+        // ("approximate coordinates ~1 km") and is well within Open-Meteo's grid
+        // resolution for current conditions (B-0046). Full precision is never
+        // sent off-device.
+        let lat = (location.coordinate.latitude * 100).rounded() / 100
+        let lon = (location.coordinate.longitude * 100).rounded() / 100
 
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
