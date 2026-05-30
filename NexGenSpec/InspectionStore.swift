@@ -620,7 +620,25 @@ public extension InspectionStore {
             updated.status = .final
             updated.finalizedAt = Date()
             updated.locked = true
-            _ = try? FinalizationService.writeSnapshot(updated)
+            // The integrity snapshot/hash is a HARD prerequisite for
+            // finalization (T-01448): write AND verify it BEFORE persisting the
+            // .final/locked version. If it can't be written/verified (e.g. the
+            // device is locked under data protection), do NOT mark the report
+            // final — otherwise integrity.txt would advertise the version as
+            // "not finalized" while it is in fact locked, breaking the legal
+            // tamper-evidence guarantee. Leave it a draft and surface an error.
+            do {
+                let writtenHash = try FinalizationService.writeSnapshot(updated)
+                let jobId = UUID(uuidString: updated.inspection.inspectionId) ?? updated.id
+                guard let readBack = FinalizationService.loadReportHash(jobId: jobId, versionId: updated.id),
+                      !readBack.isEmpty, readBack == writtenHash else {
+                    saveError = "Couldn't finalize: the integrity snapshot could not be verified. The inspection has not been finalized. Reopen the app after unlocking the device and try again."
+                    return
+                }
+            } catch {
+                saveError = "Couldn't finalize: the integrity snapshot could not be written (\(error.localizedDescription)). The inspection has not been finalized. Reopen the app after unlocking the device and try again."
+                return
+            }
             try? writeVersionToFile(updated)
             metadataList[idx] = VersionMetadata(from: updated)
             save()
