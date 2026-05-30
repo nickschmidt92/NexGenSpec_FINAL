@@ -88,6 +88,21 @@ enum FilesAppPublisher {
         }
     }
 
+    /// Recursively removes the entire published-reports root (all property-address
+    /// subfolders). Called from the Account Deletion wipe: the mirrored report
+    /// PDFs live OUTSIDE `FilePaths.appRoot`, so the appRoot-only wipe leaves them
+    /// behind (T-01447). Best effort: logs (off-disk) but never throws.
+    static func removeAllPublished() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: publishRoot.path) else { return }
+        do {
+            try fm.removeItem(at: publishRoot)
+        } catch {
+            Diagnostics.logError(context: "FilesAppPublisher.removeAllPublished failed",
+                                 error: error, persistToDisk: false)
+        }
+    }
+
     // MARK: - Folder naming
 
     /// Builds a filesystem-safe folder name from the property address, falling

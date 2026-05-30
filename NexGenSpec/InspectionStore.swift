@@ -449,6 +449,15 @@ public final class InspectionStore: ObservableObject {
                 persistToDisk: false
             )
         }
+
+        // Remove the Documents deliverable folders too — they live OUTSIDE appRoot
+        // and hold full client PII (exported ZIPs: report + photos + videos;
+        // mirrored report PDFs by address). The appRoot wipe doesn't reach them, so
+        // without this they survive Account Deletion (5.1.1(v) gap, T-01447).
+        // NexGenSpecReceipts/ is deliberately NOT removed — it is the user's
+        // permanent deletion receipt, designed to outlive the wipe.
+        InspectionZIPExportService.removeAllExports()
+        FilesAppPublisher.removeAllPublished()
     }
 
     /// Flushes any pending debounced save and writes to disk immediately. Use for ⌘S.
