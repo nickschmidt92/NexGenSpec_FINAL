@@ -49,8 +49,8 @@ enum HTMLReportRenderer {
         }
 
         var emailPhoneMeta = ""
-        if !inspection.clientEmail.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Email:</strong> \(escapeHTML(inspection.clientEmail))</p>\n" }
-        if !inspection.clientPhone.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Phone:</strong> \(escapeHTML(inspection.clientPhone))</p>\n" }
+        if !inspection.clientEmail.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Email:</strong> \((inspection.clientEmail).htmlEscaped)</p>\n" }
+        if !inspection.clientPhone.isEmpty { emailPhoneMeta += "<p class=\"meta\"><strong>Phone:</strong> \((inspection.clientPhone).htmlEscaped)</p>\n" }
 
         let agentsBlock = Self.renderAgentsBlock(inspection: inspection)
 
@@ -67,8 +67,8 @@ enum HTMLReportRenderer {
             }
             return ""
         }()
-        let logoAlt = customLogo != nil ? escapeHTML(InspectorProfile.shared.companyName.isEmpty ? "Company Logo" : InspectorProfile.shared.companyName) : "NexGenSpec"
-        let logoLabel = customLogo != nil ? escapeHTML(InspectorProfile.shared.companyName) : "NexGenSpec"
+        let logoAlt = customLogo != nil ? (InspectorProfile.shared.companyName.isEmpty ? "Company Logo" : InspectorProfile.shared.companyName).htmlEscaped : "NexGenSpec"
+        let logoLabel = customLogo != nil ? (InspectorProfile.shared.companyName).htmlEscaped : "NexGenSpec"
 
         // NexGenSpecLogo for cover page (prefer bundle asset, fall back to company logo / app icon)
         let coverLogoBase64: String = {
@@ -96,7 +96,7 @@ enum HTMLReportRenderer {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="color-scheme" content="light">
-        <title>Inspection Report – \(escapeHTML(inspection.clientName))</title>
+        <title>Inspection Report – \((inspection.clientName).htmlEscaped)</title>
         <style>
         :root { --card-shadow: 0 2px 8px rgba(0,0,0,0.08); --radius: 12px; color-scheme: light; }
         @page { size: A4 portrait; margin: 24px; }
@@ -184,10 +184,10 @@ enum HTMLReportRenderer {
         \(!coverLogoBase64.isEmpty ? "<img class=\"cover-logo\" src=\"data:image/png;base64,\(coverLogoBase64)\" alt=\"NexGenSpec\"/>" : "")
         <h1 class="cover-title">Inspection Report</h1>
         <p class="cover-subtitle">Property Inspection</p>
-        <p class="cover-address">\(escapeHTML(inspection.propertyAddress))</p>
+        <p class="cover-address">\((inspection.propertyAddress).htmlEscaped)</p>
         <ul class="cover-details">
-        <li><strong>Client:</strong> \(escapeHTML(inspection.clientName))</li>
-        <li><strong>Inspector:</strong> \(escapeHTML(inspection.inspectorName))\(!InspectorProfile.shared.companyName.isEmpty ? " — \(escapeHTML(InspectorProfile.shared.companyName))" : "")</li>
+        <li><strong>Client:</strong> \((inspection.clientName).htmlEscaped)</li>
+        <li><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!InspectorProfile.shared.companyName.isEmpty ? " — \((InspectorProfile.shared.companyName).htmlEscaped)" : "")</li>
         <li><strong>Date:</strong> \(htmlDateFormatter.string(from: inspection.inspectionDate))</li>
         </ul>
         \(coverReportId != nil ? "<div class=\"cover-report-id\">\(coverReportId!)</div>" : "")
@@ -196,11 +196,11 @@ enum HTMLReportRenderer {
         <div class="card header-card">
         \(!logoBase64.isEmpty ? "<div style=\"display:flex;align-items:center;gap:12px;margin-bottom:12px;\"><img src=\"data:image/png;base64,\(logoBase64)\" style=\"width:48px;height:48px;border-radius:10px;object-fit:contain;\" alt=\"\(logoAlt)\"/>\(!logoLabel.isEmpty ? "<span style=\"font-size:1.1rem;font-weight:700;color:#0066cc;\">\(logoLabel)</span>" : "")</div>" : "")
         <h1>Inspection Report</h1>
-        <p class="meta"><strong>Client:</strong> \(escapeHTML(inspection.clientName))</p>
+        <p class="meta"><strong>Client:</strong> \((inspection.clientName).htmlEscaped)</p>
         \(emailPhoneMeta)
-        <p class="meta"><strong>Property:</strong> \(escapeHTML(inspection.propertyAddress))</p>
+        <p class="meta"><strong>Property:</strong> \((inspection.propertyAddress).htmlEscaped)</p>
         <p class="meta"><strong>Date:</strong> \(htmlDateFormatter.string(from: inspection.inspectionDate))</p>
-        <p class="meta"><strong>Inspector:</strong> \(escapeHTML(inspection.inspectorName))\(!InspectorProfile.shared.companyName.isEmpty ? " — \(escapeHTML(InspectorProfile.shared.companyName))" : "")\(!InspectorProfile.shared.licenseNumber.isEmpty ? " (License: \(escapeHTML(InspectorProfile.shared.licenseNumber)))" : "")</p>
+        <p class="meta"><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!InspectorProfile.shared.companyName.isEmpty ? " — \((InspectorProfile.shared.companyName).htmlEscaped)" : "")\(!InspectorProfile.shared.licenseNumber.isEmpty ? " (License: \((InspectorProfile.shared.licenseNumber).htmlEscaped))" : "")</p>
         \(agentsBlock)
         <div class="summary">
         <span class="badge safety">Safety: \(counts.safety)</span>
@@ -230,8 +230,8 @@ enum HTMLReportRenderer {
         if !inspection.videos.isEmpty {
             html += "<div class=\"card\"><h2 class=\"section-title\">Videos (drone / footage)</h2>"
             for video in inspection.videos {
-                let label = escapeHTML(video.caption.isEmpty ? video.fileName : video.caption)
-                let source = escapeHTML(video.source ?? "")
+                let label = (video.caption.isEmpty ? video.fileName : video.caption).htmlEscaped
+                let source = (video.source ?? "").htmlEscaped
                 html += "<p class=\"meta\">📹 \(label)"
                 if !source.isEmpty { html += " — \(source)" }
                 html += " <em>(video attachment — send separately if sharing)</em></p>"
@@ -242,7 +242,7 @@ enum HTMLReportRenderer {
         for section in inspection.sections {
             let reportItems = section.items.filter { $0.isDefect && $0.includeInReport }
             guard !reportItems.isEmpty else { continue }
-            html += "<h2 class=\"section-title\">\(escapeHTML(section.title))</h2>"
+            html += "<h2 class=\"section-title\">\((section.title).htmlEscaped)</h2>"
             for item in reportItems {
                 guard let severity = item.defectSeverity else { continue }
                 var imagesHTML = ""
@@ -261,21 +261,21 @@ enum HTMLReportRenderer {
                 }
                 var extraFields = ""
                 if !item.location.isEmpty {
-                    extraFields += "<p><strong>Location:</strong> \(escapeHTML(item.location))</p>\n"
+                    extraFields += "<p><strong>Location:</strong> \((item.location).htmlEscaped)</p>\n"
                 }
                 if !item.inspectorComments.isEmpty {
-                    extraFields += "<p><strong>Inspector Comments:</strong> \(escapeHTML(item.inspectorComments))</p>\n"
+                    extraFields += "<p><strong>Inspector Comments:</strong> \((item.inspectorComments).htmlEscaped)</p>\n"
                 }
                 if !item.contractorTag.isEmpty {
-                    extraFields += "<p><strong>Contractor:</strong> \(escapeHTML(item.contractorTag))</p>\n"
+                    extraFields += "<p><strong>Contractor:</strong> \((item.contractorTag).htmlEscaped)</p>\n"
                 }
                 let photosBlock = imagesHTML.isEmpty ? "" : "<div class=\"photo-grid\">\(imagesHTML)</div>"
                 html += """
                 <div class="card item-card \(severity.rawValue.lowercased())">
-                <h3>\(escapeHTML(item.title)) <span class="badge \(severity.rawValue.lowercased())">\(severity.rawValue)</span></h3>
-                <p><strong>Observed:</strong> \(escapeHTML(item.observed))</p>
-                <p><strong>Implication:</strong> \(escapeHTML(item.implication))</p>
-                <p><strong>Recommendation:</strong> \(escapeHTML(item.recommendation))</p>
+                <h3>\((item.title).htmlEscaped) <span class="badge \(severity.rawValue.lowercased())">\(severity.rawValue)</span></h3>
+                <p><strong>Observed:</strong> \((item.observed).htmlEscaped)</p>
+                <p><strong>Implication:</strong> \((item.implication).htmlEscaped)</p>
+                <p><strong>Recommendation:</strong> \((item.recommendation).htmlEscaped)</p>
                 \(extraFields)\(photosBlock)
                 </div>
                 """
@@ -287,7 +287,7 @@ enum HTMLReportRenderer {
             for sig in inspection.signatures {
                 if let data = sig.loadImageData(jobId: jobId) {
                     let base64 = data.base64EncodedString()
-                    html += "<p><strong>\(escapeHTML(sig.name))</strong> — \(htmlDateFormatter.string(from: sig.date))<br/><img src=\"data:image/png;base64,\(base64)\" alt=\"Signature\"/></p>"
+                    html += "<p><strong>\((sig.name).htmlEscaped)</strong> — \(htmlDateFormatter.string(from: sig.date))<br/><img src=\"data:image/png;base64,\(base64)\" alt=\"Signature\"/></p>"
                 }
             }
             html += "</div>"
@@ -305,7 +305,7 @@ enum HTMLReportRenderer {
             html += "<p class=\"meta\" style=\"font-style:italic;color:#666;\">These floor plans are generated from a device-level LiDAR scan and represent rough estimates of room geometry. They are intended as spatial reference only and should not be used for construction or measurement-critical decisions.</p>"
             for scan in lidarScans {
                 html += "<div style=\"margin-bottom:18px;page-break-inside:avoid;break-inside:avoid;\">"
-                html += "<p class=\"meta\"><strong>\(escapeHTML(scan.displayName))</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
+                html += "<p class=\"meta\"><strong>\((scan.displayName).htmlEscaped)</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
                 if let pngName = scan.floorplanPNGFileName {
                     let pngURL = lidarDir.appendingPathComponent(pngName)
                     if let pngData = try? Data(contentsOf: pngURL) {
@@ -468,20 +468,20 @@ enum HTMLReportRenderer {
             let titleWeight = isHighPriority ? "700" : "600"
             let leftBorder = isHighPriority ? "border-left:6px solid \(sevColor);" : ""
 
-            var description = "<span style=\"font-weight:\(titleWeight);\">\(escapeHTML(row.title))</span>"
+            var description = "<span style=\"font-weight:\(titleWeight);\">\((row.title).htmlEscaped)</span>"
             if !row.observed.isEmpty {
-                description += "<br/><span style=\"color:#666;font-size:0.85rem;\">\(escapeHTML(row.observed))</span>"
+                description += "<br/><span style=\"color:#666;font-size:0.85rem;\">\((row.observed).htmlEscaped)</span>"
             }
             if !row.defectTags.isEmpty {
                 let tagsHTML = row.defectTags.map { tag in
-                    "<span style=\"display:inline-block;background:#e8f0fe;color:#1a56db;padding:2px 8px;border-radius:10px;font-size:0.75rem;margin:2px;\">\(escapeHTML(tag))</span>"
+                    "<span style=\"display:inline-block;background:#e8f0fe;color:#1a56db;padding:2px 8px;border-radius:10px;font-size:0.75rem;margin:2px;\">\((tag).htmlEscaped)</span>"
                 }.joined()
                 description += "<br/>\(tagsHTML)"
             }
 
             html += """
             <tr style="background:\(bgColor);border-bottom:1px solid #eee;\(leftBorder)">
-            <td style="padding:10px 8px;vertical-align:top;font-weight:600;">\(escapeHTML(row.section))</td>
+            <td style="padding:10px 8px;vertical-align:top;font-weight:600;">\((row.section).htmlEscaped)</td>
             <td style="padding:10px 8px;vertical-align:top;">\(description)</td>
             <td style="padding:10px 8px;vertical-align:top;"><span style="display:inline-block;padding:4px 10px;border-radius:6px;color:#fff;background:\(sevColor);font-weight:700;font-size:\(isHighPriority ? "0.9rem" : "0.85rem");">\(row.severity.rawValue)</span></td>
             <td style="padding:10px 8px;vertical-align:top;text-align:center;">\(row.photoRef)</td>
@@ -517,12 +517,12 @@ enum HTMLReportRenderer {
 
     private static func renderAgent(label: String, agent: RealEstateAgent) -> String {
         var parts: [String] = []
-        if !agent.name.isEmpty { parts.append(escapeHTML(agent.name)) }
-        if !agent.brokerage.isEmpty { parts.append(escapeHTML(agent.brokerage)) }
-        if !agent.phone.isEmpty { parts.append(escapeHTML(agent.phone)) }
-        if !agent.email.isEmpty { parts.append(escapeHTML(agent.email)) }
+        if !agent.name.isEmpty { parts.append((agent.name).htmlEscaped) }
+        if !agent.brokerage.isEmpty { parts.append((agent.brokerage).htmlEscaped) }
+        if !agent.phone.isEmpty { parts.append((agent.phone).htmlEscaped) }
+        if !agent.email.isEmpty { parts.append((agent.email).htmlEscaped) }
         guard !parts.isEmpty else { return "" }
-        return "<p class=\"meta\"><strong>\(escapeHTML(label)):</strong> \(parts.joined(separator: " — "))</p>"
+        return "<p class=\"meta\"><strong>\((label).htmlEscaped):</strong> \(parts.joined(separator: " — "))</p>"
     }
 
     // MARK: - Weather & Timer Section
@@ -537,10 +537,10 @@ enum HTMLReportRenderer {
             parts.append("""
             <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding:12px 16px;background:#f0f7ff;border-radius:8px;font-size:0.9rem;">
             <span style="font-weight:600;color:#0066cc;">Weather at Inspection:</span>
-            <span>\(escapeHTML(w.conditions))</span>
-            <span>\(escapeHTML(w.temperatureString))</span>
-            <span>Humidity: \(escapeHTML(w.humidityString))</span>
-            <span>Wind: \(escapeHTML(w.windSpeedString))</span>
+            <span>\((w.conditions).htmlEscaped)</span>
+            <span>\((w.temperatureString).htmlEscaped)</span>
+            <span>Humidity: \((w.humidityString).htmlEscaped)</span>
+            <span>Wind: \((w.windSpeedString).htmlEscaped)</span>
             </div>
             """)
         }
@@ -602,13 +602,4 @@ private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
     }
     let uiImage = UIImage(cgImage: cgImage)
     return uiImage.jpegData(compressionQuality: 0.6)
-}
-
-private func escapeHTML(_ input: String) -> String {
-    input
-        .replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
-        .replacingOccurrences(of: ">", with: "&gt;")
-        .replacingOccurrences(of: "\"", with: "&quot;")
-        .replacingOccurrences(of: "'", with: "&#39;")
 }
