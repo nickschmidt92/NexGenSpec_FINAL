@@ -288,6 +288,84 @@ final class InspectionIndexRecoveryTests: XCTestCase {
         let relaunched = InspectionStore()
         XCTAssertTrue(relaunched.metadataList.map(\.id).contains(v.id),
                       "save was incorrectly gated for an empty index")
+/// B-0045 — the sensitive working store moved out of file-shared Documents into
+/// Application Support, and the legacy exposed copy is deleted on launch.
+@MainActor
+final class LegacyStorageCleanupTests: XCTestCase {
+
+    func testAppRootIsInApplicationSupportNotDocuments() {
+        let appRoot = FilePaths.appRoot.standardizedFileURL
+        let appSupport = FilePaths.applicationSupportDirectory.standardizedFileURL
+        let docs = FilePaths.documentDirectory.standardizedFileURL
+        XCTAssertEqual(appRoot.deletingLastPathComponent().path, appSupport.path,
+                       "appRoot must live directly under Application Support")
+        XCTAssertFalse(appRoot.path.hasPrefix(docs.path),
+                       "appRoot must NOT be inside the file-shared Documents directory")
+    }
+
+    /// The cleanup must delete ONLY the two NexGenSpec-owned legacy paths and
+    /// leave every unrelated file/folder in Documents untouched.
+    func testCleanupDeletesOnlyNexGenSpecPathsAndLeavesOtherFilesUntouched() throws {
+        let fm = FileManager.default
+        let docs = FilePaths.documentDirectory
+
+        // Legacy NexGenSpec-owned paths the cleanup SHOULD delete.
+        let legacyStore = docs.appendingPathComponent("NexGenSpec", isDirectory: true)
+        let legacyMarker = legacyStore.appendingPathComponent("marker.txt")
+        let legacyLogo = docs.appendingPathComponent("company_logo.png")
+        try fm.createDirectory(at: legacyStore, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: legacyMarker)
+        try Data("x".utf8).write(to: legacyLogo)
+
+        // Unrelated, NOT NexGenSpec-owned — MUST survive.
+        let otherFile = docs.appendingPathComponent("UNRELATED-\(UUID().uuidString).txt")
+        let otherFolder = docs.appendingPathComponent("OtherApp-\(UUID().uuidString)", isDirectory: true)
+        let otherFolderFile = otherFolder.appendingPathComponent("keep.txt")
+        try Data("keep".utf8).write(to: otherFile)
+        try fm.createDirectory(at: otherFolder, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: otherFolderFile)
+        defer {
+            try? fm.removeItem(at: otherFile)
+            try? fm.removeItem(at: otherFolder)
+            try? fm.removeItem(at: legacyStore)
+            try? fm.removeItem(at: legacyLogo)
+        }
+
+        FilePaths.cleanupLegacyExposedStore()
+
+        XCTAssertFalse(fm.fileExists(atPath: legacyStore.path), "legacy store not deleted")
+        XCTAssertFalse(fm.fileExists(atPath: legacyLogo.path), "legacy logo not deleted")
+        XCTAssertTrue(fm.fileExists(atPath: otherFile.path), "cleanup deleted an unrelated file")
+        XCTAssertTrue(fm.fileExists(atPath: otherFolderFile.path), "cleanup deleted an unrelated folder")
+    }
+
+    /// The Files-app mirror publishes the PDF only — never raw inspection data —
+    /// and into Documents (the deliverables area), not the private app root.
+    func testFilesAppPublisherPublishesPdfOnlyNoRawData() throws {
+        let fm = FileManager.default
+        let jobId = UUID()
+        let inspection = Inspection(id: jobId, clientName: "Pub Test", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "500 Mirror St", inspectionDate: Date(),
+                                    inspectorName: "Insp", sections: [])
+        let version = InspectionVersion(id: jobId, versionNumber: 1, status: .draft,
+                                        finalizedAt: nil, locked: false, inspection: inspection)
+
+        let tmpPDF = fm.temporaryDirectory.appendingPathComponent("\(jobId).pdf")
+        let pdfDoc = PDFDocument()
+        pdfDoc.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdfDoc.write(to: tmpPDF))
+        defer { try? fm.removeItem(at: tmpPDF) }
+
+        let folder = FilesAppPublisher.publish(version: version, pdfURL: tmpPDF)
+        defer { if let folder { try? fm.removeItem(at: folder) } }
+
+        let unwrapped = try XCTUnwrap(folder)
+        XCTAssertTrue(unwrapped.path.contains("NexGenSpecReports"))
+        XCTAssertTrue(unwrapped.standardizedFileURL.path.hasPrefix(FilePaths.documentDirectory.standardizedFileURL.path))
+        XCTAssertTrue(fm.fileExists(atPath: unwrapped.appendingPathComponent("Inspection_Report.pdf").path),
+                      "published PDF missing")
+        XCTAssertFalse(fm.fileExists(atPath: unwrapped.appendingPathComponent("_data").path),
+                       "raw _data was mirrored into the file-shared folder")
     }
 }
 

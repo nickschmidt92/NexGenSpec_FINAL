@@ -2,40 +2,44 @@
 //  FilesAppPublisher.swift
 //  NexGenSpec
 //
-//  Mirrors a finalized inspection into a clean, Files-app-friendly folder so
-//  the inspector gets one-tap PDF access organized by property address:
+//  Mirrors a finalized inspection's PDF into a clean, Files-app-friendly folder
+//  so the inspector gets one-tap access organized by property address:
 //
-//      Files → On My iPhone → NexGenSpec
+//      Files → On My iPhone → NexGenSpec → NexGenSpecReports
 //        └── [Property Address]/
-//            ├── Inspection_Report.pdf
-//            └── _data/
-//                └── (inspection.json, photos, videos, lidar, signatures, …)
+//            └── Inspection_Report.pdf
 //
-//  The app's working storage stays where it is (NexGenSpec/Inspections/<uuid>/),
-//  which remains the source of truth. This published folder is a convenience
-//  mirror, rebuilt on each export, so it never diverges from the canonical data
-//  and a same-address re-export simply refreshes it. Visibility in the Files app
-//  is granted by UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace in
-//  Info.plist (the app's Documents directory is what Files surfaces).
+//  PDF ONLY. Raw inspection data (inspection.json, photos, videos, lidar,
+//  signatures) is NEVER mirrored here — it stays in the private working store in
+//  Application Support, which is not file-shared (B-0045). This published folder
+//  is a convenience mirror under Documents, rebuilt on each export, so it never
+//  diverges from the canonical data and a same-address re-export refreshes it.
+//  Visibility in the Files app is granted by UIFileSharingEnabled +
+//  LSSupportsOpeningDocumentsInPlace (the app's Documents directory is what
+//  Files surfaces — and it now holds only these non-sensitive PDF deliverables).
 //
 
 import Foundation
 
 enum FilesAppPublisher {
 
-    /// Publishes `version` into `NexGenSpec/[Property Address]/`, copying the
-    /// exported PDF to the top level and the inspection's raw data into `_data/`.
+    /// Documents-based, Files-app-visible root for published PDF deliverables.
+    /// Only finalized-report PDFs live here — never raw inspection data (B-0045).
+    private static var publishRoot: URL {
+        FilePaths.documentDirectory.appendingPathComponent("NexGenSpecReports", isDirectory: true)
+    }
+
+    /// Publishes `version`'s PDF into `NexGenSpecReports/[Property Address]/`.
     /// Idempotent — the address folder is rebuilt each call. Returns the folder
     /// URL on success, or nil on failure (failures are logged, never thrown, so
     /// publishing can never block an export the inspector already completed).
     @discardableResult
     static func publish(version: InspectionVersion, pdfURL: URL?) -> URL? {
         let jobId = UUID(uuidString: version.inspection.inspectionId) ?? version.id
-        let destFolder = FilePaths.appRoot.appendingPathComponent(
+        let destFolder = publishRoot.appendingPathComponent(
             folderName(for: version.inspection, jobId: jobId),
             isDirectory: true
         )
-        let dataFolder = destFolder.appendingPathComponent("_data", isDirectory: true)
         let fm = FileManager.default
 
         do {
@@ -46,19 +50,14 @@ enum FilesAppPublisher {
             }
             try FileSecurity.ensureProtectedDirectory(destFolder)
 
-            // 1. PDF at the top level — the inspector's one-tap deliverable.
+            // PDF only — the inspector's one-tap deliverable. Raw inspection data
+            // (json, photos, videos, lidar, signatures) is deliberately NOT
+            // mirrored: it stays in the private working store in Application
+            // Support and is never placed in the file-shared Documents directory
+            // (B-0045).
             if let pdfURL, fm.fileExists(atPath: pdfURL.path) {
                 let pdfDest = destFolder.appendingPathComponent("Inspection_Report.pdf")
                 try FileSecurity.copyProtectedItem(from: pdfURL, to: pdfDest)
-            }
-
-            // 2. Raw supporting data into _data/. Copy the whole canonical
-            //    inspection folder (json, photos, videos, lidar, signatures).
-            let srcFolder = FilePaths.inspectionFolder(jobId: jobId)
-            if fm.fileExists(atPath: srcFolder.path) {
-                try FileSecurity.copyProtectedItem(from: srcFolder, to: dataFolder)
-            } else {
-                try FileSecurity.ensureProtectedDirectory(dataFolder)
             }
 
             return destFolder
@@ -68,9 +67,9 @@ enum FilesAppPublisher {
         }
     }
 
-    /// The published folder URL for an inspection (NexGenSpec/[Property Address]/).
+    /// The published folder URL for an inspection (NexGenSpecReports/[Property Address]/).
     static func publishedFolderURL(for inspection: Inspection, jobId: UUID) -> URL {
-        FilePaths.appRoot.appendingPathComponent(
+        publishRoot.appendingPathComponent(
             folderName(for: inspection, jobId: jobId),
             isDirectory: true
         )

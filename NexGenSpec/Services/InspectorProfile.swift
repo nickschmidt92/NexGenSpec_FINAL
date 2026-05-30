@@ -87,9 +87,9 @@ final class InspectorProfile: ObservableObject {
     // MARK: - Disk persistence
 
     private static var logoURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return docs.appendingPathComponent("company_logo.png")
+        // Under the private app root (Application Support), not the file-shared
+        // Documents directory (B-0045).
+        FilePaths.appRoot.appendingPathComponent("company_logo.png", isDirectory: false)
     }
 
     private func saveLogoToDisk(_ image: UIImage?) {
@@ -97,7 +97,9 @@ final class InspectorProfile: ObservableObject {
             try? FileManager.default.removeItem(at: Self.logoURL)
             return
         }
-        try? data.write(to: Self.logoURL, options: .atomic)
+        // Ensure the private app root exists and write with file protection.
+        try? FileSecurity.ensureProtectedDirectory(Self.logoURL.deletingLastPathComponent())
+        try? FileSecurity.writeProtected(data, to: Self.logoURL)
     }
 
     private func loadLogoFromDisk() -> UIImage? {
