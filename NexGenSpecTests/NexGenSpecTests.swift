@@ -1973,3 +1973,60 @@ final class ImageDownscaleTests: XCTestCase {
         XCTAssertEqual(unchanged.size, small.size)
     }
 }
+
+/// T-01438 — the v3 streaming backup round-trips multiple files (incl. a large
+/// one) so the per-file framing read/write is correct. Isolated appRoot.
+@MainActor
+final class BackupStreamingRoundTripTests: XCTestCase {
+    private var stashDir: URL!
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-t01438-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: FilePaths.appRoot.path) {
+            try fm.moveItem(at: FilePaths.appRoot, to: stashDir.appendingPathComponent("appRoot"))
+        }
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+    }
+
+    override func tearDownWithError() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: FilePaths.appRoot)
+        let saved = stashDir.appendingPathComponent("appRoot")
+        if fm.fileExists(atPath: saved.path) { try fm.moveItem(at: saved, to: FilePaths.appRoot) }
+        try? fm.removeItem(at: stashDir)
+        stashDir = nil
+    }
+
+    func testStreamingRoundTripRestoresAllFilesIncludingLarge() throws {
+        let fm = FileManager.default
+        var expected: [String: Data] = [:]
+        func put(_ rel: String, _ data: Data) throws {
+            let url = FilePaths.appRoot.appendingPathComponent(rel)
+            try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+            try FileSecurity.writeProtected(data, to: url)
+            expected[rel] = data
+        }
+        try put("inspections.json", Data("index".utf8))
+        try put("Inspections/a/current.json", Data("alpha-\(UUID().uuidString)".utf8))
+        try put("Inspections/b/current.json", Data("bravo-\(UUID().uuidString)".utf8))
+        try put("Inspections/a/photos/big.jpg", Data((0..<2_000_000).map { UInt8($0 & 0xFF) }))
+
+        let pass = "twelve-char-pass!"
+        let dest = fm.temporaryDirectory.appendingPathComponent("stream-\(UUID().uuidString).backup.enc")
+        defer { try? fm.removeItem(at: dest) }
+        try EncryptedBackupService.createEncryptedBackup(passphrase: pass, destinationURL: dest)
+
+        // Wipe the store, then restore from the streamed backup.
+        try fm.removeItem(at: FilePaths.appRoot)
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        try EncryptedBackupService.restoreEncryptedBackup(passphrase: pass, sourceURL: dest)
+
+        for (rel, data) in expected {
+            let url = FilePaths.appRoot.appendingPathComponent(rel)
+            XCTAssertEqual(try? Data(contentsOf: url), data, "restored file mismatch: \(rel)")
+        }
+    }
+}

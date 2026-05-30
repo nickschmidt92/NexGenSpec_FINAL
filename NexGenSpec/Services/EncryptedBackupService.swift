@@ -6,9 +6,11 @@ enum EncryptedBackupService {
 
     // MARK: - Config (B-0047)
 
-    /// Current backup format. v1 used an un-iterated SHA-256 "KDF" and is no
-    /// longer restorable (rejected with a clear, non-crashing error).
-    static let currentSchemaVersion = 2
+    /// Current backup format. v3 streams one encrypted file at a time (header +
+    /// per-file frames) so peak memory is bounded by the largest single file,
+    /// not the whole store (T-01438). v1 (un-iterated SHA-256) and v2 (one-shot
+    /// JSON envelope) are no longer restorable (rejected with a clear error).
+    static let currentSchemaVersion = 3
     /// Minimum passphrase length. Enforced at BOTH create and restore, and
     /// referenced by the UI gates (no literals) so they cannot drift.
     static let minPassphraseLength = 12
@@ -26,6 +28,7 @@ enum EncryptedBackupService {
         case unknownKDF(String)
         case weakKDF(iterations: Int)
         case unsafePath(String)
+        case corruptBackup
 
         var errorDescription: String? {
             switch self {
@@ -44,99 +47,113 @@ enum EncryptedBackupService {
                 return "This backup's key-derivation strength (\(iterations) iterations) is outside the accepted range and cannot be restored."
             case .unsafePath(let path):
                 return "This backup contains an unsafe file path (\(path)) and cannot be restored."
+            case .corruptBackup:
+                return "This backup file is incomplete or corrupted and cannot be restored."
             }
         }
     }
 
-    struct BackupEnvelope: Codable {
+    /// JSON header at the front of a v3 backup, length-prefixed by a UInt32.
+    /// Carries the KDF parameters (the per-file ciphertext follows as binary
+    /// frames). No file data lives here — that is the whole point (T-01438).
+    struct BackupHeader: Codable {
         var schemaVersion: Int
         var createdAt: Date
         var salt: Data
-        var nonce: Data
-        var cipherText: Data
-        var tag: Data
         var kdfAlgorithm: String
         var kdfIterations: Int
-    }
-
-    struct BackupPayload: Codable {
-        var files: [StoredFile]
-    }
-
-    struct StoredFile: Codable {
-        var relativePath: String
-        var data: Data
     }
 
     static func createEncryptedBackup(passphrase: String, destinationURL: URL) throws {
         guard passphrase.count >= minPassphraseLength else {
             throw BackupError.passphraseTooShort(min: minPassphraseLength)
         }
-        let payload = try buildPayload()
-        let payloadData = try JSONEncoder().encode(payload)
-
         let salt = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
         let key = try deriveKey(passphrase: passphrase, salt: salt, iterations: pbkdf2Iterations)
-        let sealed = try AES.GCM.seal(payloadData, using: key)
 
-        let envelope = BackupEnvelope(
-            schemaVersion: currentSchemaVersion,
-            createdAt: Date(),
-            salt: salt,
-            nonce: sealed.nonce.data,
-            cipherText: sealed.ciphertext,
-            tag: sealed.tag,
-            kdfAlgorithm: kdfAlgorithmID,
-            kdfIterations: pbkdf2Iterations
-        )
-        let envelopeData = try JSONEncoder().encode(envelope)
-        try FileSecurity.writeProtected(envelopeData, to: destinationURL)
-        AuditLog.log(event: "Encrypted backup created (schema v\(currentSchemaVersion), PBKDF2 \(pbkdf2Iterations))")
+        // Write the length-prefixed header first (creating the file with file
+        // protection), then append one encrypted file at a time so peak memory
+        // is bounded by the largest single file, not the whole store (T-01438).
+        let header = BackupHeader(schemaVersion: currentSchemaVersion, createdAt: Date(),
+                                  salt: salt, kdfAlgorithm: kdfAlgorithmID, kdfIterations: pbkdf2Iterations)
+        let headerData = try JSONEncoder().encode(header)
+        var prefix = Data()
+        prefix.appendUInt32BE(UInt32(headerData.count))
+        prefix.append(headerData)
+        try FileSecurity.writeProtected(prefix, to: destinationURL)
+
+        let handle = try FileHandle(forWritingTo: destinationURL)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+
+        var fileCount = 0
+        let root = FilePaths.appRoot
+        if FileManager.default.fileExists(atPath: root.path) {
+            for relative in try FileManager.default.subpathsOfDirectory(atPath: root.path) {
+                let absolute = root.appendingPathComponent(relative)
+                var isDir: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: absolute.path, isDirectory: &isDir), !isDir.boolValue else { continue }
+                if relative.hasSuffix(".backup.enc") { continue }
+                let fileData = try Data(contentsOf: absolute)           // one file in RAM
+                let sealed = try AES.GCM.seal(fileData, using: key)
+                try handle.write(contentsOf: frame(relativePath: relative, sealed: sealed))
+                fileCount += 1
+            }
+        }
+        AuditLog.log(event: "Encrypted backup created (schema v\(currentSchemaVersion), PBKDF2 \(pbkdf2Iterations), \(fileCount) files, streamed)")
     }
 
     static func restoreEncryptedBackup(passphrase: String, sourceURL: URL) throws {
         guard passphrase.count >= minPassphraseLength else {
             throw BackupError.passphraseTooShort(min: minPassphraseLength)
         }
-        let envelopeData = try Data(contentsOf: sourceURL)
 
-        // Stage 1: peek the schema version so an unsupported (e.g. legacy v1)
-        // backup yields a precise, friendly error instead of an opaque decode
-        // failure or a crash.
-        struct VersionPeek: Decodable { let schemaVersion: Int }
-        let peek = try JSONDecoder().decode(VersionPeek.self, from: envelopeData)
-        guard peek.schemaVersion == currentSchemaVersion else {
-            throw BackupError.unsupportedSchema(found: peek.schemaVersion, supported: currentSchemaVersion)
+        let handle = try FileHandle(forReadingFrom: sourceURL)
+        defer { try? handle.close() }
+
+        // A v3 stream begins with a 4-byte header length; a legacy v1/v2 backup
+        // is a single JSON object starting with '{'. Reject the latter clearly.
+        let firstByte = try readExact(1, from: handle)
+        if firstByte.first == UInt8(ascii: "{") {
+            throw BackupError.unsupportedSchema(found: 2, supported: currentSchemaVersion)
         }
+        let headerLen = Int((firstByte + (try readExact(3, from: handle))).toUInt32BE())
+        guard headerLen > 0, headerLen < 1_000_000 else { throw BackupError.corruptBackup }
+        let header = try JSONDecoder().decode(BackupHeader.self, from: readExact(headerLen, from: handle))
 
-        let envelope = try JSONDecoder().decode(BackupEnvelope.self, from: envelopeData)
-        guard envelope.kdfAlgorithm == kdfAlgorithmID else {
-            throw BackupError.unknownKDF(envelope.kdfAlgorithm)
+        guard header.schemaVersion == currentSchemaVersion else {
+            throw BackupError.unsupportedSchema(found: header.schemaVersion, supported: currentSchemaVersion)
         }
-        guard envelope.kdfIterations >= minAcceptableIterations,
-              envelope.kdfIterations <= maxAcceptableIterations else {
-            throw BackupError.weakKDF(iterations: envelope.kdfIterations)
+        guard header.kdfAlgorithm == kdfAlgorithmID else { throw BackupError.unknownKDF(header.kdfAlgorithm) }
+        guard header.kdfIterations >= minAcceptableIterations,
+              header.kdfIterations <= maxAcceptableIterations else {
+            throw BackupError.weakKDF(iterations: header.kdfIterations)
         }
-        let key = try deriveKey(passphrase: passphrase, salt: envelope.salt, iterations: envelope.kdfIterations)
+        let key = try deriveKey(passphrase: passphrase, salt: header.salt, iterations: header.kdfIterations)
 
-        let box = try AES.GCM.SealedBox(
-            nonce: try AES.GCM.Nonce(data: envelope.nonce),
-            ciphertext: envelope.cipherText,
-            tag: envelope.tag
-        )
-        let clear = try AES.GCM.open(box, using: key)
-        let payload = try JSONDecoder().decode(BackupPayload.self, from: clear)
+        // Stream each per-file frame: only one ciphertext is in RAM at a time.
+        var fileCount = 0
+        while let pathLen = try readFrameLength(from: handle) {
+            guard pathLen > 0, pathLen < 4096 else { throw BackupError.corruptBackup }
+            let pathData = try readExact(Int(pathLen), from: handle)
+            guard let relative = String(data: pathData, encoding: .utf8) else { throw BackupError.corruptBackup }
+            let nonceData = try readExact(12, from: handle)
+            let ctLen = (try readExact(8, from: handle)).toUInt64BE()
+            guard ctLen < 2_000_000_000 else { throw BackupError.corruptBackup }
+            let ciphertext = try readExact(Int(ctLen), from: handle)
+            let tag = try readExact(16, from: handle)
 
-        for file in payload.files {
-            // Validate each stored path before writing — a crafted backup could
-            // otherwise use `..`/absolute paths to overwrite files outside the
-            // app's sandboxed store (T-01437).
-            guard let target = safeRestoreTarget(forRelativePath: file.relativePath) else {
-                throw BackupError.unsafePath(file.relativePath)
+            // Validate the path (T-01437) before opening/writing.
+            guard let target = safeRestoreTarget(forRelativePath: relative) else {
+                throw BackupError.unsafePath(relative)
             }
-            try FileSecurity.writeProtected(file.data, to: target)
+            let box = try AES.GCM.SealedBox(nonce: try AES.GCM.Nonce(data: nonceData),
+                                            ciphertext: ciphertext, tag: tag)
+            let clear = try AES.GCM.open(box, using: key)
+            try FileSecurity.writeProtected(clear, to: target)
+            fileCount += 1
         }
-        AuditLog.log(event: "Encrypted backup restored (schema v\(currentSchemaVersion), PBKDF2 \(envelope.kdfIterations))")
+        AuditLog.log(event: "Encrypted backup restored (schema v\(currentSchemaVersion), PBKDF2 \(header.kdfIterations), \(fileCount) files, streamed)")
     }
 
     /// Validates a backup's stored relative path before restore (T-01437):
@@ -155,21 +172,49 @@ enum EncryptedBackupService {
         return target
     }
 
-    private static func buildPayload() throws -> BackupPayload {
-        let root = FilePaths.appRoot
-        guard FileManager.default.fileExists(atPath: root.path) else { return BackupPayload(files: []) }
+    // MARK: - Binary framing (v3 streaming)
 
-        let urls = try FileManager.default.subpathsOfDirectory(atPath: root.path)
-        var files: [StoredFile] = []
-        for relative in urls {
-            let absolute = root.appendingPathComponent(relative)
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: absolute.path, isDirectory: &isDir), !isDir.boolValue else { continue }
-            if relative.hasSuffix(".backup.enc") { continue }
-            let data = try Data(contentsOf: absolute)
-            files.append(StoredFile(relativePath: relative, data: data))
+    /// Builds one per-file frame:
+    /// `[pathLen u32][path][nonce 12][ctLen u64][ciphertext][tag 16]`.
+    private static func frame(relativePath: String, sealed: AES.GCM.SealedBox) -> Data {
+        let pathData = Data(relativePath.utf8)
+        var out = Data()
+        out.appendUInt32BE(UInt32(pathData.count))
+        out.append(pathData)
+        out.append(sealed.nonce.data)                        // 12 bytes
+        out.appendUInt64BE(UInt64(sealed.ciphertext.count))
+        out.append(sealed.ciphertext)
+        out.append(sealed.tag)                               // 16 bytes
+        return out
+    }
+
+    /// Reads the next frame's path-length prefix. Returns nil at a clean EOF
+    /// (frame boundary), throws `corruptBackup` on a partial read.
+    private static func readFrameLength(from handle: FileHandle) throws -> UInt32? {
+        var data = Data()
+        while data.count < 4 {
+            guard let chunk = try handle.read(upToCount: 4 - data.count), !chunk.isEmpty else {
+                if data.isEmpty { return nil }
+                throw BackupError.corruptBackup
+            }
+            data.append(chunk)
         }
-        return BackupPayload(files: files)
+        return data.toUInt32BE()
+    }
+
+    /// Reads exactly `count` bytes or throws `corruptBackup` on a short/EOF read.
+    private static func readExact(_ count: Int, from handle: FileHandle) throws -> Data {
+        guard count >= 0 else { throw BackupError.corruptBackup }
+        if count == 0 { return Data() }
+        var data = Data()
+        data.reserveCapacity(count)
+        while data.count < count {
+            guard let chunk = try handle.read(upToCount: count - data.count), !chunk.isEmpty else {
+                throw BackupError.corruptBackup
+            }
+            data.append(chunk)
+        }
+        return data
     }
 
     /// Derives the AES key from the passphrase using PBKDF2-HMAC-SHA256 (real
@@ -211,4 +256,30 @@ enum EncryptedBackupService {
 
 private extension AES.GCM.Nonce {
     var data: Data { withUnsafeBytes { Data($0) } }
+}
+
+private extension Data {
+    mutating func appendUInt32BE(_ value: UInt32) {
+        append(contentsOf: [UInt8((value >> 24) & 0xFF), UInt8((value >> 16) & 0xFF),
+                            UInt8((value >> 8) & 0xFF), UInt8(value & 0xFF)])
+    }
+    mutating func appendUInt64BE(_ value: UInt64) {
+        var bytes = [UInt8]()
+        for shift in stride(from: 56, through: 0, by: -8) {
+            bytes.append(UInt8((value >> UInt64(shift)) & 0xFF))
+        }
+        append(contentsOf: bytes)
+    }
+    func toUInt32BE() -> UInt32 {
+        let b = [UInt8](self)
+        guard b.count == 4 else { return 0 }
+        return (UInt32(b[0]) << 24) | (UInt32(b[1]) << 16) | (UInt32(b[2]) << 8) | UInt32(b[3])
+    }
+    func toUInt64BE() -> UInt64 {
+        let b = [UInt8](self)
+        guard b.count == 8 else { return 0 }
+        var v: UInt64 = 0
+        for byte in b { v = (v << 8) | UInt64(byte) }
+        return v
+    }
 }
