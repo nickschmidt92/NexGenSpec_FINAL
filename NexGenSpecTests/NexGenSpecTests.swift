@@ -2061,3 +2061,22 @@ final class DeletionPIICompletenessTests: XCTestCase {
                        "exports folder (client-PII ZIPs) was not removed on deletion")
     }
 }
+
+/// T-01449 — invoice decimal filter keeps the locale decimal separator (no 100x
+/// billing bug) and strips the thousands separator, in both comma- and
+/// dot-decimal locales.
+final class FilterDecimalLocaleTests: XCTestCase {
+    func testFilterDecimalRespectsLocaleSeparator() {
+        // Comma-decimal locale: "," is the decimal, "." is thousands.
+        XCTAssertEqual(filterDecimal("49,50", decimalSeparator: ","), "49,50",
+                       "comma decimal must be preserved — not stripped to 4950")
+        XCTAssertEqual(filterDecimal("1.000,50", decimalSeparator: ","), "1000,50")
+        // Dot-decimal locale: "." is the decimal, "," is thousands.
+        XCTAssertEqual(filterDecimal("49.50", decimalSeparator: "."), "49.50")
+        XCTAssertEqual(filterDecimal("1,000.50", decimalSeparator: "."), "1000.50")
+        // Only the first decimal separator is kept.
+        XCTAssertEqual(filterDecimal("12.34.56", decimalSeparator: "."), "12.3456")
+        // Stray letters dropped.
+        XCTAssertEqual(filterDecimal("abc12.5x", decimalSeparator: "."), "12.5")
+    }
+}
