@@ -56,6 +56,27 @@ public enum InspectionFlags {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }
+
+    // MARK: - Bulk clear (account deletion)
+
+    /// Removes every per-inspection soft flag from UserDefaults. Called during
+    /// the Account Deletion wipe (App Store Guideline 5.1.1(v)): these keys live
+    /// OUTSIDE `FilePaths.appRoot`, so the on-disk wipe alone leaves them behind
+    /// and contradicts the "no copies retained" guarantee. Matches on the key
+    /// prefixes rather than enumerating inspection IDs (which are gone once the
+    /// files are deleted), so it also sweeps up any orphaned flags. (T-01412)
+    ///
+    /// Deliberately scoped to the `invoice.*` / `inspection.archivedAt.*`
+    /// prefixes — it must NOT clear the `deletion-pending-wipe` retry flag,
+    /// which has to survive the wipe until it actually completes.
+    public static func clearAll() {
+        let defaults = UserDefaults.standard
+        let prefixes = ["invoice.sentAt.", "invoice.paidAt.", "inspection.archivedAt."]
+        for key in defaults.dictionaryRepresentation().keys
+        where prefixes.contains(where: key.hasPrefix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
 }
 
 // MARK: - Badge state machine

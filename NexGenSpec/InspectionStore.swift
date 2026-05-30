@@ -240,6 +240,12 @@ public final class InspectionStore: ObservableObject {
     /// main thread. Extracted from `clearAllLocalData()` so the heavy delete can
     /// be awaited off-main (T-01413).
     nonisolated private static func wipeAppRoot() {
+        // Clear the per-inspection soft flags (invoice sent/paid, archived).
+        // These live in UserDefaults, OUTSIDE appRoot, so the disk wipe below
+        // would leave them behind — a 5.1.1(v) "no copies retained" gap. Done
+        // first so it runs even when appRoot is already gone (T-01412).
+        InspectionFlags.clearAll()
+
         let fm = FileManager.default
         let root = FilePaths.appRoot
         guard fm.fileExists(atPath: root.path) else { return }
