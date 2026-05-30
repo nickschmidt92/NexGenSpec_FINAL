@@ -68,10 +68,12 @@ public enum InspectionFlags {
     ///
     /// Deliberately scoped to the `invoice.*` / `inspection.archivedAt.*`
     /// prefixes — it must NOT clear the `deletion-pending-wipe` retry flag,
-    /// which has to survive the wipe until it actually completes.
+    /// which has to survive the wipe until it actually completes. The `invoice.`
+    /// prefix covers sentAt/paidAt as well as the persisted amounts
+    /// (price/services/total) added in T-01440.
     public static func clearAll() {
         let defaults = UserDefaults.standard
-        let prefixes = ["invoice.sentAt.", "invoice.paidAt.", "inspection.archivedAt."]
+        let prefixes = ["invoice.", "inspection.archivedAt."]
         for key in defaults.dictionaryRepresentation().keys
         where prefixes.contains(where: key.hasPrefix) {
             defaults.removeObject(forKey: key)
