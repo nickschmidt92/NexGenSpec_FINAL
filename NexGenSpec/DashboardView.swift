@@ -318,6 +318,7 @@ struct DashboardView: View {
                     TextField("Phone",              text: $newClientPhone)
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
+                        .phoneFormatted($newClientPhone)
                 }
                 Section("Property & Inspector") {
                     TextField("Property Address",   text: $newPropertyAddress)
