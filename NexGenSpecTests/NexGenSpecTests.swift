@@ -155,6 +155,13 @@ final class InspectionIndexRecoveryTests: XCTestCase {
 
     private var stashDir: URL!
     private var inspectionsDir: URL { FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true) }
+/// B-0047 — encrypted backup uses a real PBKDF2 KDF, enforces a passphrase
+/// minimum, and rejects legacy v1 backups. Isolated: stashes the real appRoot
+/// aside so create/restore run against a clean store.
+@MainActor
+final class EncryptedBackupServiceTests: XCTestCase {
+
+    private var stashDir: URL!
 
     override func setUpWithError() throws {
         let fm = FileManager.default
@@ -164,6 +171,12 @@ final class InspectionIndexRecoveryTests: XCTestCase {
         try moveAside(inspectionsDir, named: "Inspections")
         try moveAside(FilePaths.inspectionsIndex, named: "inspections.json")
         try moveAside(FilePaths.inspectionsIndexBackup, named: "inspections.json.backup")
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-b0047-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: FilePaths.appRoot.path) {
+            try fm.moveItem(at: FilePaths.appRoot, to: stashDir.appendingPathComponent("appRoot"))
+        }
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
     }
 
     override func tearDownWithError() throws {
@@ -174,6 +187,11 @@ final class InspectionIndexRecoveryTests: XCTestCase {
         try moveBack(named: "Inspections", to: inspectionsDir)
         try moveBack(named: "inspections.json", to: FilePaths.inspectionsIndex)
         try moveBack(named: "inspections.json.backup", to: FilePaths.inspectionsIndexBackup)
+        try? fm.removeItem(at: FilePaths.appRoot)
+        let saved = stashDir.appendingPathComponent("appRoot")
+        if fm.fileExists(atPath: saved.path) {
+            try fm.moveItem(at: saved, to: FilePaths.appRoot)
+        }
         try? fm.removeItem(at: stashDir)
         stashDir = nil
     }
@@ -366,6 +384,57 @@ final class LegacyStorageCleanupTests: XCTestCase {
                       "published PDF missing")
         XCTAssertFalse(fm.fileExists(atPath: unwrapped.appendingPathComponent("_data").path),
                        "raw _data was mirrored into the file-shared folder")
+    private func freshBackupURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("test-\(UUID().uuidString).backup.enc")
+    }
+
+    func testRoundTripWithStrongPassphrase() throws {
+        let marker = FilePaths.appRoot.appendingPathComponent("Inspections/x/current.json")
+        try FileSecurity.ensureProtectedDirectory(marker.deletingLastPathComponent())
+        let content = Data("round-trip-\(UUID().uuidString)".utf8)
+        try FileSecurity.writeProtected(content, to: marker)
+
+        let dest = freshBackupURL()
+        defer { try? FileManager.default.removeItem(at: dest) }
+        try EncryptedBackupService.createEncryptedBackup(passphrase: "correct horse battery staple", destinationURL: dest)
+
+        try FileManager.default.removeItem(at: marker)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+
+        try EncryptedBackupService.restoreEncryptedBackup(passphrase: "correct horse battery staple", sourceURL: dest)
+        XCTAssertEqual(try Data(contentsOf: marker), content, "round-trip restore did not reproduce the original file")
+    }
+
+    func testCreateRejectsShortPassphrase() {
+        XCTAssertThrowsError(try EncryptedBackupService.createEncryptedBackup(passphrase: "short", destinationURL: freshBackupURL())) { error in
+            guard case EncryptedBackupService.BackupError.passphraseTooShort = error else {
+                return XCTFail("expected passphraseTooShort, got \(error)")
+            }
+        }
+    }
+
+    func testRestoreRejectsLegacyV1Backup() throws {
+        // A v1 envelope: schemaVersion 1 and no kdf fields.
+        let v1 = #"{"schemaVersion":1,"createdAt":0,"salt":"AA==","nonce":"AA==","cipherText":"AA==","tag":"AA=="}"#
+        let dest = freshBackupURL()
+        defer { try? FileManager.default.removeItem(at: dest) }
+        try Data(v1.utf8).write(to: dest)
+        XCTAssertThrowsError(try EncryptedBackupService.restoreEncryptedBackup(passphrase: "twelve chars ok", sourceURL: dest)) { error in
+            guard case EncryptedBackupService.BackupError.unsupportedSchema = error else {
+                return XCTFail("expected unsupportedSchema, got \(error)")
+            }
+        }
+    }
+
+    func testWrongPassphraseFailsToRestore() throws {
+        let marker = FilePaths.appRoot.appendingPathComponent("Inspections/y/current.json")
+        try FileSecurity.ensureProtectedDirectory(marker.deletingLastPathComponent())
+        try FileSecurity.writeProtected(Data("secret".utf8), to: marker)
+        let dest = freshBackupURL()
+        defer { try? FileManager.default.removeItem(at: dest) }
+        try EncryptedBackupService.createEncryptedBackup(passphrase: "passphrase-one-aaa", destinationURL: dest)
+        // Wrong passphrase derives a different key → AES.GCM tag check fails.
+        XCTAssertThrowsError(try EncryptedBackupService.restoreEncryptedBackup(passphrase: "passphrase-two-bbb", sourceURL: dest))
     }
 }
 
