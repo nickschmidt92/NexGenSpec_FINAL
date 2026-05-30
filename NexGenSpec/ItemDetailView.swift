@@ -280,14 +280,13 @@ struct ItemDetailView: View {
                                     Task { @MainActor in
                                         for pickerItem in newItems {
                                             if let data = try? await pickerItem.loadTransferable(type: Data.self),
-                                               let uiImage = UIImage(data: data),
-                                               let fileName = savePhoto(uiImage) {
-                                                let photo = InspectionPhoto(fileName: fileName, sortOrder: item.photos.count)
+                                               let saved = await saveImportedPhoto(from: data) {
+                                                let photo = InspectionPhoto(fileName: saved.fileName, sortOrder: item.photos.count)
                                                 var copy = item
                                                 copy.photos.append(photo)
                                                 item = copy
-                                                PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: fileName)
-                                                runDefectDetection(image: uiImage, photoId: photo.id)
+                                                PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: saved.fileName)
+                                                runDefectDetection(image: saved.image, photoId: photo.id)
                                             }
                                             importedSoFar += 1
                                         }
@@ -431,35 +430,73 @@ struct ItemDetailView: View {
         }) {
             CameraCaptureView(
                 onCapture: { image in
-                    if let fileName = savePhoto(image) {
-                        let photo = InspectionPhoto(fileName: fileName, sortOrder: item.photos.count)
-                        var copy = item
-                        copy.photos.append(photo)
-                        item = copy
-                        PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: fileName)
-                        pendingAnnotationPhoto = photo
-                        runDefectDetection(image: image, photoId: photo.id)
-                    }
                     showCamera = false
+                    Task { @MainActor in
+                        if let fileName = await savePhoto(image) {
+                            let photo = InspectionPhoto(fileName: fileName, sortOrder: item.photos.count)
+                            var copy = item
+                            copy.photos.append(photo)
+                            item = copy
+                            PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: fileName)
+                            pendingAnnotationPhoto = photo
+                            runDefectDetection(image: image, photoId: photo.id)
+                        }
+                    }
                 },
                 onCancel: { showCamera = false }
             )
         }
     }
 
-    private func savePhoto(_ image: UIImage, fileName: String? = nil) -> String? {
-        let name = fileName ?? UUID().uuidString + ".png"
+    /// Downscales + JPEG-encodes + writes a captured photo OFF the main thread,
+    /// returning the saved filename. Full-res lossless PNG on the main actor was
+    /// a watchdog (0x8badf00d) + OOM risk for 48MP photos; the report only needs
+    /// a reasonable resolution. Mirrors the cover-photo path (T-01441).
+    private func savePhoto(_ image: UIImage) async -> String? {
+        let name = UUID().uuidString + ".jpg"
         let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(name)
+        let data: Data? = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let resized = image.resizedKeepingAspect(maxSide: 3024)
+                continuation.resume(returning: resized.jpegData(compressionQuality: 0.85))
+            }
+        }
+        return writePhotoData(data, to: url, name: name)
+    }
+
+    /// Library-import variant: decodes the picked data, downscales, JPEG-encodes
+    /// and writes — ALL off the main thread — so a 20-photo import never decodes
+    /// or encodes a full-res image on the main actor. Returns the filename and
+    /// the downscaled image (for thumbnail / defect detection) (T-01441).
+    private func saveImportedPhoto(from data: Data) async -> (fileName: String, image: UIImage)? {
+        let name = UUID().uuidString + ".jpg"
+        let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(name)
+        let result: (Data, UIImage)? = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let image = UIImage(data: data) else { continuation.resume(returning: nil); return }
+                let resized = image.resizedKeepingAspect(maxSide: 3024)
+                guard let jpeg = resized.jpegData(compressionQuality: 0.85) else {
+                    continuation.resume(returning: nil); return
+                }
+                continuation.resume(returning: (jpeg, resized))
+            }
+        }
+        guard let (jpeg, resized) = result, writePhotoData(jpeg, to: url, name: name) != nil else { return nil }
+        return (name, resized)
+    }
+
+    /// Writes already-encoded photo data with file protection. Returns the name
+    /// on success, nil on failure (logged).
+    private func writePhotoData(_ data: Data?, to url: URL, name: String) -> String? {
+        guard let data else { return nil }
         do {
             try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
-            if let data = image.pngData() {
-                try FileSecurity.writeProtected(data, to: url, options: [.atomic])
-                return name
-            }
+            try FileSecurity.writeProtected(data, to: url, options: [.atomic])
+            return name
         } catch {
-            Diagnostics.logError(context: "savePhoto failed", error: error)
+            Diagnostics.logError(context: "savePhoto write failed", error: error)
+            return nil
         }
-        return nil
     }
 
     private func deletePhoto(_ photo: InspectionPhoto) {
