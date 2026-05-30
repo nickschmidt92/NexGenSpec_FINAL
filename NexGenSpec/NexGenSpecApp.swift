@@ -20,6 +20,12 @@ struct NexGenSpecApp: App {
     @StateObject private var subscriptions = SubscriptionManager()
 
     init() {
+        // B-0045: the working store now lives in private Application Support, not
+        // the file-shared Documents directory. Delete the old exposed copy here —
+        // BEFORE the @StateObject `store` loads (its autoclosure is evaluated
+        // lazily on first body render, strictly after init() returns), so no
+        // sensitive data lingers in a browsable location.
+        FilePaths.cleanupLegacyExposedStore()
         _ = _suppressKeyboardConstraintLog
         FirebaseBootstrap.configureIfNeeded()
     }

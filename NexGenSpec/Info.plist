@@ -25,6 +25,11 @@
 	<string>NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- B-0045: File sharing stays ON, but the sensitive working store (inspections,
+	     photos, signatures, audit logs) now lives in Application Support, which is
+	     NOT exposed by these keys. Documents holds ONLY non-sensitive deliverables:
+	     NexGenSpecReports (report PDFs), NexGenSpecExports (ZIPs), NexGenSpecReceipts
+	     (deletion PDFs). Do NOT move app working data back into Documents. -->
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

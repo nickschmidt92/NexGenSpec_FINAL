@@ -15,8 +15,44 @@ enum FilePaths {
         return url
     }
 
+    /// Application Support is NOT exposed by `UIFileSharingEnabled` /
+    /// `LSSupportsOpeningDocumentsInPlace`, so the sensitive working store lives
+    /// here — out of the file-shared Documents directory (B-0045).
+    static var applicationSupportDirectory: URL {
+        guard let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return URL(fileURLWithPath: NSTemporaryDirectory())
+        }
+        return url
+    }
+
+    /// Root of the private working store (inspections, photos, signatures, audit
+    /// logs, index). Lives in Application Support so it is never browsable via
+    /// the Files app or USB file sharing (B-0045). Every other path here derives
+    /// from `appRoot`, so they all move with it.
     static var appRoot: URL {
-        documentDirectory.appendingPathComponent("NexGenSpec", isDirectory: true)
+        applicationSupportDirectory.appendingPathComponent("NexGenSpec", isDirectory: true)
+    }
+
+    /// One-time cleanup (B-0045): the working store and company logo used to live
+    /// in the file-shared Documents directory. Delete that old exposed copy so no
+    /// sensitive data lingers in a browsable location. STRICTLY scoped to the two
+    /// NexGenSpec-owned paths below — never the Documents directory itself, and
+    /// never anything the app did not create.
+    static func cleanupLegacyExposedStore() {
+        let fm = FileManager.default
+        let legacyStore = documentDirectory.appendingPathComponent("NexGenSpec", isDirectory: true)
+        let legacyLogo = documentDirectory.appendingPathComponent("company_logo.png", isDirectory: false)
+        for url in [legacyStore, legacyLogo] where fm.fileExists(atPath: url.path) {
+            do {
+                try fm.removeItem(at: url)
+            } catch {
+                Diagnostics.logError(
+                    context: "cleanupLegacyExposedStore: failed to remove \(url.lastPathComponent)",
+                    error: error,
+                    persistToDisk: false
+                )
+            }
+        }
     }
 
     static var inspectionsIndex: URL {
