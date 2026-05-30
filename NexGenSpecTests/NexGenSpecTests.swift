@@ -155,13 +155,6 @@ final class InspectionIndexRecoveryTests: XCTestCase {
 
     private var stashDir: URL!
     private var inspectionsDir: URL { FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true) }
-/// B-0047 — encrypted backup uses a real PBKDF2 KDF, enforces a passphrase
-/// minimum, and rejects legacy v1 backups. Isolated: stashes the real appRoot
-/// aside so create/restore run against a clean store.
-@MainActor
-final class EncryptedBackupServiceTests: XCTestCase {
-
-    private var stashDir: URL!
 
     override func setUpWithError() throws {
         let fm = FileManager.default
@@ -171,12 +164,6 @@ final class EncryptedBackupServiceTests: XCTestCase {
         try moveAside(inspectionsDir, named: "Inspections")
         try moveAside(FilePaths.inspectionsIndex, named: "inspections.json")
         try moveAside(FilePaths.inspectionsIndexBackup, named: "inspections.json.backup")
-        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-b0047-\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
-        if fm.fileExists(atPath: FilePaths.appRoot.path) {
-            try fm.moveItem(at: FilePaths.appRoot, to: stashDir.appendingPathComponent("appRoot"))
-        }
-        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
     }
 
     override func tearDownWithError() throws {
@@ -187,11 +174,6 @@ final class EncryptedBackupServiceTests: XCTestCase {
         try moveBack(named: "Inspections", to: inspectionsDir)
         try moveBack(named: "inspections.json", to: FilePaths.inspectionsIndex)
         try moveBack(named: "inspections.json.backup", to: FilePaths.inspectionsIndexBackup)
-        try? fm.removeItem(at: FilePaths.appRoot)
-        let saved = stashDir.appendingPathComponent("appRoot")
-        if fm.fileExists(atPath: saved.path) {
-            try fm.moveItem(at: saved, to: FilePaths.appRoot)
-        }
         try? fm.removeItem(at: stashDir)
         stashDir = nil
     }
@@ -306,6 +288,9 @@ final class EncryptedBackupServiceTests: XCTestCase {
         let relaunched = InspectionStore()
         XCTAssertTrue(relaunched.metadataList.map(\.id).contains(v.id),
                       "save was incorrectly gated for an empty index")
+    }
+}
+
 /// B-0045 — the sensitive working store moved out of file-shared Documents into
 /// Application Support, and the legacy exposed copy is deleted on launch.
 @MainActor
@@ -384,6 +369,39 @@ final class LegacyStorageCleanupTests: XCTestCase {
                       "published PDF missing")
         XCTAssertFalse(fm.fileExists(atPath: unwrapped.appendingPathComponent("_data").path),
                        "raw _data was mirrored into the file-shared folder")
+    }
+}
+
+/// B-0047 — encrypted backup uses a real PBKDF2 KDF, enforces a passphrase
+/// minimum, and rejects legacy v1 backups. Isolated: stashes the real appRoot
+/// aside so create/restore run against a clean store.
+@MainActor
+final class EncryptedBackupServiceTests: XCTestCase {
+
+    private var stashDir: URL!
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-b0047-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: FilePaths.appRoot.path) {
+            try fm.moveItem(at: FilePaths.appRoot, to: stashDir.appendingPathComponent("appRoot"))
+        }
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+    }
+
+    override func tearDownWithError() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: FilePaths.appRoot)
+        let saved = stashDir.appendingPathComponent("appRoot")
+        if fm.fileExists(atPath: saved.path) {
+            try fm.moveItem(at: saved, to: FilePaths.appRoot)
+        }
+        try? fm.removeItem(at: stashDir)
+        stashDir = nil
+    }
+
     private func freshBackupURL() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("test-\(UUID().uuidString).backup.enc")
     }
@@ -435,6 +453,9 @@ final class LegacyStorageCleanupTests: XCTestCase {
         try EncryptedBackupService.createEncryptedBackup(passphrase: "passphrase-one-aaa", destinationURL: dest)
         // Wrong passphrase derives a different key → AES.GCM tag check fails.
         XCTAssertThrowsError(try EncryptedBackupService.restoreEncryptedBackup(passphrase: "passphrase-two-bbb", sourceURL: dest))
+    }
+}
+
 /// T-01440 — persisted invoice amounts are swept on Account Deletion (the
 /// `invoice.` prefix now covers price/services/total), but the
 /// `deletion-pending-wipe` retry flag must survive.
@@ -456,6 +477,9 @@ final class InspectionFlagsClearAllTests: XCTestCase {
         }
         XCTAssertTrue(defaults.bool(forKey: "deletion-pending-wipe"),
                       "clearAll must not clear the deletion-pending-wipe retry flag")
+    }
+}
+
 /// T-01439 — report-facing defect counts must exclude defects not flagged
 /// includeInReport, so the header badges match the report body / per-section
 /// counts instead of overstating them.
