@@ -65,6 +65,12 @@ struct InspectionView: View {
     // (writes are immediate — see `.onChange(of: draft)`).
     @State private var autoSaveTask: Task<Void, Never>?
     @State private var localLastSavedAt: Date?
+    /// Guards one-time seeding of `draft` from the immutable `version` prop.
+    /// SwiftUI fires `onAppear` AGAIN every time a full-screen picker
+    /// (cover photo / video) dismisses; without this, re-seeding `draft =
+    /// version` would reset the draft to the original (pre-media) version
+    /// and clobber the media the user just added — the B-0059 data-loss bug.
+    @State private var didSeedDraft = false
 
     // Timer state
     //
@@ -236,12 +242,19 @@ struct InspectionView: View {
             }
         }
         .onAppear {
-            draft = version
-            // Seed the long-lived Summary VM with the inspection data
-            // so the first visit to Summary already has the right
-            // sections/items even if no edit has happened yet.
-            summaryVM.version = version
-            if draft.inspection.sections.isEmpty { selectedPane = .overview }
+            // Seed the editable draft from the immutable `version` ONLY ONCE.
+            // A full-screen picker (cover photo / video) re-fires onAppear on
+            // dismiss; re-seeding here would overwrite the just-added media
+            // with the original version (B-0059). Edits live in `draft`.
+            if !didSeedDraft {
+                didSeedDraft = true
+                draft = version
+                // Seed the long-lived Summary VM with the inspection data
+                // so the first visit to Summary already has the right
+                // sections/items even if no edit has happened yet.
+                summaryVM.version = version
+                if draft.inspection.sections.isEmpty { selectedPane = .overview }
+            }
             // Seed the save indicator from the version file's on-disk
             // modification time so the inspector sees a real "Saved
             // HH:MM" the moment they open an inspection, not a blank
