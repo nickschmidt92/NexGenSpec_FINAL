@@ -62,7 +62,8 @@ enabled (NSFileProtectionCompleteUnlessOpen). The only network usage is:
 
 - **Firebase Auth** — for sign-in (email/password or Sign in with Apple)
 - **Firebase Crashlytics** — anonymized crash reports
-- **WeatherKit** — for the inspection weather stamp (Apple-provided)
+- **Open-Meteo** (open-meteo.com) — inspection weather stamp; the device
+  sends only coarsened coordinates (~1 km, no account, no identifiers)
 - **StoreKit** — for subscription management (Apple-provided)
 
 No analytics SDK is linked. No advertising. No third-party tracking.

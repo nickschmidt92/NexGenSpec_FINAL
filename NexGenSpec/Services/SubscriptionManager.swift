@@ -114,31 +114,32 @@ public final class SubscriptionManager: ObservableObject {
         }
     }
 
-    // MARK: - TestFlight / sandbox unlock
+    // MARK: - Simulator unlock (dev/test only)
 
-    /// True when the app is running in a TestFlight or StoreKit-sandbox
-    /// context (detected via the App Store receipt URL). While IAP
-    /// products are still being configured in App Store Connect, beta
-    /// testers would otherwise hit the paywall at inspection #4 with
-    /// no way to purchase. Treating sandbox/TestFlight as "Pro" unblocks
-    /// the full feature surface for them.
+    /// True **only** on the iOS Simulator, so local development and the
+    /// automated test suite aren't blocked by the paywall. Simulator builds
+    /// never reach end users, so this is safe.
     ///
-    /// Returns **false** for real App Store builds — the receipt there
-    /// is `receipt`, not `sandboxReceipt` — so there is no risk this
-    /// accidentally unlocks the production app for paying users.
+    /// Returns **false** on every real device build — including TestFlight,
+    /// App Review, and production.
     ///
-    /// Returns **true** on the iOS Simulator so local development and
-    /// automated tests aren't blocked by the paywall. Safe because
-    /// simulator builds never reach end users.
+    /// History: this used to also return `true` for any `sandboxReceipt`
+    /// build, to unblock beta testers while the IAP products were still being
+    /// configured in App Store Connect. That is now a submission hazard: the
+    /// App Store binary App Review runs carries a `sandboxReceipt`, so the old
+    /// behavior auto-granted Pro to the reviewer and `PaywallView` never
+    /// triggered → Guideline 2.1 "couldn't locate the in-app purchase"
+    /// rejection (B-0057 / T-01225). The IAPs are configured now, so TestFlight
+    /// testers and the reviewer exercise the real paywall (sandbox purchases
+    /// are free in those environments); the App Review demo account gets Pro
+    /// via the admin override below instead.
     ///
-    /// Evaluated once at first access and cached; the receipt URL is
-    /// established at process launch and does not change at runtime.
+    /// Evaluated once at first access and cached.
     public static let isBetaOrSandboxBuild: Bool = {
         #if targetEnvironment(simulator)
         return true
         #else
-        guard let url = Bundle.main.appStoreReceiptURL else { return false }
-        return url.lastPathComponent == "sandboxReceipt"
+        return false
         #endif
     }()
 
@@ -157,14 +158,17 @@ public final class SubscriptionManager: ObservableObject {
     /// to identify which email to target.
     ///
     /// Currently registered:
-    ///   contact@nexgenspec.com → 3b00017c…
+    ///   contact@nexgenspec.com   → 3b00017c…  (owner / internal QA / comps)
+    ///   appreview@nexgenspec.com → e7d2c6d6…  (App Store review demo account —
+    ///                                          creds in AppStore/REVIEW_NOTES.md)
     ///
     /// To add a new admin email, run on the command line:
     ///   echo -n "<email>@<domain>" | shasum -a 256
     /// and append the hex digest below. (Long-term plan: move to Firebase
     /// Cloud Functions custom claims so this list lives server-side.)
     public static let adminEmailHashes: Set<String> = [
-        "3b00017c131aa4a07923190294a22c9fd157378c78aa113ef91f9862992ee97d"
+        "3b00017c131aa4a07923190294a22c9fd157378c78aa113ef91f9862992ee97d",
+        "e7d2c6d6f818813a24d282b72005c53ac3bc571496a567f50eb6dc8ec66203da"
     ]
 
     /// True if the currently signed-in Firebase user matches the admin whitelist.
