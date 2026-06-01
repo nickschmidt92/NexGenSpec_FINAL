@@ -18,7 +18,7 @@ struct TemplateManagerView: View {
             Section("Built-in Templates") {
                 HStack {
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text("DIA Inspect - Heavy Template")
+                        Text("Comprehensive Home Inspection")
                             .font(AppFont.headline)
                         Text("Default template with all standard sections")
                             .font(AppFont.caption)

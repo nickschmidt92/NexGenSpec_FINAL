@@ -826,7 +826,7 @@ private struct TemplatePickerSheet: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
-                            Text("DIA Inspect - Heavy Template")
+                            Text("Comprehensive Home Inspection")
                                 .font(AppFont.headline)
                             Text("Built-in template")
                                 .font(AppFont.caption)
