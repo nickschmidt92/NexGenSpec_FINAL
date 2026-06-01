@@ -61,10 +61,14 @@ For each type, ASC asks: linked to user / used for tracking / purposes.
 - **Purposes:** App Functionality
 
 > Justification: Coarse location at inspection start is used to (a) fetch the
-> WeatherKit weather stamp and (b) reverse-geocode the property address that
-> auto-fills the inspection record. The raw coordinate is not retained; the
-> derived address is stored as user content on the inspection. Transmitted to
-> Apple (WeatherKit) only — no third party. Quoted from `PrivacyInfo.xcprivacy:90-102`.
+> inspection weather stamp from Open-Meteo (open-meteo.com), a free no-account
+> weather API, and (b) reverse-geocode the property address that auto-fills the
+> inspection record via Apple's location services. Before the Open-Meteo request
+> the coordinate is coarsened to ~1 km (WeatherService.swift,
+> kCLLocationAccuracyKilometer + 2-decimal rounding); the raw coordinate is never
+> sent off-device or retained, and the derived address is stored as user content
+> on the inspection. The address geocode goes to Apple only. Quoted from
+> `PrivacyInfo.xcprivacy:90-102`.
 
 ### Diagnostics → Crash Data
 
