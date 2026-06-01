@@ -616,6 +616,8 @@ struct InspectionInfoPill: View {
     var body: some View {
         Label(title, systemImage: systemImage)
             .font(AppFont.caption.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xxs)
             .background(background)
@@ -734,7 +736,7 @@ private struct DashboardMetric: View {
                 .font(AppFont.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.6)
 
             Text(value)
                 .font(AppFont.title2)
@@ -826,7 +828,7 @@ private struct TemplatePickerSheet: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
-                            Text("DIA Inspect - Heavy Template")
+                            Text("Comprehensive Home Inspection")
                                 .font(AppFont.headline)
                             Text("Built-in template")
                                 .font(AppFont.caption)
