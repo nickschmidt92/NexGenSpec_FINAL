@@ -244,7 +244,7 @@ interface ParsedBody {
   reason?: string;
 }
 
-function parseDeviceCheckTokenBody(req: Request): ParsedBody {
+export function parseDeviceCheckTokenBody(req: Request): ParsedBody {
   if (req.method !== "POST") {
     return { ok: false, reason: "method_not_allowed" };
   }
