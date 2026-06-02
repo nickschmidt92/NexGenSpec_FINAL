@@ -59,6 +59,10 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     private let locationManager = CLLocationManager()
     private var completion: ((WeatherData?) -> Void)?
 
+    /// Monotonic token used to invalidate a superseded fetch's timeout, so a
+    /// stale timeout can't resolve a newer in-flight request.
+    private var fetchToken = 0
+
     /// Apple WeatherKit client. Fully qualified to disambiguate from this
     /// type, which is also named `WeatherService`.
     private let weatherKit = WeatherKit.WeatherService.shared
@@ -93,9 +97,14 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
     /// Fetches current weather for the device location. Calls completion with result or nil.
     func fetchCurrentWeather(completion: ((WeatherData?) -> Void)? = nil) {
+        // Supersede any in-flight fetch so its completion isn't orphaned and its
+        // pending timeout can't later resolve this newer request.
+        if isFetching, let pending = self.completion { pending(nil) }
         self.completion = completion
         errorMessage = nil
         isFetching = true
+        fetchToken &+= 1
+        scheduleFetchTimeout(token: fetchToken)
 
         let status = locationManager.authorizationStatus
         log.info("fetchCurrentWeather: location auth = \(self.authString(status), privacy: .public)")
@@ -129,6 +138,23 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     func retry(completion: ((WeatherData?) -> Void)? = nil) {
         errorMessage = nil
         fetchCurrentWeather(completion: completion)
+    }
+
+    /// Fails the fetch if neither a location fix nor a WeatherKit response
+    /// arrives in time — e.g. the user never answers the permission prompt,
+    /// which would otherwise leave `isFetching` stuck and the completion never
+    /// called. Guards on `fetchToken` so a superseded fetch's timeout no-ops.
+    private func scheduleFetchTimeout(token: Int) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard let self, self.isFetching, token == self.fetchToken else { return }
+            self.log.error("Weather fetch timed out after 20s (no fix/response)")
+            Diagnostics.logError(context: "Weather: fetch timed out")
+            self.isFetching = false
+            self.errorMessage = "Weather request timed out"
+            self.completion?(nil)
+            self.completion = nil
+        }
     }
 
     // MARK: - CLLocationManagerDelegate
