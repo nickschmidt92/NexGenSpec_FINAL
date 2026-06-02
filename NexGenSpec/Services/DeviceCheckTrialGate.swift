@@ -224,7 +224,7 @@ public final class DeviceCheckTrialGate {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
-        let body: [String: String] = ["deviceToken": tokenBase64]
+        let body: [String: String] = ["deviceCheckToken": tokenBase64]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {

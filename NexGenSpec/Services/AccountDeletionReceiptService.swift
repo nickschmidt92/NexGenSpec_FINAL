@@ -85,7 +85,10 @@ public enum AccountDeletionReceiptService {
             drawReceipt(in: pageRect, inputs: inputs)
         }
 
-        try data.write(to: url, options: .atomic)
+        // PII (account email, fallback email, Firebase UID) — write with the
+        // same data-protection class as inspection files so it isn't readable
+        // at rest on a locked device (it lives in the browsable Documents dir).
+        try FileSecurity.writeProtected(data, to: url)
         return url
     }
 

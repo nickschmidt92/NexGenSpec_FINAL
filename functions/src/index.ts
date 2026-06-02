@@ -248,11 +248,17 @@ function parseDeviceCheckTokenBody(req: Request): ParsedBody {
   if (req.method !== "POST") {
     return { ok: false, reason: "method_not_allowed" };
   }
-  const body = req.body as { deviceCheckToken?: unknown } | undefined;
+  const body = req.body as
+    | { deviceCheckToken?: unknown; deviceToken?: unknown }
+    | undefined;
   if (!body || typeof body !== "object") {
     return { ok: false, reason: "body_not_object" };
   }
-  const token = body.deviceCheckToken;
+  // Accept both keys: shipped clients (through build 11) send `deviceToken`,
+  // newer clients send the canonical `deviceCheckToken`. Without accepting
+  // `deviceToken`, every request 400s and the DeviceCheck reinstall backstop
+  // silently fails open (the local UserDefaults counter becomes the only gate).
+  const token = body.deviceCheckToken ?? body.deviceToken;
   if (typeof token !== "string" || token.length === 0) {
     return { ok: false, reason: "deviceCheckToken_missing_or_invalid" };
   }
