@@ -64,6 +64,11 @@ enabled (NSFileProtectionCompleteUnlessOpen). The only network usage is:
 - **Firebase Crashlytics** — anonymized crash reports
 - **Open-Meteo** (open-meteo.com) — inspection weather stamp; the device
   sends only coarsened coordinates (~1 km, no account, no identifiers)
+- **Apple location services (CLGeocoder)** — optional property-address
+  auto-fill reverse-geocodes a precise (~100 m) coordinate via Apple; the
+  coordinate goes to Apple only, is not retained, and the resulting address is
+  stored as on-device user content. (This is why the App Privacy label declares
+  Precise Location.)
 - **StoreKit** — for subscription management (Apple-provided)
 
 No analytics SDK is linked. No advertising. No third-party tracking.

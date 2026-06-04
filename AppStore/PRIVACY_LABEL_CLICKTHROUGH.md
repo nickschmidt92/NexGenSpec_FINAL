@@ -53,22 +53,30 @@ For each type, ASC asks: linked to user / used for tracking / purposes.
 > belong in "Not Collected"; they are disclosed here conservatively. Revisit if
 > cloud sync or server-side report storage ever ships.
 
-### Location → Coarse Location
+### Location → Precise Location
 
 - **Collected:** ✓
 - **Linked to user identity:** ✗ (unlinked)
 - **Used to track user:** ✗
 - **Purposes:** App Functionality
 
-> Justification: Coarse location at inspection start is used to (a) fetch the
-> inspection weather stamp from Open-Meteo (open-meteo.com), a free no-account
-> weather API, and (b) reverse-geocode the property address that auto-fills the
-> inspection record via Apple's location services. Before the Open-Meteo request
-> the coordinate is coarsened to ~1 km (WeatherService.swift,
-> kCLLocationAccuracyKilometer + 2-decimal rounding); the raw coordinate is never
-> sent off-device or retained, and the derived address is stored as user content
-> on the inspection. The address geocode goes to Apple only. Quoted from
-> `PrivacyInfo.xcprivacy:90-102`.
+> **Declare PRECISE, not Coarse** — the ASC label must match the binary's
+> `PrivacyInfo.xcprivacy:90-108`, which declares
+> `NSPrivacyCollectedDataTypePreciseLocation`. The app makes two on-demand,
+> one-shot location requests (never background): (a) property-address auto-fill
+> requests a ~100 m fix (`LocationService.swift:25`,
+> `kCLLocationAccuracyHundredMeters` — Precise in Apple's taxonomy) and
+> reverse-geocodes it via Apple's `CLGeocoder` (`LocationService.swift:86`) — a
+> **network request that sends the precise coordinate to Apple only**; the
+> resulting address is stored as user content and the coordinate itself is not
+> retained; and (b) the inspection weather stamp sends an **approximate (~1 km)
+> coordinate** to Open-Meteo (open-meteo.com, a free no-account weather API) —
+> `WeatherService.swift:85` uses `kCLLocationAccuracyKilometer` + 2-decimal
+> rounding before transmission. So a precise coordinate does leave the device
+> (to Apple, for geocoding) and a coarsened one goes to Open-Meteo; neither is
+> retained as a raw coordinate. That precise path is exactly why the label must
+> be Precise. (Earlier drafts said "Coarse" — wrong: they missed the
+> HundredMeters address path and would have mismatched the binary manifest.)
 
 ### Diagnostics → Crash Data
 
@@ -140,7 +148,7 @@ All four are valid and pre-filled in the manifest.
 Before clicking "Publish":
 
 1. **Data Linked to User** section shows: Email, Photos/Videos, Other User Content.
-2. **Data Not Linked to User** section shows: Coarse Location, Crash Data.
+2. **Data Not Linked to User** section shows: Precise Location, Crash Data.
 3. **Data Used to Track You** section is **empty**.
 4. The summary card at the top reads something like *"Data Linked to You · Data Not Linked to You"* with no third pill.
 
