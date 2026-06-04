@@ -16,6 +16,7 @@ import {
   buildUpdateBody,
   pickAppleBase,
   callApple,
+  parseDeviceCheckTokenBody,
   APPLE_DC_PROD_BASE,
   APPLE_DC_SANDBOX_BASE,
   APPLE_QUERY_PATH,
@@ -281,5 +282,59 @@ describe("callApple — update", () => {
       status: 400,
       body: "Bad device token",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseDeviceCheckTokenBody — HTTP body contract with the real client.
+//
+// REGRESSION GUARD: the client (DeviceCheckTrialGate.swift) posts the token
+// under the key `deviceToken`, but the parser originally read only
+// `deviceCheckToken`, so every request 400'd and the DeviceCheck reinstall
+// backstop silently failed open — invisible for weeks because the failure had
+// no symptom and the old tests exercised buildQueryBody() directly, never this
+// HTTP parser. These tests feed the ACTUAL client payload shape through the
+// parser so a field-name drift can never ship unnoticed again.
+// ---------------------------------------------------------------------------
+
+describe("parseDeviceCheckTokenBody", () => {
+  // Derive the param type from the function so we don't need to import Request.
+  type Req = Parameters<typeof parseDeviceCheckTokenBody>[0];
+  const mkReq = (method: string, body: unknown): Req =>
+    ({ method, body } as unknown as Req);
+
+  it("accepts the real shipped client payload: { deviceToken }", () => {
+    // This is exactly what DeviceCheckTrialGate.swift sends. If this ever fails,
+    // production trial enforcement is broken (fails open) — do not weaken it.
+    const result = parseDeviceCheckTokenBody(mkReq("POST", { deviceToken: "tok123" }));
+    expect(result).toEqual({ ok: true, deviceCheckToken: "tok123" });
+  });
+
+  it("accepts the canonical key: { deviceCheckToken }", () => {
+    const result = parseDeviceCheckTokenBody(mkReq("POST", { deviceCheckToken: "tok123" }));
+    expect(result).toEqual({ ok: true, deviceCheckToken: "tok123" });
+  });
+
+  it("rejects a body with neither key", () => {
+    const result = parseDeviceCheckTokenBody(mkReq("POST", { somethingElse: "x" }));
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("deviceCheckToken_missing_or_invalid");
+  });
+
+  it("rejects an empty-string token", () => {
+    const result = parseDeviceCheckTokenBody(mkReq("POST", { deviceToken: "" }));
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a non-object body", () => {
+    const result = parseDeviceCheckTokenBody(mkReq("POST", undefined));
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("body_not_object");
+  });
+
+  it("rejects a non-POST method", () => {
+    const result = parseDeviceCheckTokenBody(mkReq("GET", { deviceToken: "tok123" }));
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("method_not_allowed");
   });
 });
