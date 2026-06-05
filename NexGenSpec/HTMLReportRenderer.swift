@@ -104,10 +104,15 @@ enum HTMLReportRenderer {
         @page { size: A4 portrait; margin: 24px; }
         * { box-sizing: border-box; }
         html, body { background: #f4f7fb; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; overflow-wrap: anywhere; word-wrap: break-word; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; overflow-wrap: anywhere; word-wrap: break-word; position: relative; }
         .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-25deg); font-size: 48px; font-weight: bold; color: rgba(0,0,0,0.08); pointer-events: none; z-index: 0; }
-        .free-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-30deg); font-size: 56px; font-weight: 900; color: rgba(0,100,200,0.10); pointer-events: none; z-index: 9999; letter-spacing: 4px; white-space: nowrap; }
-        .free-banner { background: linear-gradient(135deg, #0066cc, #00aaff); color: #fff; text-align: center; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.9rem; font-weight: 600; }
+        /* Free-tier watermark. A full-document position:absolute overlay tiled with
+           a rotated SVG of "NEXGENSPEC FREE" — NOT position:fixed, which WKWebView.pdf()
+           silently drops from paginated output (B-0067). inset:0 against the relative
+           body spans the whole document so the tile repeats on every PDF page, on top
+           of content (z-index), and print-color-adjust:exact keeps it through rasterization. */
+        .free-overlay { position: absolute; inset: 0; z-index: 9999; pointer-events: none; background-repeat: repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='360'%20height='240'%3E%3Ctext%20x='180'%20y='130'%20fill='rgba(0,102,204,0.18)'%20font-size='30'%20font-weight='900'%20text-anchor='middle'%20transform='rotate(-30,180,130)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E"); }
+        .free-banner { background: linear-gradient(135deg, #0066cc, #00aaff); color: #fff; text-align: center; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.95rem; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
         .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; break-inside: avoid-page; page-break-inside: avoid; }
         .item-card { break-inside: auto; page-break-inside: auto; }
@@ -172,14 +177,14 @@ enum HTMLReportRenderer {
           .card { background: #fff !important; box-shadow: none !important; break-inside: avoid-page; page-break-inside: avoid; }
           .item-card { break-inside: auto !important; page-break-inside: auto !important; }
           .meta, .footer { color: #555 !important; }
-          .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .badge, .free-overlay, .free-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .cover-page { min-height: 100vh; }
         }
         </style>
         </head>
         <body>
         \(isDraft ? "<div class=\"draft-watermark\">DRAFT — NOT FINAL</div>" : "")
-        \(watermark ? "<div class=\"free-watermark\">NEXGENSPEC FREE</div>" : "")
+        \(watermark ? "<div class=\"free-overlay\"></div>" : "")
         <div class="container">
         <div class="cover-page">
         <div class="cover-border"></div>
