@@ -54,6 +54,8 @@ public enum RetentionPolicyService {
                     try FileManager.default.removeItem(at: folder)
                 }
                 deleted.append(m.id)
+                // `actorId` is the Firebase UID (never the user's email): the audit
+                // log is plaintext and user-exportable. Callers must honor this.
                 AuditLog.log(event: "Retention purge deleted inspection", user: actorId, versionId: m.id, inspectionId: m.inspectionId)
             } catch {
                 Diagnostics.logError(context: "Retention purge failed for \(m.id.uuidString)", error: error)
