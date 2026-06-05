@@ -7,6 +7,7 @@ import XCTest
 import PDFKit
 import UIKit
 import Combine
+import CoreImage
 @testable import NexGenSpec
 
 final class FilePathsTests: XCTestCase {
@@ -585,6 +586,83 @@ final class HTMLReportRendererTests: XCTestCase {
         XCTAssertFalse(html.contains("<script>alert(1)</script>"))
         XCTAssertTrue(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
         XCTAssertTrue(html.contains("A &amp; B"))
+    }
+
+    /// Regression guard for B-0067 (free-tier watermark must reach the exported
+    /// PDF) and B-0066 (a CIImage-backed custom logo whose pngData() returns nil
+    /// must not crash report generation). Drives the SAME path production uses —
+    /// renderHTML(watermark:) → low-level generatePDF(fromHTMLFile:) — not the
+    /// preview overload. The diagonal "NEXGENSPEC FREE" mark is a CSS
+    /// background-image (not extractable text), so the PDF assertion targets the
+    /// upgrade BANNER (a flow element that survives pagination), and the HTML
+    /// assertion guards the `wm` watermark class directly.
+    @MainActor
+    func testFreeWatermarkAndBannerInExportedPDF() async throws {
+        // B-0066 failure mode: a CIImage-backed logo whose pngData() returns nil.
+        let red = UIImage(ciImage: CIImage(color: CIColor(red: 0.85, green: 0.1, blue: 0.1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 240, height: 240)))
+        InspectorProfile.shared.companyName = "ACME VERIFY"
+        InspectorProfile.shared.companyLogo = red
+        // Reset the shared singleton even if an assertion/throw aborts the test,
+        // so we don't leak ACME state into other tests in the suite.
+        defer {
+            InspectorProfile.shared.companyLogo = nil
+            InspectorProfile.shared.companyName = ""
+        }
+
+        let inspection = Inspection(
+            clientName: "Verify Client",
+            clientEmail: "v@example.com",
+            clientPhone: "",
+            propertyAddress: "1 Verify Way",
+            inspectionDate: Date(),
+            inspectorName: "Verify Inspector",
+            sections: [
+                InspectionSection(title: "Roof", items: [
+                    InspectionItem(
+                        templateItemId: "r1",
+                        title: "Flashing",
+                        includeInReport: true,
+                        status: .inspected,
+                        defectSeverity: .major,
+                        location: "Roof edge",
+                        observed: "Flashing is loose.",
+                        implication: "Water intrusion is possible.",
+                        recommendation: "Repair flashing."
+                    )
+                ])
+            ]
+        )
+        let version = InspectionVersion(versionNumber: 1, status: .draft, locked: false, inspection: inspection)
+
+        // HTML-level guard for the actual watermark mechanism: the free render
+        // carries the `wm` body class + upgrade banner; the Pro render is clean.
+        let freeHTML = HTMLReportRenderer.renderHTML(for: version, watermark: true)
+        let proHTML = HTMLReportRenderer.renderHTML(for: version, watermark: false)
+        XCTAssertTrue(freeHTML.contains("class=\"wm\""), "Free HTML must tag body with the watermark class")
+        XCTAssertTrue(freeHTML.contains("Upgrade to Pro"), "Free HTML must carry the upgrade banner")
+        XCTAssertFalse(proHTML.contains("class=\"wm\""), "Pro HTML must not be watermarked")
+        XCTAssertFalse(proHTML.contains("Upgrade to Pro"), "Pro HTML must not carry the banner")
+
+        // End-to-end guard via the production low-level path: the banner is real,
+        // extractable text, so it must be present in the free PDF and absent in Pro.
+        func exportPDF(watermark: Bool, label: String) async throws -> String {
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ngs-wm-\(label)-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let html = HTMLReportRenderer.renderHTML(
+                for: version, imageFolderURL: dir.appendingPathComponent("images"),
+                videosFolderURL: nil, watermark: watermark)
+            let htmlURL = dir.appendingPathComponent("index.html")
+            try Data(html.utf8).write(to: htmlURL)
+            let pdfURL = try await PDFReportRenderer.generatePDF(
+                fromHTMLFile: htmlURL, baseURL: dir, clientName: label)
+            return PDFDocument(url: pdfURL)?.string ?? ""
+        }
+        let freeText = try await exportPDF(watermark: true, label: "free")
+        let proText = try await exportPDF(watermark: false, label: "pro")
+        XCTAssertTrue(freeText.contains("Upgrade to Pro"), "Free PDF must carry the upgrade banner")
+        XCTAssertFalse(proText.contains("Upgrade to Pro"), "Pro PDF must be clean")
     }
 
     func testReportHTMLUsesPrintSafeStylesAndEagerImageLoading() throws {

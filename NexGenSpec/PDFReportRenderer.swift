@@ -69,6 +69,10 @@ public enum PDFReportRenderer {
             throw PDFRenderError.writeFailed(error)
         }
 
+        // The free-tier "NEXGENSPEC FREE" watermark is a CSS background-image on
+        // body.wm (HTMLReportRenderer) plus the flow-element upgrade banner. Both
+        // survive WKWebView.pdf() pagination, so no post-processing is needed here.
+        // (Build 15's position:absolute overlay was what WKWebView dropped — B-0067.)
         return try await generatePDF(fromHTMLFile: indexURL, baseURL: reportDir, clientName: version.inspection.clientName)
     }
 

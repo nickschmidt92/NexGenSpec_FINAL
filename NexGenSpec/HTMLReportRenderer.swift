@@ -73,7 +73,11 @@ enum HTMLReportRenderer {
         let logoLabel = customLogo != nil ? (InspectorProfile.shared.companyName).htmlEscaped : "NexGenSpec"
 
         // NexGenSpecLogo for cover page (prefer bundle asset, fall back to company logo / app icon)
-        let coverLogoBase64: String = {
+        // Prefer the inspector's own company logo on the cover so the report is
+        // THEIR brand, not NexGenSpec's; fall back to the bundled NexGenSpec
+        // wordmark, then the app icon (B-0066 follow-up — the cover used to
+        // always show the NexGenSpec "S" even when a custom logo was set).
+        let coverLogoBase64: String = customLogo ?? {
             if let ngsLogo = UIImage(named: "NexGenSpecLogo"),
                let data = ngsLogo.pngData() {
                 return data.base64EncodedString()
@@ -106,13 +110,14 @@ enum HTMLReportRenderer {
         html, body { background: #f4f7fb; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; overflow-wrap: anywhere; word-wrap: break-word; position: relative; }
         .draft-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(-25deg); font-size: 48px; font-weight: bold; color: rgba(0,0,0,0.08); pointer-events: none; z-index: 0; }
-        /* Free-tier watermark. A full-document position:absolute overlay tiled with
-           a rotated SVG of "NEXGENSPEC FREE" — NOT position:fixed, which WKWebView.pdf()
-           silently drops from paginated output (B-0067). inset:0 against the relative
-           body spans the whole document so the tile repeats on every PDF page, on top
-           of content (z-index), and print-color-adjust:exact keeps it through rasterization. */
-        .free-overlay { position: absolute; inset: 0; z-index: 9999; pointer-events: none; background-repeat: repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='360'%20height='240'%3E%3Ctext%20x='180'%20y='130'%20fill='rgba(0,102,204,0.18)'%20font-size='30'%20font-weight='900'%20text-anchor='middle'%20transform='rotate(-30,180,130)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E"); }
-        .free-banner { background: linear-gradient(135deg, #0066cc, #00aaff); color: #fff; text-align: center; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.95rem; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        /* Free-tier watermark (B-0067). WKWebView.pdf() drops position:fixed AND
+           position:absolute overlays from paginated output, so the diagonal mark is a
+           tiled background-image on body.wm (backgrounds DO paginate) kept alive by
+           print-color-adjust:exact, with slightly translucent cards so it shows through
+           on every page. The solid banner is the guaranteed-visible flow-element marker. */
+        body.wm { background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='420'%20height='300'%3E%3Ctext%20x='210'%20y='160'%20fill='rgba(0,90,190,0.5)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='34'%20font-weight='900'%20letter-spacing='2'%20text-anchor='middle'%20transform='rotate(-30,210,160)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E"); background-repeat: repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body.wm .card, body.wm .item-card, body.wm .header-card { background: rgba(255,255,255,0.9) !important; }
+        .free-banner { background: #0055bb; color: #fff; text-align: center; padding: 14px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 1rem; font-weight: 800; letter-spacing: 0.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
         .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; break-inside: avoid-page; page-break-inside: avoid; }
         .item-card { break-inside: auto; page-break-inside: auto; }
@@ -177,18 +182,19 @@ enum HTMLReportRenderer {
           .card { background: #fff !important; box-shadow: none !important; break-inside: avoid-page; page-break-inside: avoid; }
           .item-card { break-inside: auto !important; page-break-inside: auto !important; }
           .meta, .footer { color: #555 !important; }
-          .badge, .free-overlay, .free-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .badge, .free-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body.wm { background-color: #fff !important; background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='420'%20height='300'%3E%3Ctext%20x='210'%20y='160'%20fill='rgba(0,90,190,0.5)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='34'%20font-weight='900'%20letter-spacing='2'%20text-anchor='middle'%20transform='rotate(-30,210,160)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E") !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body.wm .card, body.wm .item-card, body.wm .header-card { background: rgba(255,255,255,0.9) !important; }
           .cover-page { min-height: 100vh; }
         }
         </style>
         </head>
-        <body>
+        <body\(watermark ? " class=\"wm\"" : "")>
         \(isDraft ? "<div class=\"draft-watermark\">DRAFT — NOT FINAL</div>" : "")
-        \(watermark ? "<div class=\"free-overlay\"></div>" : "")
         <div class="container">
         <div class="cover-page">
         <div class="cover-border"></div>
-        \(!coverLogoBase64.isEmpty ? "<img class=\"cover-logo\" src=\"data:image/png;base64,\(coverLogoBase64)\" alt=\"NexGenSpec\"/>" : "")
+        \(!coverLogoBase64.isEmpty ? "<img class=\"cover-logo\" src=\"data:image/png;base64,\(coverLogoBase64)\" alt=\"\(logoAlt)\"/>" : "")
         <h1 class="cover-title">Inspection Report</h1>
         <p class="cover-subtitle">Property Inspection</p>
         <p class="cover-address">\((inspection.propertyAddress).htmlEscaped)</p>
