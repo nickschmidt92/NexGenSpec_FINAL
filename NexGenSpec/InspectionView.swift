@@ -23,6 +23,7 @@ private struct SectionItemRef: Hashable, Identifiable {
 
 struct InspectionView: View {
     @EnvironmentObject private var store: InspectionStore
+    @EnvironmentObject private var subscriptions: SubscriptionManager
     @State var version: InspectionVersion
     var updated: (InspectionVersion) -> Void
     @State private var draft: InspectionVersion = .empty
@@ -439,7 +440,7 @@ struct InspectionView: View {
         isExportingZIP = true
         defer { isExportingZIP = false }
         do {
-            let url = try await InspectionZIPExportService.exportZIP(for: draft)
+            let url = try await InspectionZIPExportService.exportZIP(for: draft, watermark: !subscriptions.hasFeatureAccess)
             exportZIPURL = url
             showExportShareSheet = true
         } catch {

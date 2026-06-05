@@ -63,8 +63,14 @@ public enum InspectionZIPExportService {
     /// Generates a ZIP containing the finalized report + assets. Returns the URL
     /// of the ZIP under `exportFolder`. Caller is responsible for sharing it
     /// (e.g. via `ShareSheet`) and informing the user where it landed.
+    ///
+    /// `watermark` gates the branded PDF/HTML the same way the in-app export
+    /// does: callers must pass `!subscriptionManager.hasFeatureAccess` so free
+    /// users get a watermarked report inside the ZIP (B-0065). No default is
+    /// provided on purpose — every call site has to make the entitlement
+    /// decision explicit.
     @MainActor
-    public static func exportZIP(for version: InspectionVersion) async throws -> URL {
+    public static func exportZIP(for version: InspectionVersion, watermark: Bool) async throws -> URL {
         let stagingRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("zip-staging-\(version.id.uuidString)", isDirectory: true)
         if FileManager.default.fileExists(atPath: stagingRoot.path) {
@@ -84,7 +90,7 @@ public enum InspectionZIPExportService {
             imageFolderURL: imagesDir,
             videosFolderURL: videosDir,
             absoluteAssetFileURLs: false,
-            watermark: false
+            watermark: watermark
         )
         let htmlURL = stagingRoot.appendingPathComponent("report.html")
         try Data(html.utf8).write(to: htmlURL, options: .atomic)

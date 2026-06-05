@@ -79,15 +79,17 @@ public final class SubscriptionManager: ObservableObject {
     }
 
     /// True if the user should have access to premium features (LiDAR,
-    /// full PDF export, photo annotations, etc.). During the free trial window (first
-    /// `freeInspectionLimit` inspections), everything is unlocked so prospective
-    /// customers can evaluate the full app before subscribing. After the trial,
-    /// a paid subscription (or admin override) is required.
+    /// full PDF export, photo annotations, etc.). This is a pure *entitlement*
+    /// check: only a paid subscription, an admin override, or a beta/simulator
+    /// build unlocks premium output.
     ///
-    /// Uses `<=` so that while the user is working inside their Nth free
-    /// inspection (N == `freeInspectionLimit`), premium features remain available.
+    /// Note: the free-trial generosity lives on inspection *creation*
+    /// (`canCreateInspection` / `freeInspectionsRemaining`), not here. Gating
+    /// premium output on the trial counter would always evaluate true — the
+    /// counter is capped at `0...freeInspectionLimit` — so free users would
+    /// receive clean (unwatermarked) branded PDFs forever (B-0065).
     public var hasFeatureAccess: Bool {
-        isPro || isAdminAccount || Self.isBetaOrSandboxBuild || freeInspectionsUsed <= Self.freeInspectionLimit
+        isPro || isAdminAccount || Self.isBetaOrSandboxBuild
     }
 
     /// Remaining free inspections. Returns nil if subscribed, admin, or beta tester.

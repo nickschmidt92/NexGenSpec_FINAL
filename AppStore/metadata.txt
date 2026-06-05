@@ -1,13 +1,13 @@
 ═══════════════════════════════════════════════════════════════
   NEXGENSPEC — APP STORE METADATA
-  Last updated: 2026-05-10 (1.0.0 launch prep, pricing aligned to D-0045)
+  Last updated: 2026-06-05 (1.0.0 build 14, App Store submission)
 ═══════════════════════════════════════════════════════════════
 
 CATEGORY:          Business (Primary) / Utilities (Secondary)
 AGE RATING:        4+
 BUNDLE ID:         com.nexgenspec.app
 VERSION:           1.0.0
-BUILD:             11
+BUILD:             14
 PRICE:             Free (with in-app subscriptions)
 
 ───────────────────────────────────────────────────────────────

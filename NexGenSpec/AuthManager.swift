@@ -11,6 +11,7 @@ import Foundation
 import Combine
 import FirebaseAuth
 import AuthenticationServices
+import Security
 
 @MainActor
 public final class AuthManager: ObservableObject {
@@ -219,14 +220,38 @@ public final class AuthManager: ObservableObject {
 
     // MARK: - Fallback email (account recovery)
 
-    /// UserDefaults key for the fallback email scoped to a Firebase UID.
+    /// Keychain service under which all fallback-recovery emails are stored.
+    /// The per-user value is keyed by Firebase UID via the account attribute.
+    private static let fallbackEmailKeychainService = "com.nexgenspec.fallbackEmail"
+
+    /// Legacy UserDefaults key for the fallback email scoped to a Firebase UID.
+    /// Retained only so the one-time Keychain migration can find and clear it;
+    /// new writes go to the Keychain (plist values land in unencrypted backups).
     private static func fallbackEmailDefaultsKey(forUID uid: String) -> String {
         "ngs.fallbackEmail.\(uid)"
     }
 
     /// Reads the persisted fallback email for the given UID. Returns nil if none.
+    ///
+    /// The address lives in the Keychain (protected by Data Protection, excluded
+    /// from device backups). For users upgrading from a build that stored it in
+    /// UserDefaults, this performs a one-time migration on read: if the Keychain
+    /// has no value but UserDefaults does, the value is copied into the Keychain
+    /// and the plaintext UserDefaults key is removed.
     public static func loadFallbackEmail(forUID uid: String) -> String? {
-        UserDefaults.standard.string(forKey: fallbackEmailDefaultsKey(forUID: uid))
+        if let stored = keychainReadFallbackEmail(forUID: uid) {
+            return stored
+        }
+        // One-time migration: lift any legacy plaintext value into the Keychain.
+        let defaultsKey = fallbackEmailDefaultsKey(forUID: uid)
+        if let legacy = UserDefaults.standard.string(forKey: defaultsKey) {
+            if keychainWriteFallbackEmail(legacy, forUID: uid) {
+                UserDefaults.standard.removeObject(forKey: defaultsKey)
+                AuditLog.log(event: "Fallback email migrated to Keychain for account \(uid)")
+            }
+            return legacy
+        }
+        return nil
     }
 
     /// Fallback email for the *currently signed-in* user, or nil if none persisted.
@@ -236,16 +261,76 @@ public final class AuthManager: ObservableObject {
     }
 
     /// Saves a fallback email for the currently signed-in user. Returns false if
-    /// not signed in or the address is malformed.
+    /// not signed in, the address is malformed, or the Keychain write fails.
     @discardableResult
     public func setFallbackEmail(_ email: String) -> Bool {
         let cleaned = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard Self.isValidEmail(cleaned) else { return false }
         guard let uid = Auth.auth().currentUser?.uid else { return false }
-        UserDefaults.standard.set(cleaned, forKey: Self.fallbackEmailDefaultsKey(forUID: uid))
+        guard Self.keychainWriteFallbackEmail(cleaned, forUID: uid) else { return false }
+        // Clear any stale plaintext copy left by a pre-migration build.
+        UserDefaults.standard.removeObject(forKey: Self.fallbackEmailDefaultsKey(forUID: uid))
         AuditLog.log(event: "Fallback email recorded for account \(uid)")
         pendingFallbackEmailPrompt = false
         return true
+    }
+
+    // MARK: - Fallback email Keychain backing store
+
+    /// Reads the Keychain-stored fallback email for the given UID, or nil if none.
+    private static func keychainReadFallbackEmail(forUID uid: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: fallbackEmailKeychainService,
+            kSecAttrAccount as String: uid,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess,
+              let data = item as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return value
+    }
+
+    /// Writes (or replaces) the fallback email for the given UID in the Keychain.
+    /// Stored with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` so the item
+    /// is unavailable until first unlock and never migrates to another device or
+    /// into a backup. Returns true only when the write succeeds.
+    @discardableResult
+    private static func keychainWriteFallbackEmail(_ email: String, forUID uid: String) -> Bool {
+        let data = Data(email.utf8)
+        let baseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: fallbackEmailKeychainService,
+            kSecAttrAccount as String: uid
+        ]
+        // Delete any existing item first so SecItemAdd can't fail with errSecDuplicateItem.
+        SecItemDelete(baseQuery as CFDictionary)
+        var addQuery = baseQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            Diagnostics.logError(context: "Failed to store fallback email in Keychain (\(status))")
+        }
+        return status == errSecSuccess
+    }
+
+    /// Removes the Keychain-stored fallback email for the given UID. Exposed for
+    /// completeness (e.g. account deletion cleanup); ignores "not found".
+    @discardableResult
+    private static func keychainDeleteFallbackEmail(forUID uid: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: fallbackEmailKeychainService,
+            kSecAttrAccount as String: uid
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 
     /// User skipped the fallback prompt. Clears the pending flag so the sheet

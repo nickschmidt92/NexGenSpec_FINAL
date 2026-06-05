@@ -39,13 +39,11 @@ public enum PDFReportRenderer {
         let reportDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("pdf-\(version.id.uuidString)", isDirectory: true)
         let imagesDir = reportDir.appendingPathComponent("images", isDirectory: true)
-        let videosDir = reportDir.appendingPathComponent("videos", isDirectory: true)
 
         if FileManager.default.fileExists(atPath: reportDir.path) {
             try? FileManager.default.removeItem(at: reportDir)
         }
         try FileSecurity.ensureProtectedDirectory(imagesDir)
-        try FileSecurity.ensureProtectedDirectory(videosDir)
 
         // Render HTML off the main actor. Images are streamed to disk so we never hold
         // all photo bytes in memory simultaneously.
@@ -55,7 +53,11 @@ public enum PDFReportRenderer {
             HTMLReportRenderer.renderHTML(
                 for: versionCopy,
                 imageFolderURL: imagesDir,
-                videosFolderURL: videosDir,
+                // PDF renders videos as plain-text labels only (never reads the
+                // files), so copying the video bytes here was pure wasted disk
+                // I/O on video-heavy inspections. The ZIP export path still
+                // passes a real folder because it bundles the actual videos.
+                videosFolderURL: nil,
                 watermark: wm
             )
         }.value
