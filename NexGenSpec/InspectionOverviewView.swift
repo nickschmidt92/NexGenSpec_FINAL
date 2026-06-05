@@ -60,6 +60,10 @@ struct InspectionOverviewView: View {
     /// (stored as the video's caption). TestFlight finding 2026-05-25:
     /// videos couldn't be renamed after capture.
     @State private var videoToRename: InspectionVideo?
+    /// Drives the rename alert for a LiDAR room scan. When non-nil, an alert
+    /// with a text field lets the inspector give the scan a friendly name
+    /// (stored as the scan's `name`). Mirrors the video rename flow.
+    @State private var scanToRename: LiDARScan?
     @State private var renameText: String = ""
     /// A clip that was just recorded and is waiting for the naming prompt.
     /// We don't present the prompt directly from the recorder's onRecorded
@@ -304,6 +308,19 @@ struct InspectionOverviewView: View {
                 Button("Cancel", role: .cancel) { videoToRename = nil }
             } message: {
                 Text("Give this recording a name so it's easy to identify in the report.")
+            }
+            .alert(
+                "Rename Room Scan",
+                isPresented: Binding(
+                    get: { scanToRename != nil },
+                    set: { if !$0 { scanToRename = nil } }
+                )
+            ) {
+                TextField("Room name", text: $renameText)
+                Button("Save") { commitScanRename() }
+                Button("Cancel", role: .cancel) { scanToRename = nil }
+            } message: {
+                Text("Give this scan a name (e.g. \"Living Room\") so it's easy to identify in the report.")
             }
             // fullScreenCover (not sheet) because UIImagePickerController
             // with sourceType = .camera wants the entire screen — using
@@ -898,6 +915,15 @@ struct InspectionOverviewView: View {
             }
             Spacer(minLength: 0)
             if isEditable {
+                Button {
+                    renameText = scan.name ?? ""
+                    scanToRename = scan
+                } label: {
+                    Image(systemName: "pencil")
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain).hoverEffect(.lift)
+                .accessibilityLabel("Rename room scan")
                 Button(role: .destructive) {
                     deleteLiDARScan(scan)
                 } label: {
@@ -923,6 +949,21 @@ struct InspectionOverviewView: View {
         let url = FilePaths.lidarFolder(jobId: jobId).appendingPathComponent(pngName)
         guard let data = try? Data(contentsOf: url) else { return nil }
         return UIImage(data: data)
+    }
+
+    /// Applies the pending rename to the scan's `name` and persists it via
+    /// `LiDARScanStore` (overwrites the scan's JSON record, the same store
+    /// `deleteLiDARScan` works against). Empty input clears the name (the row
+    /// then falls back to the USDZ filename via `displayName`). Mirrors the
+    /// video rename flow.
+    private func commitScanRename() {
+        guard let target = scanToRename else { return }
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var updated = target
+        updated.name = trimmed.isEmpty ? nil : trimmed
+        LiDARScanStore.save(updated, jobId: jobId)
+        scanToRename = nil
+        loadLiDARScans()
     }
 
     /// Removes a scan's record plus its USDZ and floor-plan files from disk.
