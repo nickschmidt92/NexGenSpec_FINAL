@@ -727,7 +727,9 @@ struct AppSettingsView: View {
     }
 
     private func runRetentionPurge() {
-        let result = store.purgeExpiredInspections(isAdmin: subscriptions.isAdminAccount, actorId: authManager.currentUsername)
+        // Attribute the purge by Firebase UID, never the user's email — the audit
+        // log is plaintext and user-exportable (mirrors AuthManager's SIWA convention).
+        let result = store.purgeExpiredInspections(isAdmin: subscriptions.isAdminAccount, actorId: authManager.currentUserUID)
         purgeSummary = "Deleted: \(result.deletedInspectionIDs.count)\nSkipped: \(result.skippedInspectionIDs.count)"
         showPurgeResult = true
     }
