@@ -394,15 +394,23 @@ extension View {
 /// Strips anything that isn't a digit or a single decimal point. `.keyboardType(.decimalPad)`
 /// already covers the on-screen keypad, but doesn't catch paste, hardware keyboards, or
 /// dictation — this binding wrapper does (T-01385).
-func filterDecimal(_ value: String) -> String {
-    var sawDot = false
+func filterDecimal(_ value: String,
+                   decimalSeparator: String = Locale.current.decimalSeparator ?? ".") -> String {
+    // Keep the user's LOCALE decimal separator (e.g. "," in de_DE / fr_FR). The
+    // previous code only accepted "." and silently stripped ",", so "49,50"
+    // became "4950" — a 100x billing bug in comma-decimal locales (T-01449). The
+    // other separator (the locale's thousands separator) and any stray character
+    // are dropped. The separator is preserved verbatim so on-keypad editing
+    // round-trips (canonicalizing to "." would make the next keystroke's "." get
+    // stripped in a comma locale).
+    var sawSeparator = false
     var out = ""
     for ch in value {
         if ch.isASCII && ch.isNumber {
             out.append(ch)
-        } else if ch == "." && !sawDot {
-            sawDot = true
-            out.append(ch)
+        } else if String(ch) == decimalSeparator && !sawSeparator {
+            sawSeparator = true
+            out.append(contentsOf: decimalSeparator)
         }
     }
     return out
