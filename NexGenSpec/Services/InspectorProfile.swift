@@ -92,8 +92,41 @@ final class InspectorProfile: ObservableObject {
         FilePaths.appRoot.appendingPathComponent("company_logo.png", isDirectory: false)
     }
 
+    /// Max longest-side pixel dimension for the stored company logo. The logo
+    /// is the only user-supplied image that previously bypassed report
+    /// downsampling, so an un-downsampled photo dropped in as a "logo" could
+    /// OOM the report render. Cap the long side at 512px before encoding —
+    /// well above what a logo needs in a PDF header. Mirrors the technique in
+    /// AnnotationBakeService.resizeForReport.
+    private static let maxLogoSidePixels: CGFloat = 512
+
+    /// Downscales the longest side of `image` to maxLogoSidePixels when the
+    /// source is larger; returns the original instance otherwise.
+    private static func downsampleLogo(_ image: UIImage) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxLogoSidePixels else { return image }
+        let ratio = maxLogoSidePixels / longest
+        let target = CGSize(
+            width: floor(image.size.width * ratio),
+            height: floor(image.size.height * ratio)
+        )
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+    }
+
     private func saveLogoToDisk(_ image: UIImage?) {
-        guard let image, let data = image.pngData() else {
+        guard let image else {
+            try? FileManager.default.removeItem(at: Self.logoURL)
+            return
+        }
+        // Downsample before encoding so a huge user-supplied image can't OOM
+        // the report render (the logo is the only user image that otherwise
+        // bypasses downsampling).
+        guard let data = Self.downsampleLogo(image).pngData() else {
             try? FileManager.default.removeItem(at: Self.logoURL)
             return
         }

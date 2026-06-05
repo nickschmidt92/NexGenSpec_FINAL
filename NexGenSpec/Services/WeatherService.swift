@@ -58,6 +58,15 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     private let locationManager = CLLocationManager()
     private var completion: ((WeatherData?) -> Void)?
 
+    /// Bounded watchdog that guarantees the UI reaches a terminal state even
+    /// when no location/permission/weather callback ever arrives — most
+    /// notably the `.notDetermined` path, where the system permission prompt
+    /// may never be answered and `requestWhenInUseAuthorization()` produces no
+    /// further delegate callback. Cancelled the moment any terminal state is
+    /// reached so it never clobbers a real result.
+    private var watchdog: Task<Void, Never>?
+    private let watchdogTimeout: UInt64 = 20_000_000_000  // 20s in nanoseconds
+
     /// Dedicated logger so the full weather fetch path is visible live in
     /// Console.app on a real device (filter subsystem = bundle id, category
     /// = "Weather"). Dynamic values are logged `.public` because this is a
@@ -87,9 +96,19 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
 
     /// Fetches current weather for the device location. Calls completion with result or nil.
     func fetchCurrentWeather(completion: ((WeatherData?) -> Void)? = nil) {
+        // In-flight guard: if a fetch is already running, fail the new caller
+        // rather than overwriting (and orphaning) the prior completion. This
+        // class is @MainActor, so this check is serialized with all other
+        // state mutations — no data race.
+        guard !isFetching else {
+            completion?(nil)
+            return
+        }
+
         self.completion = completion
         errorMessage = nil
         isFetching = true
+        startWatchdog()
 
         let status = locationManager.authorizationStatus
         log.info("fetchCurrentWeather: location auth = \(self.authString(status), privacy: .public)")
@@ -115,6 +134,26 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             isFetching = false
             errorMessage = "Location status unknown"
             completion?(nil)
+            self.completion = nil
+        }
+    }
+
+    /// (Re)starts the bounded watchdog. Cancels any prior watchdog first so a
+    /// stale timer from an earlier fetch can never reset a newer in-flight one.
+    private func startWatchdog() {
+        watchdog?.cancel()
+        watchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: self?.watchdogTimeout ?? 20_000_000_000)
+            guard let self, !Task.isCancelled, self.isFetching else { return }
+            // No location/permission/weather result ever arrived (e.g. the user
+            // never answered the permission prompt). Drive the UI to a terminal
+            // state so it stops showing "Fetching weather…".
+            self.log.error("Weather watchdog fired — no result within 20s, clearing fetch state")
+            Diagnostics.logError(context: "Weather: watchdog timeout (no result within 20s)")
+            self.isFetching = false
+            self.errorMessage = "Weather: timed out"
+            self.weatherData = nil
+            self.completion?(nil)
             self.completion = nil
         }
     }
@@ -235,6 +274,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             Diagnostics.logInfo("Open-Meteo: success \(data.temperatureString) \(data.conditions)")
             self.weatherData = data
             isFetching = false
+            watchdog?.cancel()
             completion?(data)
         } catch {
             // Surface the full error so the on-device cause — network failure,
