@@ -262,6 +262,10 @@ export function parseDeviceCheckTokenBody(req: Request): ParsedBody {
   if (typeof token !== "string" || token.length === 0) {
     return { ok: false, reason: "deviceCheckToken_missing_or_invalid" };
   }
+  // A real DeviceCheck token is well under 1KB; reject oversized input.
+  if (token.length > 4096) {
+    return { ok: false, reason: "deviceCheckToken_too_long" };
+  }
   return { ok: true, deviceCheckToken: token };
 }
 
@@ -337,7 +341,6 @@ export const getTrialStatus = onRequest(SHARED_OPTIONS, async (req, res) => {
       return send(res, 502, {
         error: "apple_devicecheck_rejected",
         appleStatus: result.status,
-        appleBody: result.body,
       });
     }
 
@@ -392,7 +395,6 @@ export const markTrialUsed = onRequest(SHARED_OPTIONS, async (req, res) => {
       return send(res, 502, {
         error: "apple_devicecheck_rejected",
         appleStatus: result.status,
-        appleBody: result.body,
       });
     }
 
