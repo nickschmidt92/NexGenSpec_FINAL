@@ -29,6 +29,12 @@ struct AppSettingsView: View {
     // Logo picker
     @State private var showLogoPicker = false
 
+    // Recovery / fallback email read-back (T-01506). Loaded from the Keychain
+    // for the current UID on appear, and re-loaded after the inline editor
+    // saves, so the displayed value always reflects what's persisted.
+    @State private var recoveryEmail: String?
+    @State private var showRecoveryEmailEditor = false
+
     // Support / Report an Issue
     @State private var showReportMailer = false
     @State private var showMailUnavailable = false
@@ -69,6 +75,24 @@ struct AppSettingsView: View {
                         SettingsValueRow(title: "User", value: authManager.currentUsername ?? "Unknown")
                         SettingsValueRow(title: "Role", value: roleLabel)
                         SettingsValueRow(title: "Subscription", value: subscriptionLabel)
+
+                        // Recovery email read-back (T-01506). Shows the
+                        // fallback email the user set at signup (or later)
+                        // so it's no longer write-only. "Not set" when the
+                        // Keychain has no value for the current UID.
+                        SettingsValueRow(
+                            title: "Recovery email",
+                            value: (recoveryEmail?.isEmpty == false) ? recoveryEmail! : "Not set"
+                        )
+
+                        Button((recoveryEmail?.isEmpty == false) ? "Update Recovery Email" : "Add Recovery Email") {
+                            showRecoveryEmailEditor = true
+                        }
+                        .buttonStyle(AppSecondaryButtonStyle())
+
+                        Text("Used only to reach you for receipts, account recovery, or important service notices if you ever lose access to your primary email.")
+                            .font(AppFont.caption)
+                            .foregroundStyle(.secondary)
 
                         if !subscriptions.isAdminAccount {
                             // Pro users go to iOS Subscriptions directly to
@@ -354,6 +378,15 @@ struct AppSettingsView: View {
             .scrollIndicators(.hidden)
             .navigationTitle("Settings")
         }
+        .task {
+            reloadRecoveryEmail()
+        }
+        .sheet(isPresented: $showRecoveryEmailEditor, onDismiss: reloadRecoveryEmail) {
+            RecoveryEmailEditorSheet(
+                authManager: authManager,
+                currentEmail: recoveryEmail
+            )
+        }
         .alert("Status", isPresented: $showStatus) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -572,6 +605,17 @@ struct AppSettingsView: View {
         }
     }
 
+    /// Loads the recovery (fallback) email from the Keychain for the current
+    /// UID into local state so the read-back row can display it. No-op result
+    /// (nil) when signed out or none is set. (T-01506)
+    private func reloadRecoveryEmail() {
+        guard let uid = authManager.currentUserUID else {
+            recoveryEmail = nil
+            return
+        }
+        recoveryEmail = AuthManager.loadFallbackEmail(forUID: uid)
+    }
+
     /// Captures everything needed for the deletion receipt while the Firebase
     /// user is still resolvable. Must run BEFORE `authManager.deleteAccount()`.
     @MainActor
@@ -777,6 +821,69 @@ private struct SettingsHeroCard: View {
             }
         }
         .inspectionCard()
+    }
+}
+
+/// Inline editor for the recovery (fallback) email, reached from the Account
+/// section's "Add / Update Recovery Email" button (T-01506). Mirrors the
+/// signup-time `FallbackEmailPromptSheet` in RootView so wording and the
+/// underlying `setFallbackEmail` validation stay consistent; the only
+/// difference is this is reachable any time from Settings and pre-fills the
+/// current value. The read-back in AppSettingsView re-loads on dismiss.
+private struct RecoveryEmailEditorSheet: View {
+    @ObservedObject var authManager: AuthManager
+    let currentEmail: String?
+    @State private var email: String = ""
+    @State private var inlineError: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Add a recovery email so we can reach you for receipts, account recovery, or important service notices if you ever lose access to your primary email.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    TextField("you@example.com", text: $email)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .autocorrectionDisabled()
+                        .textContentType(.emailAddress)
+                } header: {
+                    Text("Recovery email")
+                } footer: {
+                    if let inlineError {
+                        Text(inlineError).foregroundStyle(.red).font(.caption)
+                    } else {
+                        Text("Stored securely on this device. We never send marketing email here without your opt-in.")
+                            .font(.caption)
+                    }
+                }
+            }
+            .navigationTitle("Recovery Email")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear { email = currentEmail ?? "" }
+        }
+    }
+
+    private func save() {
+        inlineError = nil
+        if authManager.setFallbackEmail(email) {
+            dismiss()
+        } else {
+            inlineError = "Please enter a valid email address."
+        }
     }
 }
 

@@ -131,7 +131,31 @@ enum EncryptedBackupService {
         }
         let key = try deriveKey(passphrase: passphrase, salt: header.salt, iterations: header.kdfIterations)
 
-        // Stream each per-file frame: only one ciphertext is in RAM at a time.
+        // Atomic restore (B-0062): decrypt + write EVERY frame into a throwaway
+        // STAGING directory first; only if all frames succeed do we swap staging
+        // into the live store. A mid-stream failure (disk-full, a decrypt throw on
+        // a later frame, a FileHandle error, or a process kill) therefore touches
+        // only staging — the live store is never left half-old / half-new, which
+        // is exactly the data-loss this restore is meant to prevent. The common
+        // wrong-passphrase case still fails fast: the FIRST frame's AES.GCM.open
+        // throws before staging is ever swapped in, so live data is untouched.
+        let fm = FileManager.default
+        let appRoot = FilePaths.appRoot
+        // Sibling temp dirs in the same parent (Application Support) so the final
+        // moves stay on one volume and are real renames, not cross-device copies.
+        let parent = appRoot.deletingLastPathComponent()
+        let unique = UUID().uuidString
+        let staging = parent.appendingPathComponent("NexGenSpec.staging-\(unique)", isDirectory: true)
+        let snapshot = parent.appendingPathComponent("NexGenSpec.rollback-\(unique)", isDirectory: true)
+        // Always tear down both temp trees, however we leave.
+        defer {
+            try? fm.removeItem(at: staging)
+            try? fm.removeItem(at: snapshot)
+        }
+        try? fm.removeItem(at: staging)
+        try FileSecurity.ensureProtectedDirectory(staging)
+
+        // Phase 1 — decrypt + write all files into staging (off the live store).
         var fileCount = 0
         while let pathLen = try readFrameLength(from: handle) {
             guard pathLen > 0, pathLen < 4096 else { throw BackupError.corruptBackup }
@@ -143,17 +167,58 @@ enum EncryptedBackupService {
             let ciphertext = try readExact(Int(ctLen), from: handle)
             let tag = try readExact(16, from: handle)
 
-            // Validate the path (T-01437) before opening/writing.
-            guard let target = safeRestoreTarget(forRelativePath: relative) else {
+            // Validate the path (T-01437) against the LIVE appRoot — same checks
+            // as a direct restore — then redirect the write into the matching
+            // location under staging (which mirrors the appRoot layout).
+            guard safeRestoreTarget(forRelativePath: relative) != nil else {
                 throw BackupError.unsafePath(relative)
             }
+            let stagedTarget = staging.appendingPathComponent(relative)
             let box = try AES.GCM.SealedBox(nonce: try AES.GCM.Nonce(data: nonceData),
                                             ciphertext: ciphertext, tag: tag)
             let clear = try AES.GCM.open(box, using: key)
-            try FileSecurity.writeProtected(clear, to: target)
+            // Same file-protection attributes as a direct restore (writeProtected).
+            try FileSecurity.writeProtected(clear, to: stagedTarget)
             fileCount += 1
         }
-        AuditLog.log(event: "Encrypted backup restored (schema v\(currentSchemaVersion), PBKDF2 \(header.kdfIterations), \(fileCount) files, streamed)")
+
+        // Phase 2 — atomic swap with snapshot rollback. A whole-tree
+        // FileManager.replaceItemAt is avoided here: the live appRoot also holds
+        // the Backups/ folder (including the .enc we are restoring FROM and any
+        // sibling backups) which the captured envelope may not faithfully contain,
+        // so a blind whole-tree replace could delete still-needed backups. Instead
+        // we move the live tree aside as a snapshot, move staging into place,
+        // and preserve Backups/ from the snapshot. On ANY failure we move the
+        // snapshot back, so the live store is restored EXACTLY as it was.
+        try? fm.removeItem(at: snapshot)
+        let liveExisted = fm.fileExists(atPath: appRoot.path)
+        if liveExisted {
+            try fm.moveItem(at: appRoot, to: snapshot)   // live -> snapshot (atomic rename)
+        }
+        do {
+            try fm.moveItem(at: staging, to: appRoot)    // staging -> live (atomic rename)
+            // Preserve the live Backups/ directory across the swap so we never
+            // lose the source backup or its siblings.
+            if liveExisted {
+                let savedBackups = snapshot.appendingPathComponent("Backups", isDirectory: true)
+                if fm.fileExists(atPath: savedBackups.path) {
+                    let newBackups = appRoot.appendingPathComponent("Backups", isDirectory: true)
+                    try? fm.removeItem(at: newBackups)
+                    try fm.moveItem(at: savedBackups, to: newBackups)
+                    try? fm.setAttributes([.protectionKey: FileSecurity.fileProtection], ofItemAtPath: newBackups.path)
+                }
+            }
+        } catch {
+            // Roll back: restore the original live tree from the snapshot, leaving
+            // the store exactly as it was, then rethrow the original error type.
+            try? fm.removeItem(at: appRoot)
+            if liveExisted {
+                try? fm.moveItem(at: snapshot, to: appRoot)
+            }
+            throw error
+        }
+
+        AuditLog.log(event: "Encrypted backup restored (schema v\(currentSchemaVersion), PBKDF2 \(header.kdfIterations), \(fileCount) files, staged+swapped)")
     }
 
     /// Validates a backup's stored relative path before restore (T-01437):

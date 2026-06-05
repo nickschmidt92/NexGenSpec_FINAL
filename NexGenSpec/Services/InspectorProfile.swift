@@ -73,9 +73,16 @@ final class InspectorProfile: ObservableObject {
     }
 
     /// Base64-encoded PNG of the company logo (for embedding in HTML reports).
+    ///
+    /// Reads the bytes straight from the on-disk PNG that `saveLogoToDisk`
+    /// already normalized + wrote, rather than re-encoding the in-memory
+    /// `UIImage`. The in-memory image can come from the photo picker without a
+    /// backing `CGImage` (e.g. a `CIImage`-backed `UIImage`), in which case
+    /// `pngData()` returns nil — which previously made the report silently fall
+    /// back to the app icon even though a logo was set (B-0066). The disk copy
+    /// is always a valid bitmap PNG, so this can't fail that way.
     var companyLogoBase64: String? {
-        guard let logo = companyLogo,
-              let data = logo.pngData() else { return nil }
+        guard let data = try? Data(contentsOf: Self.logoURL) else { return nil }
         return data.base64EncodedString()
     }
 
@@ -100,12 +107,17 @@ final class InspectorProfile: ObservableObject {
     /// AnnotationBakeService.resizeForReport.
     private static let maxLogoSidePixels: CGFloat = 512
 
-    /// Downscales the longest side of `image` to maxLogoSidePixels when the
-    /// source is larger; returns the original instance otherwise.
-    private static func downsampleLogo(_ image: UIImage) -> UIImage {
+    /// Normalizes the company logo for storage: caps the longest side at
+    /// `maxLogoSidePixels` (down-scaling only when larger) AND **always**
+    /// re-renders through `UIGraphicsImageRenderer`, guaranteeing a
+    /// `CGImage`-backed bitmap. The always-render matters: a picker-supplied
+    /// `UIImage` may have no backing `CGImage`, so calling `pngData()` on it
+    /// directly returns nil — which used to delete the logo file and fall the
+    /// report back to the app icon (B-0066). Re-rendering normalizes any source
+    /// so `pngData()` always succeeds.
+    private static func normalizedLogo(_ image: UIImage) -> UIImage {
         let longest = max(image.size.width, image.size.height)
-        guard longest > maxLogoSidePixels else { return image }
-        let ratio = maxLogoSidePixels / longest
+        let ratio = longest > maxLogoSidePixels ? maxLogoSidePixels / longest : 1
         let target = CGSize(
             width: floor(image.size.width * ratio),
             height: floor(image.size.height * ratio)
@@ -123,10 +135,11 @@ final class InspectorProfile: ObservableObject {
             try? FileManager.default.removeItem(at: Self.logoURL)
             return
         }
-        // Downsample before encoding so a huge user-supplied image can't OOM
-        // the report render (the logo is the only user image that otherwise
-        // bypasses downsampling).
-        guard let data = Self.downsampleLogo(image).pngData() else {
+        // Normalize (downsample if huge + force a CGImage-backed bitmap) before
+        // encoding so a huge user-supplied image can't OOM the report render and
+        // a picker image with no CGImage backing can't make pngData() return nil
+        // (B-0066). After normalizing, pngData() always succeeds.
+        guard let data = Self.normalizedLogo(image).pngData() else {
             try? FileManager.default.removeItem(at: Self.logoURL)
             return
         }
