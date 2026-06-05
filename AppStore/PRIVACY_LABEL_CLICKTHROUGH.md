@@ -99,7 +99,7 @@ Click "No" on every other category. Specifically NOT collected:
 - ✗ Contacts (the device's address book)
 - ✗ User content → Customer Support (no in-app support chat collecting messages)
 - ✗ User content → Gameplay Content
-- ✗ User content → Other Audio Data — stays **No** because audio exists only inside on-device walkthrough videos that are never uploaded or collected. ⚠️ Do **NOT** write "no microphone use" anywhere: the microphone **is** used to record that video audio (declared via `NSMicrophoneUsageDescription`). The category is still "No" (not *collected*), but the mic *is* used — never assert otherwise on the label or in App Review notes (Guideline 5.1.1, B-0063).
+- ✗ User content → Other Audio Data — **No** as a *standalone* category. The mic audio captured in walkthrough videos is part of the **Photos or Videos** type already declared collected in §2 above, so there is no separate Audio-Data collection to report here. ⚠️ Never write "no microphone use" anywhere: the microphone **is** used (declared via `NSMicrophoneUsageDescription`) — only the *separate* Audio-Data category is "No" (Guideline 5.1.1, B-0063).
 - ✗ Browsing History
 - ✗ Search History
 - ✗ Identifiers → User ID *(Firebase Auth UID is account-key only, not used for tracking)*
