@@ -1298,6 +1298,83 @@ final class SubscriptionManagerBetaUnlockTests: XCTestCase {
     }
 }
 
+// MARK: - Monetization gate (B-0065)
+
+/// B-0065: `hasFeatureAccess` is a pure ENTITLEMENT check — it gates premium
+/// output (clean/unwatermarked branded PDFs). It must NOT be unlocked by the
+/// free-trial counter. The old `|| freeInspectionsUsed <= freeInspectionLimit`
+/// clause made it unconditionally true (the counter is capped 0...limit), so
+/// free users received clean branded PDFs forever.
+///
+/// On the simulator/TestFlight test host `isBetaOrSandboxBuild` is true and
+/// short-circuits `hasFeatureAccess` to true regardless of trial state — the
+/// same masking documented in `DeviceCheckTrialGateTests`. So we branch on the
+/// build: the production branch proves the trial counter no longer grants
+/// access, and both branches prove an entitled (isPro) user is always unlocked.
+@MainActor
+final class SubscriptionMonetizationGateTests: XCTestCase {
+
+    private func makeManager(trialUsed: Int) -> SubscriptionManager {
+        UserDefaults.standard.set(trialUsed, forKey: "nexgenspec.trial.inspectionsCreated")
+        // Re-init so the counter is read fresh from UserDefaults.
+        return SubscriptionManager()
+    }
+
+    /// A fresh free user (counter == 0) and an exhausted free user
+    /// (counter == limit) must BOTH be denied premium feature access in a
+    /// production build — neither value may unlock clean branded output.
+    func testFreeUsersDoNotGetPremiumFeatureAccess() {
+        defer { UserDefaults.standard.removeObject(forKey: "nexgenspec.trial.inspectionsCreated") }
+
+        let fresh = makeManager(trialUsed: 0)
+        XCTAssertEqual(fresh.freeInspectionsUsed, 0, "Test setup: counter should be 0")
+
+        let exhausted = makeManager(trialUsed: SubscriptionManager.freeInspectionLimit)
+        XCTAssertEqual(exhausted.freeInspectionsUsed, SubscriptionManager.freeInspectionLimit,
+                       "Test setup: counter should be at the free limit")
+
+        XCTAssertFalse(fresh.isPro)
+        XCTAssertFalse(fresh.isAdminAccount)
+        XCTAssertFalse(exhausted.isPro)
+        XCTAssertFalse(exhausted.isAdminAccount)
+
+        if SubscriptionManager.isBetaOrSandboxBuild {
+            // Sandbox/TestFlight host: the beta unlock dominates, so both
+            // report true. The trial-counter regression isn't observable
+            // here — the production branch below is what guards B-0065.
+            XCTAssertTrue(fresh.hasFeatureAccess,
+                          "Sandbox builds always unlock — entitlement gate is bypassed here")
+            XCTAssertTrue(exhausted.hasFeatureAccess,
+                          "Sandbox builds always unlock — entitlement gate is bypassed here")
+        } else {
+            XCTAssertFalse(fresh.hasFeatureAccess,
+                           "Fresh free user must NOT have premium access (B-0065)")
+            XCTAssertFalse(exhausted.hasFeatureAccess,
+                           "Exhausted free user must NOT have premium access (B-0065)")
+        }
+    }
+
+    /// An entitled (isPro) user must always have premium feature access,
+    /// regardless of build environment. `isPro` is seeded through the offline
+    /// grace cache that `SubscriptionManager.init()` restores on launch.
+    func testEntitledUserHasPremiumFeatureAccess() {
+        UserDefaults.standard.set(0, forKey: "nexgenspec.trial.inspectionsCreated")
+        UserDefaults.standard.set(true, forKey: "nexgenspec.entitlement.isPro")
+        UserDefaults.standard.set(Date(), forKey: "nexgenspec.entitlement.lastVerifiedDate")
+        defer {
+            UserDefaults.standard.removeObject(forKey: "nexgenspec.trial.inspectionsCreated")
+            UserDefaults.standard.removeObject(forKey: "nexgenspec.entitlement.isPro")
+            UserDefaults.standard.removeObject(forKey: "nexgenspec.entitlement.lastVerifiedDate")
+        }
+
+        let manager = SubscriptionManager()
+        XCTAssertTrue(manager.isPro,
+                      "Test setup: cached entitlement within grace must restore isPro == true")
+        XCTAssertTrue(manager.hasFeatureAccess,
+                      "Entitled (isPro) user must always have premium feature access")
+    }
+}
+
 // MARK: - End-to-end calendar integration flows
 //
 // These tests exercise the InspectionStore-level orchestration for
@@ -1761,7 +1838,7 @@ final class InspectionZIPExportServiceTests: XCTestCase {
         // Update the version's id-bound jobId reference so loadReportHash finds it.
         version.finalizedAt = version.finalizedAt ?? Date()
 
-        let zipURL = try await InspectionZIPExportService.exportZIP(for: version)
+        let zipURL = try await InspectionZIPExportService.exportZIP(for: version, watermark: false)
         addTeardownBlock {
             try? FileManager.default.removeItem(at: zipURL)
             try? FileManager.default.removeItem(at: FilePaths.inspectionFolder(jobId: jobId))
