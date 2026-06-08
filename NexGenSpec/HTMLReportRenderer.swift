@@ -105,7 +105,7 @@ enum HTMLReportRenderer {
         <title>Inspection Report – \((inspection.clientName).htmlEscaped)</title>
         <style>
         :root { --card-shadow: 0 2px 8px rgba(0,0,0,0.08); --radius: 12px; color-scheme: light; }
-        @page { size: A4 portrait; margin: 24px; }
+        @page { size: letter portrait; margin: 24px; }
         * { box-sizing: border-box; }
         html, body { background: #f4f7fb; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; color: #1a1a1a; line-height: 1.5; overflow-wrap: anywhere; word-wrap: break-word; position: relative; }

@@ -665,6 +665,47 @@ final class HTMLReportRendererTests: XCTestCase {
         XCTAssertFalse(proText.contains("Upgrade to Pro"), "Pro PDF must be clean")
     }
 
+    /// Regression guard for PDF pagination (B-0070): a multi-section report must
+    /// paginate into multiple US-Letter (612x792) pages via UIPrintPageRenderer —
+    /// NOT a single content-tall page like WKWebView.pdf() produced — and the free
+    /// watermark banner must survive the print path. Drives the production low-level path.
+    @MainActor
+    func testReportPaginatesIntoMultipleLetterPages() async throws {
+        InspectorProfile.shared.companyName = "ACME VERIFY"
+        defer { InspectorProfile.shared.companyName = "" }
+        var sections: [InspectionSection] = []
+        for s in 0..<6 {
+            var items: [InspectionItem] = []
+            for i in 0..<3 {
+                items.append(InspectionItem(
+                    templateItemId: "s\(s)i\(i)", title: "Item \(s)-\(i)",
+                    includeInReport: true, status: .inspected, defectSeverity: .major,
+                    location: "Location \(s)-\(i)",
+                    observed: "Observed condition \(s)-\(i): wear and deterioration noted across the component, requiring attention from a qualified professional during the inspection walkthrough.",
+                    implication: "If left unaddressed this may lead to water intrusion, structural concerns, or safety hazards over time.",
+                    recommendation: "Recommend evaluation and repair by a licensed contractor prior to close of the transaction."))
+            }
+            sections.append(InspectionSection(title: "Section \(s)", items: items))
+        }
+        let inspection = Inspection(
+            clientName: "Pagination Client", clientEmail: "v@example.com", clientPhone: "",
+            propertyAddress: "1 Pagination Way", inspectionDate: Date(),
+            inspectorName: "PG Inspector", sections: sections)
+        let version = InspectionVersion(versionNumber: 1, status: .draft, locked: false, inspection: inspection)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ngs-pg-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let html = HTMLReportRenderer.renderHTML(for: version, imageFolderURL: dir.appendingPathComponent("images"), videosFolderURL: nil, watermark: true)
+        let htmlURL = dir.appendingPathComponent("index.html")
+        try Data(html.utf8).write(to: htmlURL)
+        let pdfURL = try await PDFReportRenderer.generatePDF(fromHTMLFile: htmlURL, baseURL: dir, clientName: "Pagination")
+        let doc = try XCTUnwrap(PDFDocument(url: pdfURL))
+        XCTAssertGreaterThan(doc.pageCount, 1, "multi-section report must paginate into multiple pages, not one tall page")
+        let bounds = try XCTUnwrap(doc.page(at: 0)).bounds(for: .mediaBox)
+        XCTAssertEqual(bounds.width, 612, accuracy: 1, "pages should be US Letter width")
+        XCTAssertEqual(bounds.height, 792, accuracy: 1, "pages should be US Letter height")
+        XCTAssertTrue((doc.string ?? "").contains("Upgrade to Pro"), "free watermark banner must survive the print path")
+    }
+
     func testReportHTMLUsesPrintSafeStylesAndEagerImageLoading() throws {
         let jobId = UUID()
         try FilePaths.ensureAppStructure(jobId: jobId)

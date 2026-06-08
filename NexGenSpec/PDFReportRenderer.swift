@@ -3,8 +3,11 @@
 //  NexGenSpec
 //
 //  Single PDF generation path.
-//  HTML is the source of truth; PDF is derived from HTML via WKWebView.pdf(configuration:).
-//  Never uses UIPrintPageRenderer / UIMarkupTextPrintFormatter (OOM on photo-heavy reports).
+//  HTML is the source of truth. The PDF is paginated from a loaded WKWebView via
+//  UIPrintPageRenderer + viewPrintFormatter (honors @page / page-break CSS → real
+//  multi-page US-Letter output). We deliberately do NOT use UIMarkupTextPrintFormatter
+//  (it re-parses the HTML and OOMs on photo-heavy reports) and no longer use
+//  WKWebView.pdf() (it snapshots everything as one content-tall page, ignoring pagination).
 //
 
 import Foundation
@@ -77,7 +80,8 @@ public enum PDFReportRenderer {
     }
 
     /// Low-level: render an existing HTML file (with sibling asset folder) to a PDF.
-    /// Memory-safe path using WKWebView.pdf(configuration:) (iOS 14+).
+    /// Paginates via UIPrintPageRenderer + the web view's print formatter — real
+    /// multi-page US-Letter output, rendered page-by-page to bound peak memory.
     /// `clientName` is used for the output filename; pass nil to fall back to a UUID-based name.
     @MainActor
     public static func generatePDF(fromHTMLFile htmlFileURL: URL, baseURL: URL, clientName: String? = nil) async throws -> URL {
@@ -125,12 +129,42 @@ public enum PDFReportRenderer {
         )
         webView.layoutIfNeeded()
 
-        // Produce the PDF using Apple's supported API. The HTML's @page CSS drives pagination.
+        // Paginate via the print path. WKWebView.pdf() snapshots the whole document as
+        // ONE content-tall page — it ignores @page / page-break CSS — which prints
+        // unusably. UIPrintPageRenderer driven by the web view's OWN print formatter
+        // honors the page breaks and emits real, multi-page US-Letter output. We render
+        // page-by-page (peak memory ≈ one page, not the whole doc) behind the pre-flight
+        // memory guard above. Use viewPrintFormatter (reuses the already-loaded WKWebView)
+        // — NOT UIMarkupTextPrintFormatter, which re-parses the HTML and is the OOM source.
         let pdfData: Data
         do {
-            pdfData = try await webView.pdf(configuration: WKPDFConfiguration())
+            let renderer = UIPrintPageRenderer()
+            renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
+            // US Letter (612x792pt) — US/CA market standard (D-0114). 24pt margins.
+            let pageRect = CGRect(x: 0, y: 0, width: 612, height: 792)
+            let margin: CGFloat = 24
+            renderer.setValue(NSValue(cgRect: pageRect), forKey: "paperRect")
+            renderer.setValue(NSValue(cgRect: pageRect.insetBy(dx: margin, dy: margin)), forKey: "printableRect")
+
+            let mutableData = NSMutableData()
+            UIGraphicsBeginPDFContextToData(mutableData, pageRect, nil)
+            let pageCount = max(renderer.numberOfPages, 1)
+            for page in 0..<pageCount {
+                UIGraphicsBeginPDFPage()
+                renderer.drawPage(at: page, in: pageRect)
+            }
+            UIGraphicsEndPDFContext()
+            guard mutableData.length > 0 else {
+                throw PDFRenderError.pdfCreationFailed(
+                    NSError(domain: "PDFReportRenderer", code: -10,
+                            userInfo: [NSLocalizedDescriptionKey: "Print renderer produced no pages"]))
+            }
+            pdfData = mutableData as Data
+        } catch let e as PDFRenderError {
+            Diagnostics.logError(context: "UIPrintPageRenderer pagination failed", error: e)
+            throw e
         } catch {
-            Diagnostics.logError(context: "WKWebView.pdf failed", error: error)
+            Diagnostics.logError(context: "UIPrintPageRenderer pagination failed", error: error)
             throw PDFRenderError.pdfCreationFailed(error)
         }
 
