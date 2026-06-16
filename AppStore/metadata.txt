@@ -28,7 +28,7 @@ home inspection,property report,inspector,defect,PDF,real estate,building,checkl
 ───────────────────────────────────────────────────────────────
 PROMOTIONAL TEXT (170 chars max — can be updated without new build)
 ───────────────────────────────────────────────────────────────
-Professional home inspections made simple. Capture defects, annotate photos, generate PDF reports with your company logo, and send invoices — all from your iPad or iPhone.
+Professional home inspections made simple. Capture defects, annotate photos, generate PDF reports with your company logo, and send invoices, all from your iPad or iPhone.
 
 ───────────────────────────────────────────────────────────────
 DESCRIPTION (4000 chars max)
