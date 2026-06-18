@@ -688,6 +688,15 @@ struct AppSettingsView: View {
             // interrupted background wipe still retries on next launch (T-01412).
             UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
         }
+        // Wipe the device-local inspector profile (name, company, license,
+        // phone, email + logo) as part of account deletion. Apple 5.1.1(v)
+        // requires deletion to remove the user's personal data — and this PII
+        // is auto-CC'd on invoices and printed on client reports, so it must
+        // not survive into the next session on a shared device. The disk wipe
+        // above clears inspections; the profile lives in UserDefaults and is
+        // otherwise only cleared by AuthManager.logout(), a path the delete
+        // flow never traverses (B-0073).
+        InspectorProfile.shared.clear()
         // finalizeDeletion releases the auth-state hold set by deleteAccount()
         // and flips isAuthenticated to false, triggering RootView to swap in
         // LoginView.
