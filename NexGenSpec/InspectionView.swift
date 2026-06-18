@@ -210,7 +210,9 @@ struct InspectionView: View {
             ShortcutsHelpView()
         }
         .fullScreenCover(isPresented: $showReportPreview) {
-            ReportPreviewView(version: draft)
+            // Watermark the preview for free users so it mirrors the export
+            // they'd produce and can't serve as a clean paywall bypass (B-0074).
+            ReportPreviewView(version: draft, watermark: !subscriptions.hasFeatureAccess)
         }
         .confirmationDialog(
             "Save a backup ZIP to Files?",
