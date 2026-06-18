@@ -140,12 +140,13 @@ public final class PhotoLoadService: @unchecked Sendable {
         }
     }
 
-    /// Composites an AnnotationOverlay onto a base image (mirrors AnnotationBakeService logic).
+    /// Composites an AnnotationOverlay onto a base image for the thumbnail.
+    /// Uses AnnotationBakeService's shared letterbox-aware transform so the
+    /// thumbnail bakes identically to the exported PDF — previously this
+    /// duplicated the buggy separate-scaleX/scaleY math that squashed circles
+    /// into ellipses and offset every mark (B-0071).
     private static func compositeOverlay(_ overlay: AnnotationOverlay, onto image: UIImage) -> UIImage {
-        let cw = overlay.canvasWidth ?? Double(image.size.width)
-        let ch = overlay.canvasHeight ?? Double(image.size.height)
-        let scaleX = cw > 0 ? image.size.width / cw : 1
-        let scaleY = ch > 0 ? image.size.height / ch : 1
+        let t = AnnotationBakeService.overlayTransform(overlay: overlay, imageSize: image.size)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
@@ -154,30 +155,27 @@ public final class PhotoLoadService: @unchecked Sendable {
             let cg = context.cgContext
             if let data = overlay.drawingData, let drawing = try? PKDrawing(data: data) {
                 cg.saveGState()
-                cg.scaleBy(x: scaleX, y: scaleY)
+                cg.scaleBy(x: t.scale, y: t.scale)
+                cg.translateBy(x: -t.offsetX, y: -t.offsetY)
                 drawing.image(from: drawing.bounds, scale: 1).draw(at: drawing.bounds.origin)
                 cg.restoreGState()
             }
             for arrow in overlay.arrows {
                 let color = Self.annotationColor(name: arrow.colorName)
                 cg.setStrokeColor(color.cgColor)
-                cg.setLineWidth(3 * max(scaleX, scaleY))
+                cg.setLineWidth(t.lineWidth)
                 cg.beginPath()
-                cg.move(to: CGPoint(x: arrow.startX * scaleX, y: arrow.startY * scaleY))
-                cg.addLine(to: CGPoint(x: arrow.endX * scaleX, y: arrow.endY * scaleY))
+                cg.move(to: t.point(arrow.startX, arrow.startY))
+                cg.addLine(to: t.point(arrow.endX, arrow.endY))
                 cg.strokePath()
             }
             for circle in overlay.circles {
                 let color = Self.annotationColor(name: circle.colorName)
                 cg.setStrokeColor(color.cgColor)
-                cg.setLineWidth(3 * max(scaleX, scaleY))
-                let r = CGRect(
-                    x: (circle.centerX - circle.radius) * scaleX,
-                    y: (circle.centerY - circle.radius) * scaleY,
-                    width: circle.radius * 2 * scaleX,
-                    height: circle.radius * 2 * scaleY
-                )
-                cg.strokeEllipse(in: r)
+                cg.setLineWidth(t.lineWidth)
+                let c = t.point(circle.centerX, circle.centerY)
+                let r = CGFloat(circle.radius) * t.scale
+                cg.strokeEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
             }
         }
     }
