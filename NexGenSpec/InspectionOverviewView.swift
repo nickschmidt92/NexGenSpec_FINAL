@@ -240,14 +240,22 @@ struct InspectionOverviewView: View {
                             Text("Finalize and sign the inspection before exporting.")
                         }
                         Button {
+                            // Gate the plain-text summary behind Pro, mirroring the
+                            // PDF export below. Without this a free user could export
+                            // the full report content as clean, un-watermarked text
+                            // and bypass the paywall entirely (B-0076).
+                            guard subscriptions.hasFeatureAccess else {
+                                showPaywall = true
+                                return
+                            }
                             if let url = ReportExporter.exportPlainText(for: version) {
                                 shareContent = ShareContent(items: [url])
                             } else {
                                 showTextExportError = true
                             }
-                        } label: { Label("Quick summary (text)", systemImage: "doc.text") }
+                        } label: { Label(subscriptions.hasFeatureAccess ? "Quick summary (text)" : "Quick summary (text) – Pro", systemImage: "doc.text") }
                             .accessibilityLabel("Quick summary text")
-                            .accessibilityHint("Share plain text summary")
+                            .accessibilityHint(subscriptions.hasFeatureAccess ? "Share plain text summary" : "Upgrade to Pro to export the text summary")
                             .disabled(isEditable)
                         Button {
                             Task {
