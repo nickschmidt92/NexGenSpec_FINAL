@@ -130,6 +130,13 @@ public final class ReportExportService: ObservableObject {
             self.errorMessage = nil
         } else if case .failure(let error)? = result {
             self.errorMessage = error.localizedDescription
+        } else if case .success(_, nil)? = result {
+            // HTML rendered but the PDF step produced no file. Callers only act
+            // on .success with a non-nil PDF (e.g. InvoiceAndSendView guards on
+            // `.success(_, let pdf?)`), so without an errorMessage here the
+            // "Send Invoice" / "Export PDF" tap silently no-ops. Surface it as
+            // an error so the UI shows an alert instead of dead-tapping (B-0072).
+            self.errorMessage = "The report PDF couldn't be generated. Please try again."
         }
     }
 
