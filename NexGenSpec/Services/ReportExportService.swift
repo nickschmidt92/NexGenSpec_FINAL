@@ -157,13 +157,36 @@ public final class ReportExportService: ObservableObject {
         let tmp = FileManager.default.temporaryDirectory
         guard let files = try? FileManager.default.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.contentModificationDateKey], options: .skipsHiddenFiles) else { return }
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
-        let prefixes = ["report-", "pdf-", "InspectionReport-", "InspectionReport_"]
-        for url in files where prefixes.contains(where: { url.lastPathComponent.hasPrefix($0) }) {
+        for url in files where tempExportPrefixes.contains(where: { url.lastPathComponent.hasPrefix($0) }) {
             let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             let modified = vals?.contentModificationDate ?? .distantPast
             if modified < cutoff {
                 try? FileManager.default.removeItem(at: url)
             }
+        }
+    }
+
+    /// Every temp-directory prefix under which a report/PDF/ZIP staging artifact
+    /// (all carrying client PII) is written: `report-*` (ReportExportService),
+    /// `pdf-*` + `InspectionReport_*.pdf` (PDFReportRenderer), `zip-staging-*`
+    /// (InspectionZIPExportService), `InspectionReport-*.txt` (Overview share).
+    nonisolated static let tempExportPrefixes = ["report-", "pdf-", "zip-staging-", "InspectionReport-", "InspectionReport_"]
+
+    /// Removes ALL temp-directory report/PDF/ZIP staging artifacts regardless of
+    /// age. Called from the Account-Deletion wipe (`InspectionStore.wipeAppRoot`):
+    /// these client-PII files live in the temp dir, OUTSIDE `FilePaths.appRoot`,
+    /// so the per-UID disk wipe never reaches them. iOS only purges the temp dir
+    /// "from time to time", so a freshly-exported report could otherwise outlive
+    /// Account Deletion — residual PII under Apple Guideline 5.1.1(v).
+    nonisolated static func removeAllTempExports() {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: fm.temporaryDirectory,
+            includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles
+        ) else { return }
+        for url in files where tempExportPrefixes.contains(where: { url.lastPathComponent.hasPrefix($0) }) {
+            try? fm.removeItem(at: url)
         }
     }
 }

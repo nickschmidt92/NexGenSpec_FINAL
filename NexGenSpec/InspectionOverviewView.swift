@@ -23,9 +23,6 @@ struct InspectionOverviewView: View {
     /// pane router.
     var onShowSummary: ((Severity) -> Void)? = nil
     @State private var shareContent: ShareContent?
-    // Legacy — kept so other code paths still compile; drive presentation via shareContent.
-    @State private var showShareSheet = false
-    @State private var shareItems: [Any] = []
     @State private var showLiDARCapture = false
     /// Saved LiDAR scans for this inspection, loaded from disk. Refreshed on
     /// appear and after the capture sheet closes so scans show up on the

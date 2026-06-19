@@ -488,6 +488,12 @@ public final class InspectionStore: ObservableObject {
         // permanent deletion receipt, designed to outlive the wipe.
         InspectionZIPExportService.removeAllExports()
         FilesAppPublisher.removeAllPublished()
+        // Report/PDF/ZIP staging artifacts written to the temp directory (report-*,
+        // pdf-*, zip-staging-*, InspectionReport-*) also live OUTSIDE appRoot and
+        // carry full client PII. iOS purges the temp dir only "from time to time",
+        // so a freshly-exported report could survive Account Deletion without this
+        // sweep — residual PII under Apple 5.1.1(v) (audit finding).
+        ReportExportService.removeAllTempExports()
     }
 
     /// Flushes any pending debounced save and writes to disk immediately. Use for ⌘S.
@@ -549,22 +555,29 @@ public final class InspectionStore: ObservableObject {
 
 public extension InspectionStore {
 
-    func createNewInspection(clientName: String, clientEmail: String, clientPhone: String, propertyAddress: String, inspectorName: String, inspectorConfirmed: Bool, inspectionDate: Date = Date(), customTemplateId: String? = nil) {
+    /// Creates a new draft inspection. Returns true only when an inspection was
+    /// actually created and persisted; false on any early-out (template load
+    /// failure, unconfirmed inspector, directory-creation failure, or existing
+    /// inspections temporarily unreadable). Callers gate side effects on the
+    /// result — notably the free-trial counter, which must NOT advance when
+    /// creation silently fails (audit finding).
+    @discardableResult
+    func createNewInspection(clientName: String, clientEmail: String, clientPhone: String, propertyAddress: String, inspectorName: String, inspectorConfirmed: Bool, inspectionDate: Date = Date(), customTemplateId: String? = nil) -> Bool {
         let template: HeavyTemplate
         if let customId = customTemplateId,
            let custom = CustomTemplateStore.shared.template(for: customId) {
             template = CustomTemplateStore.shared.toHeavyTemplate(custom)
         } else {
-            guard let builtin = heavyTemplate else { return }
+            guard let builtin = heavyTemplate else { return false }
             template = builtin
         }
-        guard inspectorConfirmed else { return }
+        guard inspectorConfirmed else { return false }
 
         let jobId = UUID()
         do {
             try FilePaths.ensureAppStructure(jobId: jobId)
         } catch {
-            return
+            return false
         }
 
         let inspection = Inspection(
@@ -626,13 +639,14 @@ public extension InspectionStore {
                 // Existing inspections are present but temporarily unreadable
                 // (e.g. device locked). Abort rather than risk orphaning them.
                 saveError = "Can't create a new inspection while existing inspections are temporarily unavailable. Reopen the app after unlocking the device."
-                return
+                return false
             }
         }
 
         try? writeVersionToFile(newVersion)
         metadataList.insert(VersionMetadata(from: newVersion), at: 0)
         save()
+        return true
     }
 
     /// Finalizes the given version using the strict state machine. Call from UI; do not mutate version in the view.
