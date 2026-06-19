@@ -469,8 +469,15 @@ public final class AuthManager: ObservableObject {
         // swaps in LoginView, and the share sheet sees its host disappear
         // in the same frame it tries to present.
         isDeletingAccount = true
+        let uid = user.uid
         do {
             try await user.delete()
+            // Remove the device-local fallback recovery email (PII) from the
+            // Keychain. It's keyed by UID and was otherwise never cleared, so it
+            // survived Account Deletion on the device — residual PII under Apple
+            // 5.1.1(v). Only on deletion, not logout (logout can re-sign-in to
+            // the same UID, which should keep its recovery email).
+            Self.keychainDeleteFallbackEmail(forUID: uid)
             // Intentionally NOT calling applyUser(nil) here — finalizeDeletion()
             // is called from the share-sheet's onDismiss to release the gate.
         } catch {

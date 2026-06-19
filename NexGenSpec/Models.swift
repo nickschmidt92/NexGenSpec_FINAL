@@ -137,6 +137,35 @@ public struct InspectionItem: Identifiable, Codable, Equatable {
     }
 
     public var isDefect: Bool { status == .inspected && defectSeverity != nil }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, templateItemId, title, includeInReport, status, defectSeverity
+        case location, observed, implication, recommendation, inspectorComments
+        case contractorTag, photos
+    }
+
+    // Defensive decoder so adding a new stored property in a future build does
+    // not fail to decode inspections saved by older builds — the synthesized
+    // decoder throws on any missing key, and a thrown item-decode would make the
+    // whole inspection (a legal record) fail to load. Mirrors the hand-written
+    // decoders on Inspection / InspectionPhoto / InspectionSignature; each field
+    // falls back to its init default. Encoding stays synthesized.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        templateItemId = try c.decodeIfPresent(String.self, forKey: .templateItemId) ?? ""
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        includeInReport = try c.decodeIfPresent(Bool.self, forKey: .includeInReport) ?? false
+        status = try c.decodeIfPresent(ItemStatus.self, forKey: .status) ?? .notInspected
+        defectSeverity = try c.decodeIfPresent(Severity.self, forKey: .defectSeverity)
+        location = try c.decodeIfPresent(String.self, forKey: .location) ?? ""
+        observed = try c.decodeIfPresent(String.self, forKey: .observed) ?? ""
+        implication = try c.decodeIfPresent(String.self, forKey: .implication) ?? ""
+        recommendation = try c.decodeIfPresent(String.self, forKey: .recommendation) ?? ""
+        inspectorComments = try c.decodeIfPresent(String.self, forKey: .inspectorComments) ?? ""
+        contractorTag = try c.decodeIfPresent(String.self, forKey: .contractorTag) ?? ""
+        photos = try c.decodeIfPresent([InspectionPhoto].self, forKey: .photos) ?? []
+    }
 }
 
 // MARK: - Section
