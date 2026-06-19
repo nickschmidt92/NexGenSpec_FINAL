@@ -28,6 +28,13 @@ struct ItemDetailView: View {
     // AI defect detection state
     @State private var suggestedDefectTags: [String] = []
     @State private var detectingPhotoId: UUID?
+    // The photo the current suggestions belong to, so an accepted tag lands on
+    // the analyzed photo rather than whatever happens to be last in the array.
+    @State private var suggestedDefectPhotoId: UUID?
+    // Number of photos that failed to import in the last library pick, surfaced
+    // so a partial import isn't silently reported as a full "N/N" success.
+    @State private var importFailureCount = 0
+    @State private var showImportError = false
 
     private func bind<T>(_ keyPath: WritableKeyPath<InspectionItem, T>) -> Binding<T> {
         Binding(
@@ -278,6 +285,7 @@ struct ItemDetailView: View {
                                     importingCount = newItems.count
                                     importedSoFar = 0
                                     Task { @MainActor in
+                                        var failures = 0
                                         for pickerItem in newItems {
                                             if let data = try? await pickerItem.loadTransferable(type: Data.self),
                                                let saved = await saveImportedPhoto(from: data) {
@@ -287,12 +295,21 @@ struct ItemDetailView: View {
                                                 item = copy
                                                 PhotoLoadService.shared.generateThumbnailIfNeeded(jobId: jobId, fileName: saved.fileName)
                                                 runDefectDetection(image: saved.image, photoId: photo.id)
+                                            } else {
+                                                // Decode/transfer/write failed — count it so the
+                                                // user is told, instead of the progress hitting
+                                                // "N/N" as if every photo imported (silent drop).
+                                                failures += 1
                                             }
                                             importedSoFar += 1
                                         }
                                         selectedImages = []
                                         importingCount = 0
                                         importedSoFar = 0
+                                        if failures > 0 {
+                                            importFailureCount = failures
+                                            showImportError = true
+                                        }
                                     }
                                 }
                                 if importingCount > 0 {
@@ -352,6 +369,7 @@ struct ItemDetailView: View {
                         }
                         Button(role: .cancel) {
                             suggestedDefectTags = []
+                            suggestedDefectPhotoId = nil
                         } label: {
                             Text("Dismiss All")
                                 .font(.caption)
@@ -419,6 +437,11 @@ struct ItemDetailView: View {
             }
         } message: { _ in
             Text("Are you sure you want to delete this photo? This action cannot be undone.")
+        }
+        .alert("Some Photos Didn't Import", isPresented: $showImportError) {
+            Button("OK") { showImportError = false }
+        } message: {
+            Text("\(importFailureCount) photo\(importFailureCount == 1 ? "" : "s") couldn't be imported — they may be in an unsupported format or corrupted. The rest were added.")
         }
         .sheet(isPresented: $showCamera, onDismiss: {
             if let photo = pendingAnnotationPhoto {
@@ -536,23 +559,31 @@ struct ItemDetailView: View {
                     let newTags = tags.filter { !existingTags.contains($0) }
                     if !newTags.isEmpty {
                         suggestedDefectTags = newTags
+                        suggestedDefectPhotoId = photoId
                     }
                 }
             }
         }
     }
 
-    /// Accept a suggested defect tag and attach it to the most recently added photo.
+    /// Accept a suggested defect tag and attach it to the photo the suggestions
+    /// were generated from (not whatever is currently last in the array — the
+    /// analyzed photo isn't necessarily the most recent one).
     private func acceptDefectTag(_ tag: String) {
-        guard let lastPhoto = item.photos.last else { return }
+        guard let targetId = suggestedDefectPhotoId,
+              let idx = item.photos.firstIndex(where: { $0.id == targetId }) else {
+            // Target photo is gone (e.g. deleted) — drop the stale suggestions.
+            suggestedDefectTags.removeAll { $0 == tag }
+            if suggestedDefectTags.isEmpty { suggestedDefectPhotoId = nil }
+            return
+        }
         var copy = item
-        if let idx = copy.photos.firstIndex(where: { $0.id == lastPhoto.id }) {
-            if !copy.photos[idx].defectTags.contains(tag) {
-                copy.photos[idx].defectTags.append(tag)
-            }
+        if !copy.photos[idx].defectTags.contains(tag) {
+            copy.photos[idx].defectTags.append(tag)
         }
         item = copy
         suggestedDefectTags.removeAll { $0 == tag }
+        if suggestedDefectTags.isEmpty { suggestedDefectPhotoId = nil }
     }
 
     /// Remove a defect tag from a specific photo.
