@@ -403,6 +403,12 @@ struct InspectionView: View {
     // MARK: - Timer
 
     private func startTimer() {
+        // A finalized/locked inspection is done — never start or resume the
+        // timer. onAppear (reopening the report) and app-foreground both call
+        // this; without the guard, reopening a finalized inspection resumed the
+        // clock and pauseTimer() then wrote the inflated duration back onto the
+        // finalized record (which prints on the report).
+        guard draft.isEditable else { return }
         if draft.inspection.timerStartDate == nil {
             draft.inspection.timerStartDate = Date()
         }
@@ -595,9 +601,15 @@ struct InspectionView: View {
                 selectedPane = .section(sectionID)
             }
         case .finalize:
-            FinalizeView(version: $draft) { v in
-                store.finalize(version: v)
-                if let updatedVersion = store.loadFullVersion(id: v.id) {
+            FinalizeView(version: $draft) { _ in
+                // Stop the timer and fold the active session into the recorded
+                // duration BEFORE locking, so the report shows the real elapsed
+                // time and the finalized inspection never keeps counting. v is
+                // just the bound draft echoed back, so finalize `draft` (now
+                // carrying the folded time), not the pre-pause copy.
+                pauseTimer()
+                store.finalize(version: draft)
+                if let updatedVersion = store.loadFullVersion(id: draft.id) {
                     draft = updatedVersion
                     selectedPane = .invoice
                     if updatedVersion.state.isFinalized {
