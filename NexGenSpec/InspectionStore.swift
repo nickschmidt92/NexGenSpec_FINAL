@@ -670,20 +670,28 @@ public extension InspectionStore {
                 return
             }
             try? writeVersionToFile(updated)
-            // Stage the metadata update instead of publishing it now. Assigning
-            // `metadataList[idx]` here would re-render the Dashboard/Calendar/
-            // Archived `ForEach` behind the nav stack and tear the pushed
-            // InspectionView off the stack, popping the user back to the list
-            // before the finalize→Invoice redirect can run (the reported bug).
-            // The finalized version JSON + integrity snapshot are already on
-            // disk (above), and `save()` → `saveMetadataIndex()` folds this
-            // staged entry into the on-disk index, so disk stays correct. The
-            // published list is reconciled by `flushPendingMetadata()` when the
-            // user next lands on a list screen — never while the inspection is
-            // on screen. `idx` is intentionally unused now (kept for the guard).
+            // Persist the finalize WITHOUT any @Published mutation, because the
+            // Dashboard/Calendar/Archived screens observe the WHOLE store via
+            // @EnvironmentObject — so ANY published change (not just metadataList:
+            // also `isSaving` / `lastSavedAt` toggled by `save()`) re-renders their
+            // ForEach and tears the pushed eager NavigationLink off the nav stack,
+            // popping the user back to the list before the finalize→Invoice
+            // redirect can run (the reported bug). This mirrors the autosave path,
+            // which deliberately writes file-only with no publish and therefore
+            // never pops:
+            //   1. Stage the finalized metadata in the non-published
+            //      `pendingFinalizedMetadata` (assigning `metadataList[idx]` here
+            //      would publish → pop). `idx` is kept only for the guard above.
+            //   2. Write the on-disk index directly via `saveMetadataIndex()`
+            //      (which folds the staged entry in) instead of `save()` — same
+            //      disk result, but WITHOUT save()'s `isSaving`/`lastSavedAt`
+            //      @Published churn.
+            // The published `metadataList` is reconciled by `flushPendingMetadata()`
+            // when the user next lands on a list screen — never while the
+            // inspection is on screen.
             _ = idx
             pendingFinalizedMetadata[updated.id] = VersionMetadata(from: updated)
-            save()
+            try? saveMetadataIndex()
         case .failure:
             break
         }
