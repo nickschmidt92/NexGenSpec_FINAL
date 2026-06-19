@@ -451,8 +451,8 @@ enum HTMLReportRenderer {
         <thead>
         <tr style="background:#0066cc;color:#fff;text-align:left;">
         <th style="padding:10px 8px;border-radius:8px 0 0 0;width:18%;">Room / Section</th>
-        <th style="padding:10px 8px;width:52%;">Defect Description</th>
-        <th style="padding:10px 8px;width:12%;">Severity</th>
+        <th style="padding:10px 8px;width:48%;">Defect Description</th>
+        <th style="padding:10px 8px;width:16%;white-space:nowrap;">Severity</th>
         <th style="padding:10px 8px;border-radius:0 8px 0 0;width:18%;">Photo</th>
         </tr>
         </thead>
@@ -496,7 +496,7 @@ enum HTMLReportRenderer {
             <tr style="background:\(bgColor);border-bottom:1px solid #eee;\(leftBorder)">
             <td style="padding:10px 8px;vertical-align:top;font-weight:600;">\((row.section).htmlEscaped)</td>
             <td style="padding:10px 8px;vertical-align:top;">\(description)</td>
-            <td style="padding:10px 8px;vertical-align:top;"><span style="display:inline-block;padding:4px 10px;border-radius:6px;color:#fff;background:\(sevColor);font-weight:700;font-size:\(isHighPriority ? "0.9rem" : "0.85rem");">\(row.severity.rawValue)</span></td>
+            <td style="padding:10px 8px;vertical-align:top;white-space:nowrap;"><span style="display:inline-block;padding:4px 10px;border-radius:6px;color:#fff;background:\(sevColor);font-weight:700;font-size:\(isHighPriority ? "0.9rem" : "0.85rem");white-space:nowrap;">\(row.severity.rawValue)</span></td>
             <td style="padding:10px 8px;vertical-align:top;text-align:center;">\(row.photoRef)</td>
             </tr>
             """
