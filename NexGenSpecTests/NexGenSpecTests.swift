@@ -479,6 +479,30 @@ final class InspectionFlagsClearAllTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: "deletion-pending-wipe"),
                       "clearAll must not clear the deletion-pending-wipe retry flag")
     }
+
+    /// 5.1.1(v): the inspector-profile PII keys (name/company/license/phone/email)
+    /// must be swept by clearAll() so the force-quit account-deletion recovery
+    /// wipe (NexGenSpecApp recovery branch → performDiskWipe → clearAll) is
+    /// self-contained and can't leave a deleted user's identity behind for the
+    /// next inspector. (B-0086)
+    func testClearAllSweepsInspectorProfilePII() {
+        let defaults = UserDefaults.standard
+        let profileKeys = [
+            "nexgenspec.profile.inspectorName",
+            "nexgenspec.profile.companyName",
+            "nexgenspec.profile.licenseNumber",
+            "nexgenspec.profile.phone",
+            "nexgenspec.profile.email",
+        ]
+        profileKeys.forEach { defaults.set("prev-user-PII", forKey: $0) }
+
+        InspectionFlags.clearAll()
+
+        for key in profileKeys {
+            XCTAssertNil(defaults.object(forKey: key),
+                         "clearAll must sweep inspector-profile PII key \(key) (5.1.1(v))")
+        }
+    }
 }
 
 /// T-01439 — report-facing defect counts must exclude defects not flagged

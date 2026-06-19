@@ -55,6 +55,17 @@ struct NexGenSpecApp: App {
                         // flag is cleared only AFTER the disk wipe completes, so an
                         // interrupted wipe still retries on the next launch (T-01412).
                         store.beginWipe()
+                        // Mirror finishLocalWipeAndDismiss() (AppSettingsView): the
+                        // normal delete path clears the inspector profile, but if the
+                        // app was force-quit during the receipt share sheet, only this
+                        // recovery branch runs and previously OMITTED the profile wipe.
+                        // Without it, the deleted user's name/license/email/phone
+                        // survive in UserDefaults (nexgenspec.profile.*) and the live
+                        // singleton — auto-filled on inspections, CC'd on invoices, and
+                        // printed on client reports for the NEXT inspector. 5.1.1(v)
+                        // residual-PII gap. clear() is @MainActor (we're in onAppear)
+                        // and both wipes the in-memory singleton and persists empties.
+                        InspectorProfile.shared.clear()
                         Task {
                             await store.performDiskWipe()
                             UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
