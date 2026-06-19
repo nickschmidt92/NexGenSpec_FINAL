@@ -30,6 +30,17 @@ struct InspectionView: View {
     @State private var selectedPane: InspectionPane = .overview
     @State private var showShortcutsHelp = false
     @State private var showReportPreview = false
+    /// Drives the post-finalize Invoice & Send presentation. Shown as a
+    /// fullScreenCover so the redirect lands reliably on BOTH iPhone (whose
+    /// sidebar uses push navigation and ignores `selectedPane`) and iPad
+    /// (split view). The store no longer pops this view on finalize (the
+    /// metadata publish is deferred — see InspectionStore.finalize), so the
+    /// cover, presented by this still-alive view, survives the finalize.
+    @State private var showInvoiceCover = false
+    /// One-shot: after finalize we defer the ZIP-backup prompt and the App
+    /// Store review request until the Invoice cover is dismissed, so they don't
+    /// collide with presenting the cover (only one modal can present at a time).
+    @State private var pendingPostInvoicePrompts = false
 
     // T-01213: Auto-export ZIP backup prompt that fires once a version is
     // finalized. The bundle lands in Documents/NexGenSpecExports/ and is
@@ -213,6 +224,33 @@ struct InspectionView: View {
             // Watermark the preview for free users so it mirrors the export
             // they'd produce and can't serve as a clean paywall bypass (B-0074).
             ReportPreviewView(version: draft, watermark: !subscriptions.hasFeatureAccess)
+        }
+        // Post-finalize Invoice & Send. Presented as a cover (not a pushed pane)
+        // so the redirect is reliable on iPhone push-nav AND iPad split-view, and
+        // so InvoiceAndSendView's mail/share/export sheets present from a clean
+        // modal context. Environment objects are injected explicitly because a
+        // cover does not always inherit the presenter's environment across the
+        // modal boundary. On dismiss, fire the one-shot ZIP-backup prompt and the
+        // App Store review request that we deferred to avoid a present-collision.
+        .fullScreenCover(isPresented: $showInvoiceCover, onDismiss: {
+            if pendingPostInvoicePrompts {
+                pendingPostInvoicePrompts = false
+                showExportZIPPrompt = true
+                // Ask for an App Store review at the 2nd successful finalization
+                // (one-shot, production-only).
+                ReviewPromptService.recordFinalizationAndMaybeRequestReview()
+            }
+        }) {
+            NavigationStack {
+                InvoiceAndSendView(version: draft)
+                    .environmentObject(store)
+                    .environmentObject(subscriptions)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showInvoiceCover = false }
+                        }
+                    }
+            }
         }
         .confirmationDialog(
             "Save a backup ZIP to Files?",
@@ -611,12 +649,19 @@ struct InspectionView: View {
                 store.finalize(version: draft)
                 if let updatedVersion = store.loadFullVersion(id: draft.id) {
                     draft = updatedVersion
-                    selectedPane = .invoice
+                    // Only advance to Invoice & Send if finalize actually locked
+                    // the version. If it failed (e.g. integrity snapshot couldn't
+                    // be written/verified — store surfaces saveError), the version
+                    // is still a draft; don't present the Invoice flow over it.
                     if updatedVersion.state.isFinalized {
-                        showExportZIPPrompt = true
-                        // Ask for an App Store review at the 2nd successful
-                        // finalization (one-shot, production-only).
-                        ReviewPromptService.recordFinalizationAndMaybeRequestReview()
+                        // Drive the redirect via a fullScreenCover so it works on
+                        // iPhone (push nav, no selectedPane) AND iPad. The store
+                        // deferred its metadata publish, so THIS view is still on
+                        // the stack to present from. Keep selectedPane in sync for
+                        // the iPad split view behind the cover.
+                        selectedPane = .invoice
+                        pendingPostInvoicePrompts = true
+                        showInvoiceCover = true
                     }
                 }
             }
