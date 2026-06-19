@@ -78,7 +78,13 @@ public enum InspectionFlags {
     /// Delete Account.
     public static func clearAll() {
         let defaults = UserDefaults.standard
-        let prefixes = ["invoice.", "inspection.archivedAt.", "ngs.fallbackEmail.", "NexGenSpec.calendar."]
+        // `nexgenspec.profile.` is the inspector's own identity (name / company /
+        // license / phone / email) — auto-filled on inspections, CC'd on invoices,
+        // printed on client reports. The normal delete path clears it via
+        // InspectorProfile.clear(), but the force-quit recovery wipe doesn't, so
+        // sweeping the prefix here makes every disk-wipe path self-contained and
+        // closes the residual-PII gap regardless of which path runs (5.1.1(v)).
+        let prefixes = ["invoice.", "inspection.archivedAt.", "ngs.fallbackEmail.", "NexGenSpec.calendar.", "nexgenspec.profile."]
         for key in defaults.dictionaryRepresentation().keys
         where prefixes.contains(where: key.hasPrefix) {
             defaults.removeObject(forKey: key)
