@@ -32,17 +32,17 @@ struct PaywallView: View {
                             .accessibilityAddTraits(.isHeader)
 
                         if let remaining = subscriptions.freeInspectionsRemaining, remaining <= 0 {
-                            Text("You've used all \(SubscriptionManager.freeInspectionLimit) free inspections. Subscribe to continue creating inspections with full PDF export, LiDAR scanning, the annotation pack, and more.")
+                            Text("You've used all \(SubscriptionManager.freeInspectionLimit) free inspections. Subscribe for unlimited inspections and clean, unwatermarked PDF reports.")
                                 .font(.body)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         } else if let remaining = subscriptions.freeInspectionsRemaining {
-                            Text("You have \(remaining) free inspection\(remaining == 1 ? "" : "s") remaining. Subscribe for unlimited inspections, clean PDF export, LiDAR scanning, and the annotation pack.")
+                            Text("You have \(remaining) free inspection\(remaining == 1 ? "" : "s") remaining. Subscribe for unlimited inspections and clean, unwatermarked PDF reports.")
                                 .font(.body)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                         } else {
-                            Text("Unlock unlimited inspections, PDF export, LiDAR scanning, and the annotation pack. Cancel anytime in Settings.")
+                            Text("Unlock unlimited inspections and clean, unwatermarked PDF reports. Cancel anytime in Settings.")
                                 .font(.body)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
@@ -130,10 +130,14 @@ struct PaywallView: View {
     private var premiumFeaturesList: some View {
         VStack(alignment: .leading, spacing: 16) {
             featureRow(title: "Unlimited Inspections", requiresUpgrade: true)
-            featureRow(title: "Clean, Branded PDF Reports", requiresUpgrade: true)
-            featureRow(title: "LiDAR Scanning", requiresUpgrade: true)
-            featureRow(title: "Annotation Pack", requiresUpgrade: true)
+            featureRow(title: "Clean, Unwatermarked PDF Reports", requiresUpgrade: true)
             featureRow(title: "Priority Support", requiresUpgrade: true)
+            // LiDAR scanning and the annotation tools are available to everyone
+            // within the free quota — they're free authoring features, not Pro
+            // upsells. List them as included so the paywall isn't selling what
+            // users already have.
+            featureRow(title: "LiDAR Scanning", requiresUpgrade: false)
+            featureRow(title: "Annotation Tools", requiresUpgrade: false)
             featureRow(title: "\(SubscriptionManager.freeInspectionLimit) Free Inspections", requiresUpgrade: false)
         }
         .inspectionCard()

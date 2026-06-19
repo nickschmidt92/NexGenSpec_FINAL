@@ -78,16 +78,18 @@ public final class SubscriptionManager: ObservableObject {
         return freeInspectionsUsed < Self.freeInspectionLimit
     }
 
-    /// True if the user should have access to premium features (LiDAR,
-    /// full PDF export, photo annotations, etc.). This is a pure *entitlement*
-    /// check: only a paid subscription, an admin override, or a beta/simulator
-    /// build unlocks premium output.
+    /// True if the user is entitled to premium *output* — clean (unwatermarked)
+    /// reports and the plain-text export (which can't be watermarked). A pure
+    /// *entitlement* check: only a paid subscription, an admin override, or a
+    /// beta/simulator build unlocks it.
     ///
-    /// Note: the free-trial generosity lives on inspection *creation*
-    /// (`canCreateInspection` / `freeInspectionsRemaining`), not here. Gating
-    /// premium output on the trial counter would always evaluate true — the
-    /// counter is capped at `0...freeInspectionLimit` — so free users would
-    /// receive clean (unwatermarked) branded PDFs forever (B-0065).
+    /// Do NOT gate authoring features on this. LiDAR capture and photo
+    /// annotation are free for everyone — within the free quota a user gets the
+    /// full app; only the deliverable is watermarked. The free-tier limit lives
+    /// on inspection *creation* (`canCreateInspection` / `freeInspectionsRemaining`),
+    /// not here: gating output on the trial counter would always evaluate true
+    /// (it's capped at `0...freeInspectionLimit`), so free users would receive
+    /// clean branded PDFs forever (B-0065).
     public var hasFeatureAccess: Bool {
         isPro || isAdminAccount || Self.isBetaOrSandboxBuild
     }
