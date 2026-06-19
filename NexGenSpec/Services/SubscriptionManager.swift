@@ -51,6 +51,9 @@ public final class SubscriptionManager: ObservableObject {
 
     private enum TrialKey {
         static let inspectionsCreated = "nexgenspec.trial.inspectionsCreated"
+        /// Set when the trial is consumed but the DeviceCheck "trial used"
+        /// write hasn't been confirmed yet. Drives the launch/login retry.
+        static let markUsedPending = "nexgenspec.trial.markUsedPending"
     }
 
     /// Number of inspections the user has created (persisted across launches).
@@ -107,14 +110,15 @@ public final class SubscriptionManager: ObservableObject {
         UserDefaults.standard.set(freeInspectionsUsed, forKey: TrialKey.inspectionsCreated)
 
         // Once the trial is fully consumed, flip the DeviceCheck bit so a
-        // future Delete App + reinstall doesn't grant a fresh 3-pack.
-        // Fire-and-forget — the local counter is the synchronous gate,
-        // the device bit is the post-reinstall backstop.
+        // future Delete App + reinstall doesn't grant a fresh 3-pack. Persist
+        // the intent first: if the write fails now (network/auth blip), the
+        // pending flag makes markDeviceTrialUsedIfPending() retry on every
+        // launch/login until it lands. Previously this was fire-and-forget, so
+        // a single failed call silently left the bit unset and let that device
+        // reset its trial via reinstall.
         if freeInspectionsUsed >= Self.freeInspectionLimit {
-            let gate = DeviceCheckTrialGate()
-            Task { [gate] in
-                _ = await gate.markTrialUsed()
-            }
+            UserDefaults.standard.set(true, forKey: TrialKey.markUsedPending)
+            Task { await markDeviceTrialUsedIfPending() }
         }
     }
 
@@ -324,6 +328,26 @@ public final class SubscriptionManager: ObservableObject {
         case .unknown:
             // Fail open — keep whatever cached/last-known value we have.
             break
+        }
+        // If a mark-used write is still pending from a prior session (network
+        // was down when the trial was consumed), retry it now so the reinstall
+        // backstop reliably lands. This runs on every launch + sign-in.
+        await markDeviceTrialUsedIfPending()
+    }
+
+    /// Retries the DeviceCheck "trial used" write while it's still pending.
+    /// Idempotent and safe to call repeatedly (right after the 3rd inspection,
+    /// and on every launch/login via `refreshDeviceCheckTrial`). Clears the
+    /// pending flag only on a confirmed server write, so a transient failure
+    /// keeps retrying instead of silently leaving the reinstall backstop unset.
+    /// On simulator/beta `markTrialUsed` returns false and the flag harmlessly
+    /// stays pending (never ships).
+    public func markDeviceTrialUsedIfPending() async {
+        guard UserDefaults.standard.bool(forKey: TrialKey.markUsedPending) else { return }
+        let gate = DeviceCheckTrialGate()
+        if await gate.markTrialUsed() {
+            UserDefaults.standard.set(false, forKey: TrialKey.markUsedPending)
+            if !deviceCheckTrialUsed { deviceCheckTrialUsed = true }
         }
     }
 
