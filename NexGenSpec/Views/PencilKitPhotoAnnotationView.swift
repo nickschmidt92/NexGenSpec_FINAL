@@ -48,6 +48,18 @@ struct PencilKitPhotoAnnotationView: View {
                     shapesOverlay(size: geo.size)
                 }
                 .onAppear { canvasSize = geo.size }
+                // Keep canvasSize in lockstep with the live container geometry.
+                // onAppear captured it ONCE; if the device rotates or an iPad
+                // Split View / Slide Over resizes the sheet, the DragGesture and
+                // PencilKit start recording in the NEW coordinate space while the
+                // saved overlay's canvasWidth/Height stayed at the old size — so
+                // AnnotationBakeService.overlayTransform mis-scaled/offset every
+                // baked mark in the exported PDF and thumbnail. Refresh on every
+                // size change so the persisted canvas size always matches the
+                // space the marks were actually drawn in. (B-0088)
+                .onChange(of: geo.size) { _, newSize in
+                    canvasSize = newSize
+                }
             }
             toolBar
         }
