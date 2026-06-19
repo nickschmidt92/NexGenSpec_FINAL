@@ -67,14 +67,18 @@ public enum InspectionFlags {
     /// files are deleted), so it also sweeps up any orphaned flags. (T-01412)
     ///
     /// Deliberately scoped to the `invoice.*` / `inspection.archivedAt.*` /
-    /// `ngs.fallbackEmail.*` prefixes — it must NOT clear the
-    /// `deletion-pending-wipe` retry flag, which has to survive the wipe until it
-    /// actually completes. The `invoice.` prefix covers sentAt/paidAt as well as
-    /// the persisted amounts (price/services/total) added in T-01440; the
-    /// `ngs.fallbackEmail.` prefix is the inspector's recovery-email PII (T-01445).
+    /// `ngs.fallbackEmail.*` / `NexGenSpec.calendar.*` prefixes — it must NOT
+    /// clear the `deletion-pending-wipe` retry flag, which has to survive the
+    /// wipe until it actually completes. The `invoice.` prefix covers
+    /// sentAt/paidAt as well as the persisted amounts (price/services/total)
+    /// added in T-01440; the `ngs.fallbackEmail.` prefix is the inspector's
+    /// recovery-email PII (T-01445); the `NexGenSpec.calendar.` prefix covers
+    /// CalendarPreferences (default-calendar id + auto-add flag), whose keys are
+    /// suffixed with the user's email — residual PII otherwise left behind on
+    /// Delete Account.
     public static func clearAll() {
         let defaults = UserDefaults.standard
-        let prefixes = ["invoice.", "inspection.archivedAt.", "ngs.fallbackEmail."]
+        let prefixes = ["invoice.", "inspection.archivedAt.", "ngs.fallbackEmail.", "NexGenSpec.calendar."]
         for key in defaults.dictionaryRepresentation().keys
         where prefixes.contains(where: key.hasPrefix) {
             defaults.removeObject(forKey: key)
