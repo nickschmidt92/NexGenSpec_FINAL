@@ -18,10 +18,15 @@ final class FilePathsTests: XCTestCase {
         XCTAssertTrue(url.isFileURL)
     }
 
-    func testAppRootContainsNexGenSpec() {
+    func testAppRootIsNamespacedUnderUsersContainer() {
+        // B-0096: appRoot is now per-user — …/NexGenSpec/Users/<segment> — so it
+        // no longer ends in "NexGenSpec". It must still live under the private
+        // NexGenSpec tree and sit directly inside the `Users` container.
         let url = FilePaths.appRoot
-        XCTAssertTrue(url.lastPathComponent == "NexGenSpec")
         XCTAssertTrue(url.path.contains("NexGenSpec"))
+        XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, "Users")
+        XCTAssertEqual(url.deletingLastPathComponent(), FilePaths.usersContainer)
+        XCTAssertTrue(FilePaths.usersContainer.path.hasPrefix(FilePaths.legacySharedRoot.path))
     }
 
     func testInspectionPathsUseJobId() {
@@ -301,8 +306,15 @@ final class LegacyStorageCleanupTests: XCTestCase {
         let appRoot = FilePaths.appRoot.standardizedFileURL
         let appSupport = FilePaths.applicationSupportDirectory.standardizedFileURL
         let docs = FilePaths.documentDirectory.standardizedFileURL
-        XCTAssertEqual(appRoot.deletingLastPathComponent().path, appSupport.path,
-                       "appRoot must live directly under Application Support")
+        // B-0096 nests appRoot one extra level deep (…/NexGenSpec/Users/<uid>),
+        // so it is no longer a DIRECT child of Application Support — but the
+        // security intent is unchanged: it must live somewhere under the private
+        // Application Support tree and never under the file-shared Documents dir.
+        XCTAssertTrue(appRoot.path.hasPrefix(appSupport.path + "/"),
+                      "appRoot must live under the private Application Support tree")
+        XCTAssertEqual(FilePaths.legacySharedRoot.standardizedFileURL.deletingLastPathComponent().path,
+                       appSupport.path,
+                       "the NexGenSpec store root must sit directly under Application Support")
         XCTAssertFalse(appRoot.path.hasPrefix(docs.path),
                        "appRoot must NOT be inside the file-shared Documents directory")
     }
@@ -2302,5 +2314,137 @@ final class FilterDecimalLocaleTests: XCTestCase {
         XCTAssertEqual(filterDecimal("12.34.56", decimalSeparator: "."), "12.3456")
         // Stray letters dropped.
         XCTAssertEqual(filterDecimal("abc12.5x", decimalSeparator: "."), "12.5")
+    }
+}
+
+/// B-0096 — per-UID local-data scoping + lossless migration. Proves the working
+/// store is namespaced per Firebase UID (so one account can't read another's
+/// data on a shared device), that the account-deletion pin overrides the live
+/// UID (so the wipe targets the deleted user's namespace even after Firebase has
+/// cleared `currentUser`), and that pre-fix un-namespaced data migrates into the
+/// signed-in user's namespace with no loss and no clobber.
+final class B0096ScopingTests: XCTestCase {
+
+    private var savedProvider: (() -> String?)!
+
+    override func setUp() {
+        super.setUp()
+        savedProvider = SessionScope.uidProvider
+        SessionScope.unpin()
+    }
+
+    override func tearDown() {
+        SessionScope.uidProvider = savedProvider
+        SessionScope.unpin()
+        super.tearDown()
+    }
+
+    func testAppRootIsDistinctPerUID() {
+        SessionScope.uidProvider = { "uid-AAAA" }
+        let rootA = FilePaths.appRoot
+        SessionScope.uidProvider = { "uid-BBBB" }
+        let rootB = FilePaths.appRoot
+        XCTAssertNotEqual(rootA, rootB, "different accounts must get different store roots")
+        XCTAssertEqual(rootA.lastPathComponent, "uid-AAAA")
+        XCTAssertEqual(rootB.lastPathComponent, "uid-BBBB")
+        XCTAssertEqual(rootA, FilePaths.userRoot(uid: "uid-AAAA"))
+    }
+
+    func testSignedOutUsesSentinelSegment() {
+        SessionScope.uidProvider = { nil }
+        XCTAssertEqual(FilePaths.appRoot.lastPathComponent, SessionScope.signedOutSegment)
+        XCTAssertNil(SessionScope.activeUID)
+    }
+
+    func testDeletionPinOverridesLiveUID() {
+        SessionScope.uidProvider = { "uid-live" }
+        XCTAssertEqual(FilePaths.appRoot.lastPathComponent, "uid-live")
+        SessionScope.pin("uid-deleting")
+        XCTAssertEqual(FilePaths.appRoot.lastPathComponent, "uid-deleting",
+                       "deletion pin must override the live UID so the wipe hits the deleted namespace")
+        SessionScope.unpin()
+        XCTAssertEqual(FilePaths.appRoot.lastPathComponent, "uid-live",
+                       "appRoot must revert to the live UID once unpinned")
+    }
+
+    func testMigrationMovesLegacyDataIntoUserNamespaceWithoutLoss() throws {
+        let fm = FileManager.default
+        let uid = "uid-migrate-\(UUID().uuidString)"
+        SessionScope.uidProvider = { uid }
+        let dest = FilePaths.userRoot(uid: uid)
+        try? fm.removeItem(at: dest)
+
+        // Seed pre-fix un-namespaced data directly under the legacy shared root,
+        // exactly where build ≤17 wrote it.
+        try FileSecurity.ensureProtectedDirectory(FilePaths.legacySharedRoot)
+        let legacyIndex = FilePaths.legacySharedRoot.appendingPathComponent("inspections.json")
+        let payload = Data("LEGACY-INDEX-\(uid)".utf8)
+        try FileSecurity.writeProtected(payload, to: legacyIndex)
+        let legacyInspections = FilePaths.legacySharedRoot.appendingPathComponent("Inspections", isDirectory: true)
+        let legacyJobDir = legacyInspections.appendingPathComponent("job-1", isDirectory: true)
+        try FileSecurity.ensureProtectedDirectory(legacyJobDir)
+        try FileSecurity.writeProtected(Data("LEGACY-JOB".utf8), to: legacyJobDir.appendingPathComponent("current.json"))
+
+        defer {
+            try? fm.removeItem(at: dest)
+            try? fm.removeItem(at: legacyIndex)
+            try? fm.removeItem(at: legacyInspections)
+        }
+
+        let moved = SessionMigration.runIfNeeded()
+        XCTAssertTrue(moved, "migration should report it moved entries")
+
+        // Legacy copies MOVED (not copied) out of the shared root — no residue.
+        XCTAssertFalse(fm.fileExists(atPath: legacyIndex.path),
+                       "legacy index must be moved out of the shared root, not left behind")
+        // Data is intact in the user's namespace.
+        let migratedIndex = dest.appendingPathComponent("inspections.json")
+        XCTAssertTrue(fm.fileExists(atPath: migratedIndex.path))
+        XCTAssertEqual(try Data(contentsOf: migratedIndex), payload, "migrated index bytes must be intact")
+        let migratedJob = dest.appendingPathComponent("Inspections", isDirectory: true)
+            .appendingPathComponent("job-1", isDirectory: true)
+            .appendingPathComponent("current.json")
+        XCTAssertTrue(fm.fileExists(atPath: migratedJob.path), "nested inspection folder must migrate too")
+        // Marker written; a second run is a no-op.
+        XCTAssertTrue(fm.fileExists(atPath: dest.appendingPathComponent(SessionMigration.markerName).path))
+        XCTAssertFalse(SessionMigration.runIfNeeded(), "migration must not run twice for the same user")
+    }
+
+    func testMigrationNeverClobbersExistingUserData() throws {
+        let fm = FileManager.default
+        let uid = "uid-existing-\(UUID().uuidString)"
+        SessionScope.uidProvider = { uid }
+        let dest = FilePaths.userRoot(uid: uid)
+        try FileSecurity.ensureProtectedDirectory(dest)
+        let existing = dest.appendingPathComponent("inspections.json")
+        let mine = Data("MY-OWN-DATA".utf8)
+        try FileSecurity.writeProtected(mine, to: existing)
+        let legacyIndex = FilePaths.legacySharedRoot.appendingPathComponent("inspections.json")
+        try FileSecurity.ensureProtectedDirectory(FilePaths.legacySharedRoot)
+        try FileSecurity.writeProtected(Data("SOMEONE-ELSE".utf8), to: legacyIndex)
+        defer {
+            try? fm.removeItem(at: dest)
+            try? fm.removeItem(at: legacyIndex)
+        }
+
+        _ = SessionMigration.runIfNeeded()
+        XCTAssertEqual(try Data(contentsOf: existing), mine,
+                       "migration must never overwrite a user's existing index with legacy data")
+    }
+
+    func testWipeLegacyUnnamespacedDataLeavesUsersContainer() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.usersContainer)
+        let survivorRoot = FilePaths.userRoot(uid: "survivor-\(UUID().uuidString)")
+        try FileSecurity.ensureProtectedDirectory(survivorRoot)
+        let survivorFile = survivorRoot.appendingPathComponent("keep.json")
+        try FileSecurity.writeProtected(Data("KEEP".utf8), to: survivorFile)
+        let legacyFile = FilePaths.legacySharedRoot.appendingPathComponent("audit_log.txt")
+        try FileSecurity.writeProtected(Data("LEGACY".utf8), to: legacyFile)
+        defer { try? fm.removeItem(at: survivorRoot); try? fm.removeItem(at: legacyFile) }
+
+        SessionMigration.wipeLegacyUnnamespacedData()
+        XCTAssertFalse(fm.fileExists(atPath: legacyFile.path), "legacy un-namespaced file must be removed")
+        XCTAssertTrue(fm.fileExists(atPath: survivorFile.path), "Users/<uid> namespaces must NOT be touched")
     }
 }
