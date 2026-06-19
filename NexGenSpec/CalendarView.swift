@@ -60,6 +60,10 @@ struct CalendarView: View {
             if calendarService.authorizationState == .notDetermined {
                 Task { await calendarService.requestAccess() }
             }
+            // Reconcile a finalize that happened while an inspection opened from
+            // this tab was pushed (publish deferred to avoid popping it). No-op
+            // when nothing is staged. See InspectionStore.flushPendingMetadata.
+            store.flushPendingMetadata()
         }
         .sheet(isPresented: $showOtherEventsSheet) {
             if let day = selectedDay {

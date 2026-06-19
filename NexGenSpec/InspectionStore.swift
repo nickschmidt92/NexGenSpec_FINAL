@@ -48,6 +48,19 @@ public final class InspectionStore: ObservableObject {
     /// no-ops so nothing can re-create the directory being deleted mid-wipe.
     public private(set) var isWiping = false
 
+    /// Finalize metadata updates staged by `finalize(version:)` but NOT yet
+    /// published into `metadataList`. Deliberately a plain (non-`@Published`)
+    /// property: publishing the finalized row immediately re-renders the
+    /// Dashboard/Calendar/Archived `ForEach` that listed this inspection, which
+    /// tears the pushed `InspectionView` off the navigation stack and pops the
+    /// user back to the list — the finalize→Invoice "bounce to Workspace" bug.
+    /// The version file + integrity snapshot are written to disk synchronously
+    /// in `finalize`, and `saveMetadataIndex()` folds these staged entries into
+    /// the on-disk index, so disk is always correct. The in-memory published
+    /// list is reconciled by `flushPendingMetadata()` once the user returns to a
+    /// list screen (never while the inspection is on screen). Keyed by versionID.
+    private var pendingFinalizedMetadata: [UUID: VersionMetadata] = [:]
+
     public init() {
         load()
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -100,6 +113,11 @@ public final class InspectionStore: ObservableObject {
         // Reset the gate every load so a later healthy launch — or a restored
         // backup via reloadFromDisk() — re-enables index writes automatically.
         didLoadSucceed = true
+        // The on-disk index already reflects any staged finalize updates
+        // (saveMetadataIndex folds them in), so a fresh load is authoritative
+        // and any pending staging is moot. Clear it so a reload can't later
+        // re-apply a stale finalized snapshot over freshly-loaded data.
+        pendingFinalizedMetadata.removeAll()
 
         let (primaryRead, backupRead): (IndexFileRead, IndexFileRead) = ioQueue.sync {
             (Self.readIndexFile(indexURL), Self.readIndexFile(FilePaths.inspectionsIndexBackup))
@@ -244,7 +262,19 @@ public final class InspectionStore: ObservableObject {
             )
             return
         }
-        let snapshot = metadataList
+        // Fold any staged finalize updates into the snapshot so the on-disk
+        // index reflects the finalized status even though we haven't published
+        // it to the in-memory `metadataList` yet (see pendingFinalizedMetadata).
+        // This keeps disk authoritative across backgrounding/force-quit while
+        // the inspection is still on screen.
+        var snapshot = metadataList
+        if !pendingFinalizedMetadata.isEmpty {
+            for (id, meta) in pendingFinalizedMetadata {
+                if let i = snapshot.firstIndex(where: { $0.id == id }) {
+                    snapshot[i] = meta
+                }
+            }
+        }
         try ioQueue.sync {
             try FileSecurity.ensureProtectedDirectory(indexURL.deletingLastPathComponent())
             // Only copy the existing primary over the backup when it currently
@@ -640,10 +670,48 @@ public extension InspectionStore {
                 return
             }
             try? writeVersionToFile(updated)
-            metadataList[idx] = VersionMetadata(from: updated)
-            save()
+            // Persist the finalize WITHOUT any @Published mutation, because the
+            // Dashboard/Calendar/Archived screens observe the WHOLE store via
+            // @EnvironmentObject — so ANY published change (not just metadataList:
+            // also `isSaving` / `lastSavedAt` toggled by `save()`) re-renders their
+            // ForEach and tears the pushed eager NavigationLink off the nav stack,
+            // popping the user back to the list before the finalize→Invoice
+            // redirect can run (the reported bug). This mirrors the autosave path,
+            // which deliberately writes file-only with no publish and therefore
+            // never pops:
+            //   1. Stage the finalized metadata in the non-published
+            //      `pendingFinalizedMetadata` (assigning `metadataList[idx]` here
+            //      would publish → pop). `idx` is kept only for the guard above.
+            //   2. Write the on-disk index directly via `saveMetadataIndex()`
+            //      (which folds the staged entry in) instead of `save()` — same
+            //      disk result, but WITHOUT save()'s `isSaving`/`lastSavedAt`
+            //      @Published churn.
+            // The published `metadataList` is reconciled by `flushPendingMetadata()`
+            // when the user next lands on a list screen — never while the
+            // inspection is on screen.
+            _ = idx
+            pendingFinalizedMetadata[updated.id] = VersionMetadata(from: updated)
+            try? saveMetadataIndex()
         case .failure:
             break
+        }
+    }
+
+    /// Reconciles finalize metadata staged by `finalize(version:)` into the
+    /// published `metadataList`. Call from a list screen's `.onAppear`
+    /// (Dashboard / Calendar / Archived) so the row badge flips to Finalized
+    /// AFTER the user has left the pushed inspection — publishing it earlier
+    /// would pop the inspection off the nav stack (the finalize→Invoice bug
+    /// this whole mechanism exists to avoid). Idempotent; a no-op when nothing
+    /// is staged.
+    func flushPendingMetadata() {
+        guard !pendingFinalizedMetadata.isEmpty else { return }
+        let pending = pendingFinalizedMetadata
+        pendingFinalizedMetadata.removeAll()
+        for (id, meta) in pending {
+            if let idx = metadataList.firstIndex(where: { $0.id == id }) {
+                metadataList[idx] = meta
+            }
         }
     }
 

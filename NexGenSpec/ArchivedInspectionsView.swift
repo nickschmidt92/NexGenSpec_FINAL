@@ -114,6 +114,12 @@ struct ArchivedInspectionsView: View {
             }
         }
         .navigationTitle("Archived")
+        // Reconcile a finalize that occurred while an inspection was pushed
+        // (publish is deferred to avoid popping the pushed view). Harmless
+        // no-op when nothing is staged. See InspectionStore.flushPendingMetadata.
+        .onAppear {
+            store.flushPendingMetadata()
+        }
     }
 }
 

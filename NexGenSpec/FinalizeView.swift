@@ -132,9 +132,18 @@ struct FinalizeView: View {
     }
 
     /// Request finalization; store performs transition. View does not mutate state.
+    ///
+    /// Deliberately does NOT call `dismiss()` afterward. FinalizeView is rendered
+    /// as the inspection's Finalize pane — pushed (iPhone) or as the
+    /// NavigationSplitView `detail` (iPad) inside InspectionView, which itself is
+    /// pushed onto the Dashboard's NavigationStack. In that arrangement
+    /// `@Environment(\.dismiss)` resolves to the OUTER stack, so dismissing here
+    /// popped the entire inspection off the Dashboard — bouncing the user back to
+    /// Workspace instead of advancing to Invoice & Send (the reported finalize
+    /// bug). Post-finalize navigation is now owned by `onFinalize` (presents the
+    /// Invoice & Send cover + sets the iPad detail pane), so we must stay put.
     private func finalize() {
         onFinalize(version)
-        dismiss()
     }
 }
 

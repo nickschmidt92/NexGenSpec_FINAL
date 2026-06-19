@@ -178,6 +178,13 @@ struct DashboardView: View {
                 .refreshable {
                     store.reloadFromDisk()
                 }
+                // Reconcile any finalize that happened while an inspection was
+                // pushed: finalize defers its metadata publish to avoid popping
+                // the pushed view (the finalize→Invoice bug), so the row badge
+                // flips to Finalized here, once the user is back on the list.
+                .onAppear {
+                    store.flushPendingMetadata()
+                }
                 .navigationTitle("Workspace")
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
