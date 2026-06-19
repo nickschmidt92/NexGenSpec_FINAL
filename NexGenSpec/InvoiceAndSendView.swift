@@ -224,7 +224,16 @@ struct InvoiceAndSendView: View {
                 .environmentObject(subscriptions)
         }
         .alert("Large PDF", isPresented: $showLargePDFWarning) {
-            Button("Send Anyway") { }
+            Button("Send Anyway") {
+                // Proceed to email the large report. Previously this was an
+                // empty no-op, so the labelled action did nothing and the user
+                // had to hunt for the separate Send button.
+                guard MFMailComposeViewController.canSendMail() else {
+                    mailUnavailableAlert = true
+                    return
+                }
+                showMailCompose = true
+            }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("The exported PDF exceeds 20 MB. Some email providers may reject attachments this large. Consider reducing the number of photos or using a file-sharing link instead.")

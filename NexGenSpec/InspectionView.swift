@@ -347,10 +347,14 @@ struct InspectionView: View {
     }
 
     /// Compact indicator shown in the navigation toolbar so inspectors
-    /// always know whether their work is on disk. Three states:
-    ///   • "Unsaved" pill (amber) while a debounced save is pending
+    /// always know whether their work is on disk. Two states:
     ///   • "Saved HH:MM" (green) once the last save landed
     ///   • Empty until first save of this session
+    ///
+    /// Edits write synchronously (no debounce), so there is no pending
+    /// "Unsaved" state to show. The previous amber branch keyed off
+    /// `autoSaveTask != nil`, but that task is never assigned a running task
+    /// (only cancelled), so it could never render — removed as dead UI.
     ///
     /// Uses local `@State` timestamp (not `store.lastSavedAt`) so this
     /// indicator updating does not trigger SwiftUI-wide re-renders of
@@ -358,14 +362,7 @@ struct InspectionView: View {
     /// crash note on the auto-save path.
     @ViewBuilder
     private var saveStatusLabel: some View {
-        if autoSaveTask != nil {
-            HStack(spacing: 4) {
-                Image(systemName: "circle.dotted")
-                Text("Unsaved")
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.orange)
-        } else if let t = localLastSavedAt {
+        if let t = localLastSavedAt {
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill")
                 Text("Saved \(t, style: .time)")
