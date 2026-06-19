@@ -637,11 +637,15 @@ final class HTMLReportRendererTests: XCTestCase {
 
         // HTML-level guard for the actual watermark mechanism: the free render
         // carries the `wm` body class + upgrade banner; the Pro render is clean.
+        // This version is a DRAFT, so both renders also carry the `draft` body
+        // class — a tiled background marker that paginates across every PDF page
+        // (the old position:fixed .draft-watermark div only landed on page 1).
         let freeHTML = HTMLReportRenderer.renderHTML(for: version, watermark: true)
         let proHTML = HTMLReportRenderer.renderHTML(for: version, watermark: false)
-        XCTAssertTrue(freeHTML.contains("class=\"wm\""), "Free HTML must tag body with the watermark class")
+        XCTAssertTrue(freeHTML.contains("class=\"wm draft\""), "Free DRAFT HTML body must carry both the watermark (wm) and paginating draft classes")
         XCTAssertTrue(freeHTML.contains("Upgrade to Pro"), "Free HTML must carry the upgrade banner")
-        XCTAssertFalse(proHTML.contains("class=\"wm\""), "Pro HTML must not be watermarked")
+        XCTAssertFalse(proHTML.contains("class=\"wm"), "Pro HTML must not be watermarked")
+        XCTAssertTrue(proHTML.contains("class=\"draft\""), "Pro DRAFT HTML body must carry the paginating draft class")
         XCTAssertFalse(proHTML.contains("Upgrade to Pro"), "Pro HTML must not carry the banner")
 
         // End-to-end guard via the production low-level path: the banner is real,

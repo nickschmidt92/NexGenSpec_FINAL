@@ -117,6 +117,15 @@ enum HTMLReportRenderer {
            on every page. The solid banner is the guaranteed-visible flow-element marker. */
         body.wm { background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='420'%20height='300'%3E%3Ctext%20x='210'%20y='160'%20fill='rgba(0,90,190,0.5)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='34'%20font-weight='900'%20letter-spacing='2'%20text-anchor='middle'%20transform='rotate(-30,210,160)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E"); background-repeat: repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         body.wm .card, body.wm .item-card, body.wm .header-card { background: rgba(255,255,255,0.9) !important; }
+        /* DRAFT marker — same tiled-background technique as body.wm so it
+           PAGINATES. The centered `.draft-watermark` div above is position:fixed,
+           which UIPrintPageRenderer paints on page 1 only — leaving pages 2..N of
+           a multi-page draft looking like a finished report. A tiled background
+           repeats on every printed page; translucent cards let it show through. */
+        body.draft { background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='360'%20height='260'%3E%3Ctext%20x='180'%20y='140'%20fill='rgba(190,0,0,0.16)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='30'%20font-weight='900'%20letter-spacing='3'%20text-anchor='middle'%20transform='rotate(-30,180,140)'%3EDRAFT%3C/text%3E%3C/svg%3E"); background-repeat: repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body.draft .card, body.draft .item-card, body.draft .header-card { background: rgba(255,255,255,0.92) !important; }
+        /* Free + draft together: layer both tiled marks so neither is lost. */
+        body.wm.draft { background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='360'%20height='260'%3E%3Ctext%20x='180'%20y='140'%20fill='rgba(190,0,0,0.16)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='30'%20font-weight='900'%20letter-spacing='3'%20text-anchor='middle'%20transform='rotate(-30,180,140)'%3EDRAFT%3C/text%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='420'%20height='300'%3E%3Ctext%20x='210'%20y='160'%20fill='rgba(0,90,190,0.5)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='34'%20font-weight='900'%20letter-spacing='2'%20text-anchor='middle'%20transform='rotate(-30,210,160)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E"); background-repeat: repeat, repeat; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .free-banner { background: #0055bb; color: #fff; text-align: center; padding: 14px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 1rem; font-weight: 800; letter-spacing: 0.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; }
         .card { background: #fff; border-radius: var(--radius); box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 20px; break-inside: avoid-page; page-break-inside: avoid; }
@@ -185,11 +194,14 @@ enum HTMLReportRenderer {
           .badge, .free-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           body.wm { background-color: #fff !important; background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='420'%20height='300'%3E%3Ctext%20x='210'%20y='160'%20fill='rgba(0,90,190,0.5)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='34'%20font-weight='900'%20letter-spacing='2'%20text-anchor='middle'%20transform='rotate(-30,210,160)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E") !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           body.wm .card, body.wm .item-card, body.wm .header-card { background: rgba(255,255,255,0.9) !important; }
+          body.draft { background-color: #fff !important; background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='360'%20height='260'%3E%3Ctext%20x='180'%20y='140'%20fill='rgba(190,0,0,0.16)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='30'%20font-weight='900'%20letter-spacing='3'%20text-anchor='middle'%20transform='rotate(-30,180,140)'%3EDRAFT%3C/text%3E%3C/svg%3E") !important; background-repeat: repeat !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body.draft .card, body.draft .item-card, body.draft .header-card { background: rgba(255,255,255,0.92) !important; }
+          body.wm.draft { background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='360'%20height='260'%3E%3Ctext%20x='180'%20y='140'%20fill='rgba(190,0,0,0.16)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='30'%20font-weight='900'%20letter-spacing='3'%20text-anchor='middle'%20transform='rotate(-30,180,140)'%3EDRAFT%3C/text%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='420'%20height='300'%3E%3Ctext%20x='210'%20y='160'%20fill='rgba(0,90,190,0.5)'%20font-family='Helvetica,Arial,sans-serif'%20font-size='34'%20font-weight='900'%20letter-spacing='2'%20text-anchor='middle'%20transform='rotate(-30,210,160)'%3ENEXGENSPEC%20FREE%3C/text%3E%3C/svg%3E") !important; background-repeat: repeat, repeat !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .cover-page { min-height: 100vh; }
         }
         </style>
         </head>
-        <body\(watermark ? " class=\"wm\"" : "")>
+        <body class="\([watermark ? "wm" : "", isDraft ? "draft" : ""].filter { !$0.isEmpty }.joined(separator: " "))">
         \(isDraft ? "<div class=\"draft-watermark\">DRAFT — NOT FINAL</div>" : "")
         <div class="container">
         <div class="cover-page">
