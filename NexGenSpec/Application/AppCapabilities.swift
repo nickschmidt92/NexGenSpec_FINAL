@@ -22,7 +22,11 @@ struct SyncContext {
 
 /// Future: feature flags or tier-based capability. Use to gate LiDAR, AI summary, team features.
 enum AppCapabilities {
-    static var currentTier: SubscriptionTier { .professional }
+    /// Placeholder only — real entitlement lives in `SubscriptionManager`
+    /// (`isPro` / `hasFeatureAccess`). Defaults to `.free` so that if anything
+    /// ever reads this by mistake it fails CLOSED (treats the user as free)
+    /// instead of silently granting Pro to everyone. Nothing reads it today.
+    static var currentTier: SubscriptionTier { .free }
     static var syncContext: SyncContext { SyncContext() }
     static var canUseLiDAR: Bool { true }
     static var canUseAISummary: Bool { false }
