@@ -402,6 +402,18 @@ public final class AuthManager: ObservableObject {
             // client report). The profile is not account-scoped, so logout is
             // the boundary where it must be reset.
             InspectorProfile.shared.clear()
+            // Audit isolation hardening: exported report ZIPs
+            // (Documents/NexGenSpecExports) and published report PDFs
+            // (Documents/NexGenSpecReports) live in the file-shared Documents
+            // directory — OUTSIDE the per-UID appRoot — so the B-0096 per-UID
+            // scoping does NOT reach them. Left in place, the next inspector on
+            // a shared device (or anyone browsing the Files app while signed
+            // out) could open the previous user's client reports + PII. Clear
+            // them on logout. Inspections/photos themselves stay scoped per-UID
+            // and return on re-login; only the standalone Documents deliverables
+            // (which the user has already shared out) are removed.
+            InspectionZIPExportService.removeAllExports()
+            FilesAppPublisher.removeAllPublished()
         } catch {
             authErrorMessage = Self.friendlyMessage(for: error)
         }

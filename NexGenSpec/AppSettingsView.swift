@@ -130,7 +130,7 @@ struct AppSettingsView: View {
                         }
                         .buttonStyle(AppSecondaryButtonStyle())
 
-                        Text("Logging out preserves all inspections, photos, and reports on this device. Sign back in to restore access.")
+                        Text("Logging out keeps your inspections and photos on this device (restored when you sign back in). For privacy on shared devices, exported report files in the Files app are removed.")
                             .font(AppFont.caption)
                             .foregroundStyle(.secondary)
 
