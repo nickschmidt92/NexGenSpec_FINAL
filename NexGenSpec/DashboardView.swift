@@ -109,10 +109,15 @@ struct DashboardView: View {
                         }
 
                         ForEach(visibleList) { meta in
-                            NavigationLink {
-                                InspectionRootView(versionID: meta.id)
-                                    .environmentObject(store)
-                            } label: {
+                            // Value-based navigation (NavigationLink(value:) +
+                            // .navigationDestination below). The old eager
+                            // NavigationLink { destination } form tore down the
+                            // pushed InspectionView whenever metadataList mutated
+                            // — e.g. on finalize — bouncing the user back to the
+                            // Dashboard instead of advancing to Invoice & Send.
+                            // Value-based links keep the pushed view alive across
+                            // list changes.
+                            NavigationLink(value: meta.id) {
                                 VersionRow(metadata: meta, badge: badgeMap[meta.id] ?? meta.badge)
                             }
                             .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.md, bottom: Spacing.xs, trailing: Spacing.md))
@@ -179,6 +184,10 @@ struct DashboardView: View {
                     store.reloadFromDisk()
                 }
                 .navigationTitle("Workspace")
+                .navigationDestination(for: UUID.self) { id in
+                    InspectionRootView(versionID: id)
+                        .environmentObject(store)
+                }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {

@@ -29,10 +29,10 @@ struct ArchivedInspectionsView: View {
                 List {
                     Section {
                         ForEach(archivedList) { meta in
-                            NavigationLink {
-                                InspectionRootView(versionID: meta.id)
-                                    .environmentObject(store)
-                            } label: {
+                            // Value-based navigation — see DashboardView. The
+                            // eager NavigationLink form popped the pushed view on
+                            // any metadataList mutation.
+                            NavigationLink(value: meta.id) {
                                 ArchivedRow(metadata: meta)
                             }
                             .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.md, bottom: Spacing.xs, trailing: Spacing.md))
@@ -114,6 +114,10 @@ struct ArchivedInspectionsView: View {
             }
         }
         .navigationTitle("Archived")
+        .navigationDestination(for: UUID.self) { id in
+            InspectionRootView(versionID: id)
+                .environmentObject(store)
+        }
     }
 }
 
