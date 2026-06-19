@@ -64,6 +64,7 @@ struct InspectionOverviewView: View {
     /// with a text field lets the inspector give the scan a friendly name
     /// (stored as the scan's `name`). Mirrors the video rename flow.
     @State private var scanToRename: LiDARScan?
+    @State private var scanToPreview: LiDARScan?
     @State private var renameText: String = ""
     /// A clip that was just recorded and is waiting for the naming prompt.
     /// We don't present the prompt directly from the recorder's onRecorded
@@ -303,6 +304,21 @@ struct InspectionOverviewView: View {
                     url: FilePaths.videosFolder(jobId: jobId).appendingPathComponent(video.fileName),
                     caption: video.caption.isEmpty ? video.fileName : video.caption
                 )
+            }
+            .sheet(item: $scanToPreview) { scan in
+                NavigationStack {
+                    QuickLookPreview(
+                        url: FilePaths.lidarFolder(jobId: jobId).appendingPathComponent(scan.usdzFileName)
+                    )
+                    .ignoresSafeArea()
+                    .navigationTitle(scan.displayName)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { scanToPreview = nil }
+                        }
+                    }
+                }
             }
             .alert(
                 "Rename Video",
@@ -889,38 +905,51 @@ struct InspectionOverviewView: View {
     @ViewBuilder
     private func roomScanRow(_ scan: LiDARScan) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            if let thumb = loadFloorplanThumbnail(scan) {
-                Image(uiImage: thumb)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 64, height: 64)
-                    .background(Color(.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color(.separator), lineWidth: 0.5)
-                    )
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(.systemBackground))
-                        .frame(width: 64, height: 64)
-                    Image(systemName: "cube.transparent")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
+            // Tapping the thumbnail/name opens the captured USDZ in the system
+            // QuickLook viewer (interactive 3D + AR). Previously the row showed
+            // the scan but had no way to view it — an orphaned affordance.
+            Button {
+                scanToPreview = scan
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    if let thumb = loadFloorplanThumbnail(scan) {
+                        Image(uiImage: thumb)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 64, height: 64)
+                            .background(Color(.systemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color(.separator), lineWidth: 0.5)
+                            )
+                    } else {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(.systemBackground))
+                                .frame(width: 64, height: 64)
+                            Image(systemName: "cube.transparent")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(scan.displayName)
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                        Text(scan.capturedAt, style: .date)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Label("Tap to view 3D scan", systemImage: "cube.transparent")
+                            .font(.caption2)
+                            .foregroundStyle(Color.accentColor)
+                    }
                 }
+                .contentShape(Rectangle())
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(scan.displayName)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                Text(scan.capturedAt, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text("3D model (USDZ) saved with this inspection")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View room scan \(scan.displayName)")
+            .accessibilityHint("Opens the 3D scan in a viewer")
             Spacer(minLength: 0)
             if isEditable {
                 Button {
