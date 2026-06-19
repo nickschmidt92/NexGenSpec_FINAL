@@ -22,6 +22,7 @@ struct SignatureView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var inspectorSignature: UIImage?
     @State private var clientSignature: UIImage?
+    @State private var showSaveError = false
 
     private var hasInspectorSignature: Bool {
         version.inspection.signatures.contains { $0.name == version.inspection.inspectorName && !version.inspection.inspectorName.isEmpty }
@@ -69,9 +70,15 @@ struct SignatureView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        saveSignatures()
-                        onComplete()
-                        dismiss()
+                        if saveSignatures() {
+                            onComplete()
+                            dismiss()
+                        } else {
+                            // A signature failed to write — the pad stays
+                            // unlocked. Keep the sheet open so the user can retry
+                            // rather than finalizing a record with a missing sig.
+                            showSaveError = true
+                        }
                     }
                     .disabled(!canSave)
                 }
@@ -79,6 +86,11 @@ struct SignatureView: View {
         }
         .frame(minWidth: 720, minHeight: 800)
         .presentationDetents([.large])
+        .alert("Couldn't Save Signature", isPresented: $showSaveError) {
+            Button("OK") { showSaveError = false }
+        } message: {
+            Text("The signature couldn't be saved to this device. Please try signing again.")
+        }
     }
 
     /// Enabled only when the user has provided what's still needed.
@@ -120,35 +132,51 @@ struct SignatureView: View {
     /// Appends new signatures without disturbing existing ones. Only fires
     /// for roles that are currently missing — the UI already prevents the
     /// user from drawing over a locked pad.
-    private func saveSignatures() {
+    ///
+    /// Records (and thereby locks) a signature ONLY if its image actually
+    /// saved to disk. A failed encode/write leaves the pad unlocked and
+    /// returns false so the caller can alert and let the user retry, instead
+    /// of locking a signature whose file is missing from the final report.
+    /// Returns true only if every signature the user provided was persisted.
+    private func saveSignatures() -> Bool {
         let jobId = UUID(uuidString: version.inspection.inspectionId) ?? version.id
         let deviceId = UIDevice.current.identifierForVendor?.uuidString
         var existing = version.inspection.signatures
-        if !hasInspectorSignature, let inspector = inspectorSignature, let data = inspector.pngData() {
+        var allSaved = true
+        if !hasInspectorSignature, let inspector = inspectorSignature {
             let sigId = UUID()
-            SignatureStore.saveImage(data, jobId: jobId, signatureId: sigId)
-            existing.append(InspectionSignature(
-                id: sigId,
-                name: version.inspection.inspectorName,
-                imageFileName: "\(sigId.uuidString).png",
-                date: Date(),
-                deviceId: deviceId
-            ))
+            if let data = inspector.pngData(),
+               SignatureStore.saveImage(data, jobId: jobId, signatureId: sigId) {
+                existing.append(InspectionSignature(
+                    id: sigId,
+                    name: version.inspection.inspectorName,
+                    imageFileName: "\(sigId.uuidString).png",
+                    date: Date(),
+                    deviceId: deviceId
+                ))
+            } else {
+                allSaved = false
+            }
         }
-        if !hasClientSignature, let client = clientSignature, let data = client.pngData() {
+        if !hasClientSignature, let client = clientSignature {
             let sigId = UUID()
-            SignatureStore.saveImage(data, jobId: jobId, signatureId: sigId)
-            existing.append(InspectionSignature(
-                id: sigId,
-                name: version.inspection.clientName,
-                imageFileName: "\(sigId.uuidString).png",
-                date: Date(),
-                deviceId: deviceId
-            ))
+            if let data = client.pngData(),
+               SignatureStore.saveImage(data, jobId: jobId, signatureId: sigId) {
+                existing.append(InspectionSignature(
+                    id: sigId,
+                    name: version.inspection.clientName,
+                    imageFileName: "\(sigId.uuidString).png",
+                    date: Date(),
+                    deviceId: deviceId
+                ))
+            } else {
+                allSaved = false
+            }
         }
         var copy = version
         copy.inspection.signatures = existing
         version = copy
+        return allSaved
     }
 }
 
