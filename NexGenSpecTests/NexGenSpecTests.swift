@@ -2497,3 +2497,57 @@ final class B0096ScopingTests: XCTestCase {
         XCTAssertEqual(store.metadataList.count, 1, "account A's data must return on re-login")
     }
 }
+
+/// B-0096 sibling — custom templates must be per-UID too. Drives the SINGLETON
+/// (CustomTemplateStore.shared) across an account switch, the exact blind spot
+/// that hid both the indexURL and CustomTemplateStore frozen-path leaks (every
+/// other test built a fresh object).
+@MainActor
+final class B0096CustomTemplateScopingTests: XCTestCase {
+
+    private var savedProvider: (() -> String?)!
+
+    override func setUp() {
+        super.setUp()
+        savedProvider = SessionScope.uidProvider
+        SessionScope.unpin()
+    }
+
+    override func tearDown() {
+        SessionScope.uidProvider = savedProvider
+        SessionScope.unpin()
+        CustomTemplateStore.shared.clear()
+        super.tearDown()
+    }
+
+    func testCustomTemplatesFollowActiveUIDOnReload() {
+        let fm = FileManager.default
+        let uidA = "tmpl-A-\(UUID().uuidString)"
+        let uidB = "tmpl-B-\(UUID().uuidString)"
+        defer {
+            try? fm.removeItem(at: FilePaths.userRoot(uid: uidA))
+            try? fm.removeItem(at: FilePaths.userRoot(uid: uidB))
+        }
+        let store = CustomTemplateStore.shared
+
+        // Account A creates a custom template (writes to A's per-UID namespace).
+        SessionScope.uidProvider = { uidA }
+        store.reload()
+        let template = CustomTemplate(templateId: "t-\(uidA)", name: "A's Template", sections: [])
+        store.add(template)
+        XCTAssertTrue(store.templates.contains { $0.templateId == template.templateId },
+                      "account A should have its own template")
+
+        // Account B logs in on the SAME singleton → must NOT see A's template.
+        SessionScope.uidProvider = { uidB }
+        store.reload()
+        XCTAssertTrue(store.templates.isEmpty,
+                      "account B must NOT see account A's custom templates (B-0096 sibling leak)")
+
+        // Back to A → A's template returns.
+        SessionScope.uidProvider = { uidA }
+        store.reload()
+        XCTAssertTrue(store.templates.contains { $0.templateId == template.templateId },
+                      "account A's custom template must return on reload")
+    }
+}

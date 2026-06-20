@@ -410,6 +410,12 @@ public final class AuthManager: ObservableObject {
             // client report). The profile is not account-scoped, so logout is
             // the boundary where it must be reset.
             InspectorProfile.shared.clear()
+            // Custom templates are per-UID but held in a launch-time singleton;
+            // clear the in-memory list now so the next user can't observe the
+            // previous inspector's templates before the onChange reload fires
+            // (B-0096 sibling). The per-UID file is left in place for this user's
+            // own re-login; account deletion wipes it.
+            CustomTemplateStore.shared.clear()
         } catch {
             authErrorMessage = Self.friendlyMessage(for: error)
         }

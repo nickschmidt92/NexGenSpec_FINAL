@@ -708,6 +708,10 @@ struct AppSettingsView: View {
         // otherwise only cleared by AuthManager.logout(), a path the delete
         // flow never traverses (B-0073).
         InspectorProfile.shared.clear()
+        // Clear the per-UID custom templates held in the launch-time singleton
+        // (B-0096 sibling): the wipe removes the disk file; this drops the
+        // in-memory copy so it can't be observed before relaunch.
+        CustomTemplateStore.shared.clear()
         // finalizeDeletion releases the auth-state hold set by deleteAccount()
         // and flips isAuthenticated to false, triggering RootView to swap in
         // LoginView.

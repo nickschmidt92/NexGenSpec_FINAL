@@ -115,6 +115,13 @@ public final class InspectionStore: ObservableObject {
     }
 
     private func load() {
+        // Never load while an account-deletion wipe is in flight. The new
+        // onChange(currentUID→nil) during deletion would otherwise reload from
+        // the (pinned, being-wiped) namespace and repopulate metadataList — or
+        // its rebuild/backup branches could re-write inspections.json into the
+        // namespace being deleted (residual PII). beginWipe() already emptied the
+        // list; keep it empty until the wipe completes. (audit hardening)
+        guard !isWiping else { return }
         loadError = nil
         // Reset the gate every load so a later healthy launch — or a restored
         // backup via reloadFromDisk() — re-enables index writes automatically.
@@ -241,8 +248,15 @@ public final class InspectionStore: ObservableObject {
         }
     }
 
-    /// Reloads the inspection index from disk. Use after resolving load errors (e.g. restoring backup).
+    /// Reloads the inspection index from disk. Use after resolving load errors
+    /// (e.g. restoring backup) and on every account switch (B-0096).
     public func reloadFromDisk() {
+        // Cancel any pending debounced save first: it captured the PREVIOUS
+        // user's in-memory list, and if it fired after the account switch it
+        // would write that list into the new (or signed-out _nobody) namespace.
+        // Mirrors beginWipe()'s cancel. (audit hardening)
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
         load()
     }
 

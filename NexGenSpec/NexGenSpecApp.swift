@@ -75,6 +75,10 @@ struct NexGenSpecApp: App {
                         // residual-PII gap. clear() is @MainActor (we're in onAppear)
                         // and both wipes the in-memory singleton and persists empties.
                         InspectorProfile.shared.clear()
+                        // Per-UID custom templates held in the launch-time
+                        // singleton (B-0096 sibling) — drop the in-memory copy on
+                        // the recovery wipe path too.
+                        CustomTemplateStore.shared.clear()
                         // B-0096: if this interrupted deletion came from a
                         // PRE-fix build, its data is un-namespaced at the legacy
                         // shared root and the per-UID wipe above would miss it.
@@ -109,6 +113,10 @@ struct NexGenSpecApp: App {
                     // because a Sign in with Apple user can have a nil email.
                     SessionMigration.runIfNeeded()
                     store.reloadFromDisk()
+                    // Custom templates are ALSO per-UID and live in a launch-time
+                    // singleton — re-scope them on the same boundary so account B
+                    // never sees account A's custom templates (same bug class).
+                    CustomTemplateStore.shared.reload()
                 }
                 .onChange(of: authManager.currentUsername) { _, newEmail in
                     subscriptions.applyCurrentUser(email: newEmail)
