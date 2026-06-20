@@ -34,7 +34,13 @@ public final class InspectionStore: ObservableObject {
         }
         return heavyTemplateCache
     }
-    private let indexURL = FilePaths.inspectionsIndex
+    /// COMPUTED, never stored: the index path must follow the active user's
+    /// per-UID `appRoot` (B-0096). A stored `let` here froze the path to whatever
+    /// segment was active when the store was constructed (at launch = signed-out
+    /// `_nobody`), so after login every account read the SAME index file and saw
+    /// each other's inspections — the on-device cross-account leak. Computed, it
+    /// resolves to the current user's index on every read/write.
+    private var indexURL: URL { FilePaths.inspectionsIndex }
     /// Gates index writes after a failed load so a bad load can never overwrite a
     /// good primary/backup with an empty in-memory list. See `load()` (B-0044).
     private var didLoadSucceed = true
@@ -119,8 +125,13 @@ public final class InspectionStore: ObservableObject {
         // re-apply a stale finalized snapshot over freshly-loaded data.
         pendingFinalizedMetadata.removeAll()
 
+        // Resolve the per-UID paths ON the main actor (indexURL is now computed
+        // from the active user's appRoot) so the getter isn't re-evaluated on the
+        // ioQueue thread.
+        let primaryIndexURL = indexURL
+        let backupIndexURL = FilePaths.inspectionsIndexBackup
         let (primaryRead, backupRead): (IndexFileRead, IndexFileRead) = ioQueue.sync {
-            (Self.readIndexFile(indexURL), Self.readIndexFile(FilePaths.inspectionsIndexBackup))
+            (Self.readIndexFile(primaryIndexURL), Self.readIndexFile(backupIndexURL))
         }
 
         // Clean first launch: neither index nor backup exists.
@@ -275,16 +286,20 @@ public final class InspectionStore: ObservableObject {
                 }
             }
         }
+        // Resolve the per-UID paths on the main actor before handing off to the
+        // ioQueue, so a single save writes one consistent index path (B-0096).
+        let currentIndexURL = indexURL
+        let backupIndexURL = FilePaths.inspectionsIndexBackup
         try ioQueue.sync {
-            try FileSecurity.ensureProtectedDirectory(indexURL.deletingLastPathComponent())
+            try FileSecurity.ensureProtectedDirectory(currentIndexURL.deletingLastPathComponent())
             // Only copy the existing primary over the backup when it currently
             // DECODES — a corrupt primary must never clobber a still-good backup.
-            if let existing = try? Data(contentsOf: indexURL), Self.decodeIndexData(existing) != nil {
-                try? FileSecurity.copyProtectedItem(from: indexURL, to: FilePaths.inspectionsIndexBackup)
+            if let existing = try? Data(contentsOf: currentIndexURL), Self.decodeIndexData(existing) != nil {
+                try? FileSecurity.copyProtectedItem(from: currentIndexURL, to: backupIndexURL)
             }
             let index = MetadataIndex(schemaVersion: 1, metadata: snapshot)
             let data = try JSONEncoder().encode(index)
-            try FileSecurity.writeProtected(data, to: indexURL)
+            try FileSecurity.writeProtected(data, to: currentIndexURL)
         }
     }
 

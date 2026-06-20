@@ -2447,4 +2447,53 @@ final class B0096ScopingTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: legacyFile.path), "legacy un-namespaced file must be removed")
         XCTAssertTrue(fm.fileExists(atPath: survivorFile.path), "Users/<uid> namespaces must NOT be touched")
     }
+
+    /// On-device repro guard: ONE long-lived store, the active user changes, and
+    /// the index (the dashboard list) must follow the new user — not stay frozen
+    /// to the segment that was active when the store was constructed. A stored
+    /// (non-computed) `indexURL` froze it to the launch (signed-out) segment, so
+    /// after login every account read the SAME inspections.json and saw each
+    /// other's inspections. The earlier tests missed this because they built a
+    /// fresh store per case; this one mutates the UID on a live store + reloads.
+    @MainActor
+    func testLiveStoreIndexFollowsActiveUIDAcrossReload() throws {
+        let fm = FileManager.default
+        let uidA = "uid-A-\(UUID().uuidString)"
+        let uidB = "uid-B-\(UUID().uuidString)"
+        defer {
+            try? fm.removeItem(at: FilePaths.userRoot(uid: uidA))
+            try? fm.removeItem(at: FilePaths.userRoot(uid: uidB))
+        }
+
+        // Store is built while signed out — mirrors the real app (the store is a
+        // launch-time @StateObject, created before anyone logs in).
+        SessionScope.uidProvider = { nil }
+        let store = InspectionStore()
+
+        // Account A logs in → create an inspection.
+        SessionScope.uidProvider = { uidA }
+        store.reloadFromDisk()
+        let jobId = UUID()
+        let inspection = Inspection(
+            id: jobId, clientName: "A-ONLY", clientEmail: "", clientPhone: "",
+            propertyAddress: "1 A Street", inspectionDate: Date(),
+            inspectorName: "Inspector A", sections: []
+        )
+        store.insert(version: InspectionVersion(
+            id: jobId, versionNumber: 1, status: .draft,
+            finalizedAt: nil, locked: false, inspection: inspection
+        ))
+        XCTAssertEqual(store.metadataList.count, 1, "account A should see its own inspection")
+
+        // Account B logs in on the SAME store → must NOT see A's inspection.
+        SessionScope.uidProvider = { uidB }
+        store.reloadFromDisk()
+        XCTAssertTrue(store.metadataList.isEmpty,
+                      "account B must NOT see account A's inspections after login (B-0096 index-path leak)")
+
+        // Back to A → A's inspection returns (correct scoping, no data loss).
+        SessionScope.uidProvider = { uidA }
+        store.reloadFromDisk()
+        XCTAssertEqual(store.metadataList.count, 1, "account A's data must return on re-login")
+    }
 }
