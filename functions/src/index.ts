@@ -277,6 +277,11 @@ const SHARED_OPTIONS: HttpsOptions = {
   region: "us-central1",
   memory: "256MiB",
   timeoutSeconds: 30,
+  // Cap concurrent instances so a single authenticated caller (these endpoints
+  // are gated only by a Firebase ID token, not App Check) can't fan out toward
+  // the v2 1000-instance default and run up Functions + Apple DeviceCheck cost.
+  // 5 is ample for one solo-operator app's trial checks. (audit hardening)
+  maxInstances: 5,
   secrets: [
     APPLE_DEVICECHECK_KEY,
     APPLE_DEVICECHECK_KEY_ID,
@@ -333,10 +338,12 @@ export const getTrialStatus = onRequest(SHARED_OPTIONS, async (req, res) => {
     });
 
     if (result.kind === "rejected") {
+      // Log status only — NOT result.body. Apple's response text is
+      // attacker-influenceable and keyed here to a uid; keep it out of Cloud
+      // Logging. (audit hardening)
       logger.warn("Apple DeviceCheck query rejected", {
         uid: auth.uid,
         status: result.status,
-        body: result.body,
       });
       return send(res, 502, {
         error: "apple_devicecheck_rejected",
@@ -373,6 +380,10 @@ export const markTrialUsed = onRequest(SHARED_OPTIONS, async (req, res) => {
   try {
     const jwt = await getSignedJwt();
     const base = pickAppleBase(APPLE_DEVICECHECK_USE_SANDBOX.value());
+    // bit0 = "trial used". bit1 is RESERVED/unused — but Apple's update_two_bits
+    // writes both bits atomically, so it is always (re)set false here. If bit1
+    // ever carries state, switch this to a read-modify-write (query_two_bits
+    // first, preserve the existing bit1). (audit note)
     const body = buildUpdateBody({
       deviceToken: parsed.deviceCheckToken,
       bit0: true,
@@ -387,10 +398,10 @@ export const markTrialUsed = onRequest(SHARED_OPTIONS, async (req, res) => {
     });
 
     if (result.kind === "rejected") {
+      // Log status only — not result.body (see getTrialStatus). (audit hardening)
       logger.warn("Apple DeviceCheck update rejected", {
         uid: auth.uid,
         status: result.status,
-        body: result.body,
       });
       return send(res, 502, {
         error: "apple_devicecheck_rejected",
