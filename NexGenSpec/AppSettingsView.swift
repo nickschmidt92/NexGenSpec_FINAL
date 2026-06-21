@@ -236,6 +236,22 @@ struct AppSettingsView: View {
                     }
 
                     SettingsSectionCard(
+                        title: "Reports",
+                        subtitle: "Browse and re-share the report PDFs and ZIP backups you’ve exported. They stay on this device for your account."
+                    ) {
+                        NavigationLink {
+                            MyReportsView()
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "My Reports",
+                                subtitle: "Saved report PDFs and backups. Tap to share or save to Files.",
+                                systemImage: "folder.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    SettingsSectionCard(
                         title: "Legal",
                         subtitle: "Review the customer-facing legal text shown to inspection clients."
                     ) {
