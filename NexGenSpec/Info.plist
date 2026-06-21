@@ -25,11 +25,14 @@
 	<string>NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<!-- B-0045: File sharing stays ON, but the sensitive working store (inspections,
-	     photos, signatures, audit logs) now lives in Application Support, which is
-	     NOT exposed by these keys. Documents holds ONLY non-sensitive deliverables:
-	     NexGenSpecReports (report PDFs), NexGenSpecExports (ZIPs), NexGenSpecReceipts
-	     (deletion PDFs). Do NOT move app working data back into Documents. -->
+	<!-- B-0045 + deliverable-isolation fix: File sharing stays ON only so the user
+	     can Save a report to Files on demand via the share sheet. The app no longer
+	     auto-writes ANY data into Documents — inspections, photos, signatures, audit
+	     logs, exported ZIPs, report PDFs, AND deletion receipts all live in the
+	     private per-UID store under Application Support, which iOS does NOT surface
+	     in the Files app. Documents is intentionally empty. Do NOT move any app data
+	     (working store OR deliverables) back into Documents — it reopens the
+	     cross-account PII leak this closed. -->
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

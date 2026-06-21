@@ -73,27 +73,36 @@ public enum InspectionZIPExportService {
     public static func exportZIP(for version: InspectionVersion, watermark: Bool) async throws -> URL {
         let stagingRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("zip-staging-\(version.id.uuidString)", isDirectory: true)
-        if FileManager.default.fileExists(atPath: stagingRoot.path) {
-            try? FileManager.default.removeItem(at: stagingRoot)
-        }
-        try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
 
-        let imagesDir = stagingRoot.appendingPathComponent("images", isDirectory: true)
-        let videosDir = stagingRoot.appendingPathComponent("videos", isDirectory: true)
-        try FileSecurity.ensureProtectedDirectory(imagesDir)
-        try FileSecurity.ensureProtectedDirectory(videosDir)
+        // 1. Set up staging, render the canonical HTML, and copy the photo/video
+        //    assets — all OFF the main thread. This is the CPU/IO-heavy step (it
+        //    processes every photo) and would otherwise hang the UI for several
+        //    seconds on a photo-heavy inspection. The PDF render (step 2) must
+        //    stay on the main actor because it drives a WKWebView. Mirrors
+        //    ReportExportService.export's main/off-main split.
+        let htmlURL: URL = try await Task.detached(priority: .userInitiated) {
+            if FileManager.default.fileExists(atPath: stagingRoot.path) {
+                try? FileManager.default.removeItem(at: stagingRoot)
+            }
+            try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
 
-        // 1. Render canonical HTML with relative file paths so the bundled images
-        //    are reachable inside the ZIP.
-        let html = HTMLReportRenderer.renderHTML(
-            for: version,
-            imageFolderURL: imagesDir,
-            videosFolderURL: videosDir,
-            absoluteAssetFileURLs: false,
-            watermark: watermark
-        )
-        let htmlURL = stagingRoot.appendingPathComponent("report.html")
-        try Data(html.utf8).write(to: htmlURL, options: .atomic)
+            let imagesDir = stagingRoot.appendingPathComponent("images", isDirectory: true)
+            let videosDir = stagingRoot.appendingPathComponent("videos", isDirectory: true)
+            try FileSecurity.ensureProtectedDirectory(imagesDir)
+            try FileSecurity.ensureProtectedDirectory(videosDir)
+
+            // Relative file paths so the bundled images are reachable inside the ZIP.
+            let html = HTMLReportRenderer.renderHTML(
+                for: version,
+                imageFolderURL: imagesDir,
+                videosFolderURL: videosDir,
+                absoluteAssetFileURLs: false,
+                watermark: watermark
+            )
+            let url = stagingRoot.appendingPathComponent("report.html")
+            try Data(html.utf8).write(to: url, options: .atomic)
+            return url
+        }.value
 
         // 2. Generate the paginated PDF from the same HTML.
         let pdfTempURL = try await PDFReportRenderer.generatePDF(

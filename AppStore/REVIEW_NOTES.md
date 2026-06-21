@@ -87,7 +87,8 @@ Per Guideline 5.1.1(v), users can fully delete their account from within
 the app: Settings → Account → Delete Account. The flow requires
 reauthentication (password or Apple ID), then deletes the Firebase
 account, wipes all local inspection data, and generates a deletion
-receipt saved to the user's Files app for their records.
+receipt the user can save (via the system share sheet — to Files, Mail,
+etc.) for their records.
 
 ---
 

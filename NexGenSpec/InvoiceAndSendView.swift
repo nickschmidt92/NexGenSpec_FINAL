@@ -32,14 +32,17 @@ struct InvoiceAndSendView: View {
     @State private var invoiceSentAt: Date?
     @State private var invoicePaidAt: Date?
 
-    private var sentAtKey: String { "invoice.sentAt.\(version.inspection.inspectionId)" }
-    private var paidAtKey: String { "invoice.paidAt.\(version.inspection.inspectionId)" }
+    // Keys are per-UID scoped via InspectionFlags.scopedKey so one account's
+    // invoice state is isolated from — and preserved separately from — another's
+    // on a shared device (matches the on-disk per-UID store).
+    private var sentAtKey: String { InspectionFlags.scopedKey("invoice.sentAt.\(version.inspection.inspectionId)") }
+    private var paidAtKey: String { InspectionFlags.scopedKey("invoice.paidAt.\(version.inspection.inspectionId)") }
     // The dollar amounts + services text are persisted per-inspection too, so a
     // pane switch doesn't lose them and a locked Resend re-sends the SAME invoice
     // the client received rather than a blank one (T-01440).
-    private var priceKey: String { "invoice.price.\(version.inspection.inspectionId)" }
-    private var servicesKey: String { "invoice.services.\(version.inspection.inspectionId)" }
-    private var totalKey: String { "invoice.total.\(version.inspection.inspectionId)" }
+    private var priceKey: String { InspectionFlags.scopedKey("invoice.price.\(version.inspection.inspectionId)") }
+    private var servicesKey: String { InspectionFlags.scopedKey("invoice.services.\(version.inspection.inspectionId)") }
+    private var totalKey: String { InspectionFlags.scopedKey("invoice.total.\(version.inspection.inspectionId)") }
 
     /// Once the invoice has been emailed to the client, the dollar amounts and
     /// services description are locked. Editing them after send would let the
