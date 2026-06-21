@@ -1,3 +1,12 @@
+# Secrets — never commit service-account / admin-SDK / OAuth-client keys or .env
+# (the committed GoogleService-Info.plist is client config and is fine; these
+# guard the genuinely-sensitive files). (audit hardening)
+**/serviceAccount*.json
+**/*-firebase-adminsdk-*.json
+**/client_secret*.json
+.env
+.env.*
+
 # Apple
 .DS_Store
 *.xcuserstate
