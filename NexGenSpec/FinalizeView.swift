@@ -143,6 +143,7 @@ struct FinalizeView: View {
     /// bug). Post-finalize navigation is now owned by `onFinalize` (presents the
     /// Invoice & Send cover + sets the iPad detail pane), so we must stay put.
     private func finalize() {
+        Haptics.success()
         onFinalize(version)
     }
 }

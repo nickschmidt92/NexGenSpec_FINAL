@@ -487,6 +487,7 @@ struct InspectionView: View {
             let url = try await InspectionZIPExportService.exportZIP(for: draft, watermark: !subscriptions.hasFeatureAccess)
             exportZIPURL = url
             showExportShareSheet = true
+            Haptics.success()
         } catch {
             Diagnostics.logError(context: "Inspection ZIP export failed", error: error)
             exportZIPError = error.localizedDescription
