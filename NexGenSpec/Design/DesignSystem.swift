@@ -26,6 +26,10 @@ enum AppFont {
     static let title2 = Font.system(.title2, design: .rounded).weight(.bold)
     static let title3 = Font.system(.title3, design: .rounded).weight(.semibold)
     static let headline = Font.system(.headline, design: .rounded).weight(.semibold)
+    /// Uppercase section/eyebrow label — pair with `.textCase(.uppercase).tracking(0.9)`.
+    static let eyebrow = Font.system(.caption, design: .rounded).weight(.semibold)
+    /// Instrument readouts (measurements, IDs, serials, timestamps). Add `.monospacedDigit()` on numeric values.
+    static let mono = Font.system(.callout, design: .monospaced).weight(.medium)
     static let body = Font.body
     static let callout = Font.callout
     static let subheadline = Font.subheadline
@@ -36,9 +40,12 @@ enum AppFont {
 /// Semantic colors. Adapts to light/dark; high contrast when enabled.
 enum AppColor {
     // MARK: Brand colors (fixed, not adaptive)
-    static let brandNavy = Color(red: 0.08, green: 0.09, blue: 0.17)
-    static let brandBlue = Color(red: 0.12, green: 0.43, blue: 0.96)
-    static let brandCyan = Color(red: 0.15, green: 0.82, blue: 0.93)
+    static let brandNavy = Color(red: 0.06, green: 0.08, blue: 0.15)      // #0F1426
+    static let brandNavyHi = Color(red: 0.10, green: 0.13, blue: 0.24)    // #1A213D — gradient top step
+    static let brandBlue = Color(red: 0.04, green: 0.29, blue: 0.78)      // #0A4AC7 — deep cobalt hero (white text ~6:1, AA)
+    static let brandBlueDeep = Color(red: 0.03, green: 0.16, blue: 0.45)  // #082873 — button bottom stop / dark canvas
+    static let brandBlueOnDark = Color(red: 0.30, green: 0.55, blue: 1.0) // #4D8CFF — cobalt text/icons on navy
+    static let brandCyan = Color(red: 0.16, green: 0.78, blue: 0.92)      // #29C7EB
 
     // MARK: Semantic surface colors (adaptive light/dark)
     static let background = Color(uiColor: .systemGroupedBackground)
@@ -48,20 +55,41 @@ enum AppColor {
     static let secondaryText = Color(uiColor: .secondaryLabel)
     static let tertiaryText = Color(uiColor: .tertiaryLabel)
     static let separator = Color(uiColor: .separator)
-    static let border = Color.primary.opacity(0.12)
+    /// Hairline "machined" edge — faint cobalt in light, faint white in dark.
+    static let border = Color(uiColor: UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.08)
+            : UIColor(red: 0.04, green: 0.29, blue: 0.78, alpha: 0.10)
+    })
     static let cardBackground = elevatedSurface
-    static let cardShadow = Color.black.opacity(0.08)
+    static let cardShadow = Color.black.opacity(0.06)
+    /// Atmospheric canvas top stop (cobalt-tinted); paired with `background` at the bottom.
+    static let canvasTop = Color(uiColor: UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(red: 0.043, green: 0.059, blue: 0.110, alpha: 1) // #0B0F1C
+            : UIColor(red: 0.957, green: 0.965, blue: 0.984, alpha: 1) // #F4F6FB
+    })
 
     // MARK: Accent and status colors
-    static let accent = brandBlue
-    /// Deep accent for text/icons — adapts to light/dark automatically.
-    static let accentDeep = accent
-    /// Soft accent for tinted backgrounds — adapts via system tint.
-    static let accentSoft = accent.opacity(0.15)
-    static let highlight = Color(red: 0.95, green: 0.73, blue: 0.29)
-    static let success = Color(red: 0.19, green: 0.53, blue: 0.35)
-    static let warning = Color(red: 0.86, green: 0.57, blue: 0.18)
-    static let critical = Color(red: 0.72, green: 0.23, blue: 0.26)
+    /// Cobalt action color, legible in BOTH modes: #0A4AC7 light, #2E6BFF dark.
+    /// Dynamic provider (NOT `.opacity`) so text/icon tints adapt instead of going muddy.
+    static let actionBlue = Color(uiColor: UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(red: 0.18, green: 0.42, blue: 1.0, alpha: 1)   // #2E6BFF
+            : UIColor(red: 0.04, green: 0.29, blue: 0.78, alpha: 1)  // #0A4AC7
+    })
+    static let accent = actionBlue
+    static let accentDeep = actionBlue
+    /// Soft tint for pills/chips — dynamic alpha so it never goes muddy gray on navy.
+    static let accentSoft = Color(uiColor: UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(red: 0.18, green: 0.42, blue: 1.0, alpha: 0.22)
+            : UIColor(red: 0.04, green: 0.29, blue: 0.78, alpha: 0.12)
+    })
+    static let highlight = Color(red: 0.95, green: 0.78, blue: 0.20)  // #F2C733 gold — near-black text only
+    static let success = Color(red: 0.16, green: 0.50, blue: 0.33)    // #298054
+    static let warning = Color(red: 0.90, green: 0.45, blue: 0.10)    // #E6731A construction orange
+    static let critical = Color(red: 0.74, green: 0.18, blue: 0.20)   // #BD2E33
 
     static let safety = critical
     static let major = warning
@@ -107,7 +135,7 @@ enum AppColor {
 
     static var brandPanelGradient: LinearGradient {
         LinearGradient(
-            colors: [brandNavy, Color(red: 0.11, green: 0.12, blue: 0.23)],
+            colors: [brandNavy, brandBlueDeep],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -141,9 +169,16 @@ struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(Spacing.md)
-            .background(AppColor.elevatedSurface)
+            .background(
+                LinearGradient(colors: [AppColor.brandBlue.opacity(0.04), AppColor.elevatedSurface],
+                               startPoint: .top, endPoint: .bottom)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: AppColor.cardShadow, radius: 6, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(AppColor.border, lineWidth: 1)   // machined edge
+            )
+            .shadow(color: AppColor.cardShadow, radius: 10, x: 0, y: 4)
     }
 }
 
@@ -180,10 +215,18 @@ struct AppPrimaryButtonStyle: ButtonStyle {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.xs)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppColor.brandBlue)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(LinearGradient(colors: [AppColor.brandBlue, AppColor.brandBlueDeep],
+                                             startPoint: .top, endPoint: .bottom))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), .clear],
+                                                     startPoint: .top, endPoint: .bottom), lineWidth: 1)
+                }
             )
-            .opacity(configuration.isPressed ? 0.85 : 1)
+            .shadow(color: AppColor.brandBlue.opacity(0.35), radius: 8, x: 0, y: 3)  // backlit-key glow
+            .opacity(configuration.isPressed ? 0.90 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .hoverEffect(.lift)   // Apple Pencil hover preview on iPad
@@ -194,13 +237,17 @@ struct AppSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(AppFont.headline)
-            .foregroundStyle(AppColor.accent)
+            .foregroundStyle(AppColor.actionBlue)
             .frame(maxWidth: .infinity, minHeight: TouchTarget.minHeight)
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.xs)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(AppColor.accent.opacity(0.1))
+                    .fill(AppColor.accentSoft)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(AppColor.actionBlue.opacity(0.30), lineWidth: 1)
+                    )
             )
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
@@ -235,7 +282,8 @@ struct AppScreenBackground<Content: View>: View {
 
     var body: some View {
         ZStack {
-            AppColor.background
+            LinearGradient(colors: [AppColor.canvasTop, AppColor.background],
+                           startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
             content
