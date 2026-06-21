@@ -22,7 +22,6 @@ struct InvoiceAndSendView: View {
     @State private var exportedPDFURL: URL?
     @State private var mailUnavailableAlert = false
     @State private var showExportError = false
-    @State private var showPaywall = false
     @State private var showLargePDFWarning = false
     @State private var ccBuyersAgent: Bool = false
     @State private var ccListingAgent: Bool = false
@@ -218,10 +217,6 @@ struct InvoiceAndSendView: View {
                 ProgressView(value: exportService.progress)
                     .padding()
             }
-        }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-                .environmentObject(subscriptions)
         }
         .alert("Large PDF", isPresented: $showLargePDFWarning) {
             Button("Send Anyway") {

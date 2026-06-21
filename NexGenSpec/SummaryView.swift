@@ -33,7 +33,6 @@ struct SummaryView: View {
                 .background(AppColor.surface)
                 .cornerRadius(8)
                 .padding(.horizontal)
-                .onChange(of: searchText) { _, _ in }
             List(filteredDefects()) { record in
                 Button {
                     // Tap → jump into the containing section. This

@@ -2551,3 +2551,63 @@ final class B0096CustomTemplateScopingTests: XCTestCase {
                       "account A's custom template must return on reload")
     }
 }
+
+/// Audit fix — the free-trial counter must advance only when an inspection was
+/// actually created. `createNewInspection` now reports success so the caller can
+/// gate `recordInspectionCreated()`.
+@MainActor
+final class CreateInspectionSuccessSignalTests: XCTestCase {
+
+    func testReturnsFalseWhenInspectorNotConfirmed() {
+        let store = InspectionStore()
+        let created = store.createNewInspection(
+            clientName: "C", clientEmail: "", clientPhone: "",
+            propertyAddress: "1 Unconfirmed St", inspectorName: "I",
+            inspectorConfirmed: false
+        )
+        XCTAssertFalse(created, "must not create (nor burn a trial slot) when the inspector isn't confirmed")
+    }
+
+    func testReturnsTrueAndInsertsOnSuccess() {
+        let store = InspectionStore()
+        let before = store.metadataList.count
+        let created = store.createNewInspection(
+            clientName: "C", clientEmail: "", clientPhone: "",
+            propertyAddress: "1 Success St", inspectorName: "I",
+            inspectorConfirmed: true
+        )
+        XCTAssertTrue(created)
+        XCTAssertEqual(store.metadataList.count, before + 1)
+        if let id = store.metadataList.first?.id { _ = store.deleteVersion(id: id) }
+    }
+}
+
+/// Audit fix [5.1.1(v)] — Account Deletion must sweep report/PDF/ZIP staging
+/// artifacts from the temp directory regardless of age (they carry client PII
+/// and live outside appRoot, so the disk wipe never reaches them).
+final class TempExportCleanupTests: XCTestCase {
+
+    func testRemoveAllTempExportsClearsFreshPIIArtifactsButLeavesUnrelatedFiles() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory
+        let report = tmp.appendingPathComponent("report-\(UUID().uuidString)", isDirectory: true)
+        let pdf = tmp.appendingPathComponent("pdf-\(UUID().uuidString)", isDirectory: true)
+        let zip = tmp.appendingPathComponent("zip-staging-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: report, withIntermediateDirectories: true)
+        try fm.createDirectory(at: pdf, withIntermediateDirectories: true)
+        try fm.createDirectory(at: zip, withIntermediateDirectories: true)
+        let unrelated = tmp.appendingPathComponent("KEEP-\(UUID().uuidString).txt")
+        try Data("keep".utf8).write(to: unrelated)
+        defer {
+            try? fm.removeItem(at: report); try? fm.removeItem(at: pdf)
+            try? fm.removeItem(at: zip); try? fm.removeItem(at: unrelated)
+        }
+
+        ReportExportService.removeAllTempExports()
+
+        XCTAssertFalse(fm.fileExists(atPath: report.path), "fresh report-* staging must be swept on deletion")
+        XCTAssertFalse(fm.fileExists(atPath: pdf.path), "fresh pdf-* staging must be swept on deletion")
+        XCTAssertFalse(fm.fileExists(atPath: zip.path), "fresh zip-staging-* must be swept on deletion")
+        XCTAssertTrue(fm.fileExists(atPath: unrelated.path), "unrelated temp files must be left untouched")
+    }
+}

@@ -391,7 +391,7 @@ struct DashboardView: View {
                             showNewInspectionSheet = false
                             showTemplateError = true
                         } else {
-                            store.createNewInspection(
+                            let created = store.createNewInspection(
                                 clientName:      newClientName,
                                 clientEmail:    newClientEmail,
                                 clientPhone:    newClientPhone,
@@ -401,7 +401,12 @@ struct DashboardView: View {
                                 inspectionDate:  newInspectionDate,
                                 customTemplateId: selectedTemplateId
                             )
-                            subscriptions.recordInspectionCreated()
+                            // Only burn a free-trial slot when an inspection was
+                            // actually created — a silent failure (template load,
+                            // locked device) must not advance the counter (audit finding).
+                            if created {
+                                subscriptions.recordInspectionCreated()
+                            }
                             showNewInspectionSheet = false
                         }
                     }
