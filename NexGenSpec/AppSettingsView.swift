@@ -658,6 +658,14 @@ struct AppSettingsView: View {
             finishLocalWipeAndDismiss()
             return
         }
+        // B-0096: pin this user's UID so the local wipe — which runs AFTER
+        // Firebase has already cleared `currentUser` (deleteAccount completed
+        // above) — still resolves `appRoot` to the DELETED user's per-UID
+        // namespace, and keeps doing so across a force-quit relaunch (the pin is
+        // persisted). Without this the wipe would target the signed-out segment
+        // and leave the user's inspections/PII on disk (5.1.1(v)). Released in
+        // finishLocalWipeAndDismiss once the wipe finishes.
+        SessionScope.pin(snapshot.firebaseUID)
         AuditLog.log(event: "Account deletion receipt requested for \(snapshot.firebaseUID)")
         do {
             let receiptURL = try AccountDeletionReceiptService.generateReceipt(snapshot)
@@ -687,6 +695,9 @@ struct AppSettingsView: View {
             // Retry guard cleared only AFTER the wipe actually completes, so an
             // interrupted background wipe still retries on next launch (T-01412).
             UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
+            // B-0096: release the per-UID deletion pin now the namespace is
+            // wiped, so `appRoot` reverts to the live (signed-out) segment.
+            SessionScope.unpin()
         }
         // Wipe the device-local inspector profile (name, company, license,
         // phone, email + logo) as part of account deletion. Apple 5.1.1(v)
@@ -697,6 +708,10 @@ struct AppSettingsView: View {
         // otherwise only cleared by AuthManager.logout(), a path the delete
         // flow never traverses (B-0073).
         InspectorProfile.shared.clear()
+        // Clear the per-UID custom templates held in the launch-time singleton
+        // (B-0096 sibling): the wipe removes the disk file; this drops the
+        // in-memory copy so it can't be observed before relaunch.
+        CustomTemplateStore.shared.clear()
         // finalizeDeletion releases the auth-state hold set by deleteAccount()
         // and flips isAuthenticated to false, triggering RootView to swap in
         // LoginView.

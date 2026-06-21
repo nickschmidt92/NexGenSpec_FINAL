@@ -81,12 +81,33 @@ final class CustomTemplateStore: ObservableObject {
 
     @Published private(set) var templates: [CustomTemplate] = []
 
-    private let fileURL: URL = {
+    /// COMPUTED, never stored: the templates file must follow the active user's
+    /// per-UID `appRoot` (B-0096). A stored `let` here froze the path to the
+    /// segment active at first `.shared` access (typically signed-out `_nobody`
+    /// at launch), so custom templates — authored section/item titles + contractor
+    /// tags — leaked across accounts on a shared device and survived Account
+    /// Deletion. Same class as the InspectionStore.indexURL bug. Computed, it
+    /// resolves to the current user's file on every load/save.
+    private var fileURL: URL {
         FilePaths.appRoot.appendingPathComponent("custom_templates.json", isDirectory: false)
-    }()
+    }
 
     private init() {
         load()
+    }
+
+    /// Re-reads templates from the CURRENT user's namespace. Called from
+    /// `NexGenSpecApp`'s `onChange(of: currentUID)` on every login / logout /
+    /// account switch, alongside `InspectionStore.reloadFromDisk()`, so account B
+    /// never observes account A's in-memory templates.
+    func reload() {
+        load()
+    }
+
+    /// Clears the in-memory list (e.g. on logout / account deletion) so the
+    /// previous user's templates can't be observed before the next reload.
+    func clear() {
+        templates = []
     }
 
     // MARK: - CRUD
@@ -149,9 +170,13 @@ final class CustomTemplateStore: ObservableObject {
     // MARK: - Persistence
 
     private func load() {
+        // MUST reset to [] when the current user has no file — otherwise a reload
+        // after an account switch would keep the previous user's in-memory list
+        // (the cross-account leak). `fileURL` is resolved fresh per call.
         guard FileManager.default.fileExists(atPath: fileURL.path),
               let data = try? Data(contentsOf: fileURL),
               let decoded = try? JSONDecoder().decode([CustomTemplate].self, from: data) else {
+            templates = []
             return
         }
         templates = decoded

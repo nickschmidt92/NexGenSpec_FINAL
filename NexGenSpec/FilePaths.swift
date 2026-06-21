@@ -25,12 +25,41 @@ enum FilePaths {
         return url
     }
 
-    /// Root of the private working store (inspections, photos, signatures, audit
-    /// logs, index). Lives in Application Support so it is never browsable via
-    /// the Files app or USB file sharing (B-0045). Every other path here derives
-    /// from `appRoot`, so they all move with it.
-    static var appRoot: URL {
+    /// Name of the per-user container directory that holds every account's
+    /// namespace. Sits inside `legacySharedRoot`; skipped by the B-0096 migration.
+    static let usersContainerName = "Users"
+
+    /// The pre-B-0096 shared root: `Application Support/NexGenSpec`. Before B-0096
+    /// every account read and wrote the working store here, which leaked one
+    /// user's inspections/PII to the next user on a shared device. Retained ONLY
+    /// so `SessionMigration` can find legacy data and move it under the active
+    /// user, and so an interrupted pre-fix account deletion can still be cleaned
+    /// up. New code must use `appRoot`, never this.
+    static var legacySharedRoot: URL {
         applicationSupportDirectory.appendingPathComponent("NexGenSpec", isDirectory: true)
+    }
+
+    /// Container holding all per-user namespaces: `…/NexGenSpec/Users`.
+    static var usersContainer: URL {
+        legacySharedRoot.appendingPathComponent(usersContainerName, isDirectory: true)
+    }
+
+    /// The private working-store root for an explicit Firebase UID:
+    /// `…/NexGenSpec/Users/<uid>`. Used by paths that must target a specific user
+    /// regardless of who is currently signed in (e.g. capturing a deletion target).
+    static func userRoot(uid: String) -> URL {
+        usersContainer.appendingPathComponent(uid, isDirectory: true)
+    }
+
+    /// Root of the private working store (inspections, photos, signatures, audit
+    /// logs, index) for the CURRENTLY-active user. Lives in Application Support so
+    /// it is never browsable via the Files app or USB file sharing (B-0045), and
+    /// is namespaced per Firebase UID so accounts never share data on one device
+    /// (B-0096). Every other path here derives from `appRoot`, so they all move
+    /// with the active user. See `SessionScope.currentSegment` for how the active
+    /// segment (signed-in UID / deletion pin / signed-out sentinel) is resolved.
+    static var appRoot: URL {
+        usersContainer.appendingPathComponent(SessionScope.currentSegment, isDirectory: true)
     }
 
     /// One-time cleanup (B-0045): the working store and company logo used to live
