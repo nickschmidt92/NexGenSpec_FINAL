@@ -146,13 +146,18 @@ public enum InspectionZIPExportService {
         SHA-256 (canonical inspection JSON, captured at finalization):
         \(hash.isEmpty ? "(unavailable — version not finalized)" : hash)
 
+        Scope: this hash seals the inspection's recorded DATA — findings, notes,
+        severities, and metadata (the canonical JSON). The bundled photos, videos,
+        and signature images are included exactly as captured at finalization, but
+        are not individually covered by this hash.
+
         How to verify:
         1. Open report.pdf or report.html. The hash printed in the footer must
            match the value above.
         2. To verify against the canonical record, send the Report ID and hash
            to contact@nexgenspec.com — we will confirm the report was generated
-           by NexGenSpec and that no edits were made to the inspection data
-           after finalization.
+           by NexGenSpec and that the inspection data was not altered after
+           finalization.
         """
         try Data(integrityText.utf8).write(
             to: stagingRoot.appendingPathComponent("integrity.txt"),

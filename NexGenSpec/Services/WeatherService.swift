@@ -188,7 +188,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         Task { @MainActor in
             // Coordinates rounded to ~2 decimals (~1km) so the log confirms a
             // sane fix without recording precise location.
-            log.info("Location received: ~\(location.coordinate.latitude, format: .fixed(precision: 2), privacy: .public), ~\(location.coordinate.longitude, format: .fixed(precision: 2), privacy: .public) (accuracy \(location.horizontalAccuracy, format: .fixed(precision: 0), privacy: .public)m)")
+            log.info("Location received: ~\(location.coordinate.latitude, format: .fixed(precision: 2), privacy: .private), ~\(location.coordinate.longitude, format: .fixed(precision: 2), privacy: .private) (accuracy \(location.horizontalAccuracy, format: .fixed(precision: 0), privacy: .public)m)")
             await fetchWeather(at: location)
         }
     }
