@@ -355,8 +355,9 @@ final class LegacyStorageCleanupTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: otherFolderFile.path), "cleanup deleted an unrelated folder")
     }
 
-    /// The Files-app mirror publishes the PDF only — never raw inspection data —
-    /// and into Documents (the deliverables area), not the private app root.
+    /// The report mirror publishes the PDF only — never raw inspection data —
+    /// into the per-UID private store under `appRoot`, NEVER the file-shared
+    /// Documents directory (the cross-account PII leak this closes).
     func testFilesAppPublisherPublishesPdfOnlyNoRawData() throws {
         let fm = FileManager.default
         let jobId = UUID()
@@ -376,12 +377,15 @@ final class LegacyStorageCleanupTests: XCTestCase {
         defer { if let folder { try? fm.removeItem(at: folder) } }
 
         let unwrapped = try XCTUnwrap(folder)
-        XCTAssertTrue(unwrapped.path.contains("NexGenSpecReports"))
-        XCTAssertTrue(unwrapped.standardizedFileURL.path.hasPrefix(FilePaths.documentDirectory.standardizedFileURL.path))
+        XCTAssertTrue(unwrapped.standardizedFileURL.path.hasPrefix(FilePaths.appRoot.standardizedFileURL.path),
+                      "published report must live under the private per-UID appRoot")
+        XCTAssertFalse(unwrapped.standardizedFileURL.path.hasPrefix(FilePaths.documentDirectory.standardizedFileURL.path),
+                       "published report must NOT be in the file-shared Documents directory")
+        XCTAssertEqual(unwrapped.deletingLastPathComponent().lastPathComponent, "Reports")
         XCTAssertTrue(fm.fileExists(atPath: unwrapped.appendingPathComponent("Inspection_Report.pdf").path),
                       "published PDF missing")
         XCTAssertFalse(fm.fileExists(atPath: unwrapped.appendingPathComponent("_data").path),
-                       "raw _data was mirrored into the file-shared folder")
+                       "raw _data was mirrored into the published folder")
     }
 }
 
@@ -1876,16 +1880,19 @@ final class AccountDeletionReceiptServiceTests: XCTestCase {
     }
 
     func testReceiptFolderIsOutsideAppRoot() {
-        // Receipt PDFs MUST live outside FilePaths.appRoot so they survive
-        // store.clearAllLocalData() and remain reachable from the Files app
-        // for the user's permanent record. Verify by checking the parent —
-        // a string-prefix check fails here because "NexGenSpec" is a prefix
-        // of "NexGenSpecReceipts" though they are siblings, not nested.
+        // Receipt PDFs MUST live OUTSIDE FilePaths.appRoot so they survive
+        // store.clearAllLocalData() (the receipt outlives the wipe it documents),
+        // AND outside the file-shared Documents directory so a previous account's
+        // email / recovery-email / UID is never browsable by the next inspector.
         let receipt = AccountDeletionReceiptService.receiptFolder
         XCTAssertEqual(receipt.deletingLastPathComponent().standardizedFileURL,
-                       FilePaths.documentDirectory.standardizedFileURL,
-                       "Receipt folder must be a sibling of appRoot under Documents/")
+                       FilePaths.applicationSupportDirectory.standardizedFileURL,
+                       "Receipt folder must live directly under Application Support")
         XCTAssertEqual(receipt.lastPathComponent, "NexGenSpecReceipts")
+        XCTAssertFalse(receipt.standardizedFileURL.path.hasPrefix(FilePaths.documentDirectory.standardizedFileURL.path),
+                       "Receipt folder must NOT be in the file-shared Documents directory")
+        XCTAssertFalse(receipt.standardizedFileURL.path.hasPrefix(FilePaths.appRoot.standardizedFileURL.path),
+                       "Receipt folder must NOT be under appRoot (it must survive the Delete Account wipe)")
     }
 
     func testGenerateReceiptCreatesPDFInCanonicalFolder() throws {
@@ -1939,17 +1946,19 @@ final class AccountDeletionReceiptServiceTests: XCTestCase {
 
 final class InspectionZIPExportServiceTests: XCTestCase {
 
-    func testExportFolderIsOutsideAppRoot() {
-        // ZIP exports MUST live outside FilePaths.appRoot — they are the
-        // user's deliverable for client handoff and 5-year retention, so
-        // a Delete Account wipe should not nuke previously-exported reports.
-        // Verify by parent-equality (string prefix gives a false negative
-        // since "NexGenSpec" is a prefix of "NexGenSpecExports").
+    func testExportFolderIsUnderAppRootNotFileShared() {
+        // ZIP exports now live UNDER FilePaths.appRoot in the per-UID private
+        // store — NOT the file-shared Documents directory — so one account's
+        // client-PII bundles are never browsable by the next inspector on a
+        // shared device. They persist across logout and are removed only by the
+        // Account Deletion appRoot wipe (which is what the owner asked for:
+        // logout preserves, only Delete Account deletes).
         let exports = InspectionZIPExportService.exportFolder
-        XCTAssertEqual(exports.deletingLastPathComponent().standardizedFileURL,
-                       FilePaths.documentDirectory.standardizedFileURL,
-                       "Export folder must be a sibling of appRoot under Documents/")
-        XCTAssertEqual(exports.lastPathComponent, "NexGenSpecExports")
+        XCTAssertTrue(exports.standardizedFileURL.path.hasPrefix(FilePaths.appRoot.standardizedFileURL.path),
+                      "Export folder must live under the private per-UID appRoot")
+        XCTAssertFalse(exports.standardizedFileURL.path.hasPrefix(FilePaths.documentDirectory.standardizedFileURL.path),
+                       "Export folder must NOT be in the file-shared Documents directory")
+        XCTAssertEqual(exports.lastPathComponent, "Exports")
     }
 
     @MainActor
@@ -2005,10 +2014,78 @@ final class InspectionZIPExportServiceTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: zipURL.path))
         XCTAssertEqual(zipURL.pathExtension, "zip")
-        XCTAssertTrue(zipURL.path.contains("/NexGenSpecExports/"))
+        XCTAssertTrue(zipURL.path.contains("/Exports/"))
+        XCTAssertTrue(zipURL.standardizedFileURL.path.hasPrefix(FilePaths.appRoot.standardizedFileURL.path),
+                      "exported ZIP must live under the private per-UID appRoot, not Documents")
 
         let size = (try? FileManager.default.attributesOfItem(atPath: zipURL.path)[.size] as? NSNumber)?.intValue ?? 0
         XCTAssertGreaterThan(size, 1000, "ZIP archive should be more than a few bytes — got \(size)")
+    }
+}
+
+// MARK: - Cross-account deliverable isolation (PII leak fix)
+
+/// Locks in the fix for the cross-account PII leak: NONE of the three deliverable
+/// trees (exported ZIPs, mirrored report PDFs, deletion receipts) may live in the
+/// file-shared Documents directory, and the one-time legacy sweep removes only the
+/// app's own old exposed copies.
+final class DeliverableIsolationTests: XCTestCase {
+
+    func testNoDeliverableTreeLivesInFileSharedDocuments() {
+        let docs = FilePaths.documentDirectory.standardizedFileURL.path
+
+        // ZIP exports + mirrored PDFs are under the private per-UID appRoot.
+        XCTAssertFalse(InspectionZIPExportService.exportFolder.standardizedFileURL.path.hasPrefix(docs),
+                       "exported ZIPs (full client PII) must not be in file-shared Documents")
+        XCTAssertTrue(InspectionZIPExportService.exportFolder.standardizedFileURL.path
+                        .hasPrefix(FilePaths.appRoot.standardizedFileURL.path))
+
+        let jobId = UUID()
+        let sample = Inspection(id: jobId, clientName: "Leak Check", clientEmail: "", clientPhone: "",
+                                propertyAddress: "1 Privacy Ln", inspectionDate: Date(),
+                                inspectorName: "Insp", sections: [])
+        let publishedFolder = FilesAppPublisher.publishedFolderURL(for: sample, jobId: jobId)
+        XCTAssertFalse(publishedFolder.standardizedFileURL.path.hasPrefix(docs),
+                       "mirrored report PDFs must not be in file-shared Documents")
+        XCTAssertTrue(publishedFolder.standardizedFileURL.path
+                        .hasPrefix(FilePaths.appRoot.standardizedFileURL.path))
+
+        // Deletion receipts are outside Documents AND outside appRoot (must survive
+        // the wipe) — i.e. directly under Application Support.
+        XCTAssertFalse(AccountDeletionReceiptService.receiptFolder.standardizedFileURL.path.hasPrefix(docs),
+                       "deletion receipts (email + recovery email + UID) must not be in file-shared Documents")
+        XCTAssertFalse(AccountDeletionReceiptService.receiptFolder.standardizedFileURL.path
+                        .hasPrefix(FilePaths.appRoot.standardizedFileURL.path),
+                       "deletion receipts must survive the Delete Account appRoot wipe")
+    }
+
+    func testCleanupLegacyDocumentsDeliverablesRemovesOnlyAppsOwnExposedCopies() throws {
+        let fm = FileManager.default
+        let docs = FilePaths.documentDirectory
+
+        let legacyExports = docs.appendingPathComponent("NexGenSpecExports", isDirectory: true)
+        let legacyReports = docs.appendingPathComponent("NexGenSpecReports", isDirectory: true)
+        let legacyReceipts = docs.appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
+        // An unrelated user file in Documents that the sweep must never touch.
+        let unrelated = docs.appendingPathComponent("user-keepsake-\(UUID().uuidString).txt", isDirectory: false)
+
+        for folder in [legacyExports, legacyReports, legacyReceipts] {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data("pii".utf8).write(to: folder.appendingPathComponent("leak.pdf"))
+        }
+        try Data("keep me".utf8).write(to: unrelated)
+        addTeardownBlock {
+            for url in [legacyExports, legacyReports, legacyReceipts, unrelated] {
+                try? fm.removeItem(at: url)
+            }
+        }
+
+        FilePaths.cleanupLegacyDocumentsDeliverables()
+
+        XCTAssertFalse(fm.fileExists(atPath: legacyExports.path), "legacy exposed exports not removed")
+        XCTAssertFalse(fm.fileExists(atPath: legacyReports.path), "legacy exposed reports not removed")
+        XCTAssertFalse(fm.fileExists(atPath: legacyReceipts.path), "legacy exposed receipts not removed")
+        XCTAssertTrue(fm.fileExists(atPath: unrelated.path), "sweep deleted an unrelated user file")
     }
 }
 

@@ -53,8 +53,9 @@ struct AppSettingsView: View {
     // the receipt is deliverable even if iOS Mail isn't configured (e.g.
     // Yahoo-only users). The share sheet auto-detects installed Mail apps
     // (Yahoo Mail / Gmail / Outlook), AirDrop, Messages, Files, etc., and the
-    // receipt PDF is also saved at Documents/NexGenSpecReceipts/ as a
-    // permanent record regardless of how the user delivers it.
+    // receipt PDF is also saved at Application Support/NexGenSpecReceipts/ (a
+    // private, non-file-shared location) as a permanent record regardless of how
+    // the user delivers it.
     @State private var showDeletionReceiptShareSheet = false
     @State private var pendingDeletionReceiptURL: URL?
     @State private var pendingDeletionReceiptBody: String = ""
@@ -644,7 +645,8 @@ struct AppSettingsView: View {
     /// configured, leading to silently-undelivered receipts. The local wipe
     /// only runs AFTER the share sheet dismisses, so the receipt PDF is
     /// reachable for attachment. The PDF is also saved at
-    /// Documents/NexGenSpecReceipts/ regardless of delivery choice.
+    /// Application Support/NexGenSpecReceipts/ (private, non-file-shared)
+    /// regardless of delivery choice.
     @MainActor
     private func proceedAfterFirebaseDelete(_ snapshot: AccountDeletionReceiptService.Inputs?) async {
         // T-01412: Firebase has deleted the account; mark the local wipe as owed

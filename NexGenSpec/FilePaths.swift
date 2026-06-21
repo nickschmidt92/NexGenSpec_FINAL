@@ -84,6 +84,37 @@ enum FilePaths {
         }
     }
 
+    /// One-time cleanup of the OLD file-shared deliverable copies. Pre-fix builds
+    /// wrote exported ZIPs (`Documents/NexGenSpecExports`), mirrored report PDFs
+    /// (`Documents/NexGenSpecReports`), and deletion receipts
+    /// (`Documents/NexGenSpecReceipts`) into the file-shared Documents directory,
+    /// where the next inspector on a shared device could browse a previous
+    /// account's client PII via the Files app. Deliverables now live in the
+    /// per-UID private store under Application Support; this removes any
+    /// pre-existing exposed copies on launch (and again at Account Deletion as a
+    /// belt-and-suspenders sweep). STRICTLY scoped to the three NexGenSpec-owned
+    /// folders below — never the Documents directory itself, never anything the
+    /// app did not create. Idempotent: a no-op once the old copies are gone.
+    static func cleanupLegacyDocumentsDeliverables() {
+        let fm = FileManager.default
+        let legacyDeliverables = [
+            documentDirectory.appendingPathComponent("NexGenSpecExports", isDirectory: true),
+            documentDirectory.appendingPathComponent("NexGenSpecReports", isDirectory: true),
+            documentDirectory.appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
+        ]
+        for url in legacyDeliverables where fm.fileExists(atPath: url.path) {
+            do {
+                try fm.removeItem(at: url)
+            } catch {
+                Diagnostics.logError(
+                    context: "cleanupLegacyDocumentsDeliverables: failed to remove \(url.lastPathComponent)",
+                    error: error,
+                    persistToDisk: false
+                )
+            }
+        }
+    }
+
     static var inspectionsIndex: URL {
         appRoot.appendingPathComponent("inspections.json", isDirectory: false)
     }
@@ -140,6 +171,41 @@ enum FilePaths {
 
     static var inspectionsIndexBackup: URL {
         appRoot.appendingPathComponent("inspections.json.backup", isDirectory: false)
+    }
+
+    // MARK: - Deliverables (per-UID, NOT file-shared)
+    //
+    // Client deliverables (exported ZIP bundles, mirrored report PDFs) live UNDER
+    // the per-UID `appRoot` in Application Support — never the file-shared
+    // Documents directory. iOS surfaces only Documents in the Files app
+    // (UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace), app-globally, so
+    // keeping deliverables under `appRoot` means one account's client PII is never
+    // browsable by the next account on a shared device. They persist across logout
+    // (per-UID) and are removed only by the Account Deletion `appRoot` wipe. The
+    // inspector still gets any report into the Files app / iCloud / Drive on demand
+    // via the existing share sheet ("Save to Files").
+
+    /// Per-UID folder for exported inspection ZIP bundles (report + photos +
+    /// videos + manifest). Under `appRoot`, so it is private, persists across
+    /// logout, and is wiped only by Account Deletion.
+    static var exportsFolder: URL {
+        appRoot.appendingPathComponent("Exports", isDirectory: true)
+    }
+
+    /// Per-UID folder for mirrored finalized-report PDFs (organized by property
+    /// address). Under `appRoot` — same guarantees as `exportsFolder`.
+    static var reportsFolder: URL {
+        appRoot.appendingPathComponent("Reports", isDirectory: true)
+    }
+
+    /// Folder for account-deletion receipts: `Application Support/NexGenSpecReceipts/`.
+    /// NOT under `appRoot` (so it survives the Account Deletion wipe — outliving the
+    /// wipe is the whole point of a receipt) and NOT in the file-shared Documents
+    /// directory (so a previous account's email / recovery-email / UID is never
+    /// browsable by the next inspector via the Files app). The user receives the
+    /// receipt at deletion time via the share sheet.
+    static var receiptsFolder: URL {
+        applicationSupportDirectory.appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
     }
 
     static func signaturesFolder(jobId: UUID) -> URL {

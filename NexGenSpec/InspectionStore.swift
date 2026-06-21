@@ -509,14 +509,19 @@ public final class InspectionStore: ObservableObject {
             )
         }
 
-        // Remove the Documents deliverable folders too — they live OUTSIDE appRoot
-        // and hold full client PII (exported ZIPs: report + photos + videos;
-        // mirrored report PDFs by address). The appRoot wipe doesn't reach them, so
-        // without this they survive Account Deletion (5.1.1(v) gap, T-01447).
-        // NexGenSpecReceipts/ is deliberately NOT removed — it is the user's
-        // permanent deletion receipt, designed to outlive the wipe.
+        // Deliverables (exported ZIPs, mirrored report PDFs) now live UNDER appRoot,
+        // so the recursive wipe above already removed them. These calls remain as
+        // explicit, defensive cleanup. The deletion receipt lives in
+        // Application Support/NexGenSpecReceipts (OUTSIDE appRoot) and is
+        // deliberately NOT removed — it is the user's permanent record, designed to
+        // outlive the wipe.
         InspectionZIPExportService.removeAllExports()
         FilesAppPublisher.removeAllPublished()
+        // Belt-and-suspenders for upgrading users: sweep any pre-fix copies still in
+        // the OLD file-shared Documents location (NexGenSpecExports / NexGenSpecReports
+        // / NexGenSpecReceipts). New installs never write there; the launch sweep
+        // normally clears these first, so this is just a guarantee at deletion time.
+        FilePaths.cleanupLegacyDocumentsDeliverables()
         // Report/PDF/ZIP staging artifacts written to the temp directory (report-*,
         // pdf-*, zip-staging-*, InspectionReport-*) also live OUTSIDE appRoot and
         // carry full client PII. iOS purges the temp dir only "from time to time",

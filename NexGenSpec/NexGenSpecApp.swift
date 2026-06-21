@@ -26,6 +26,13 @@ struct NexGenSpecApp: App {
         // lazily on first body render, strictly after init() returns), so no
         // sensitive data lingers in a browsable location.
         FilePaths.cleanupLegacyExposedStore()
+        // Close the cross-account deliverable leak for upgrading users: pre-fix
+        // builds wrote exported ZIPs, mirrored report PDFs, and deletion receipts
+        // into the file-shared Documents directory, where the next inspector on a
+        // shared device could browse a previous account's client PII via the Files
+        // app. Deliverables now live in the per-UID private store under Application
+        // Support; remove any old exposed copies here on launch.
+        FilePaths.cleanupLegacyDocumentsDeliverables()
         _ = _suppressKeyboardConstraintLog
         FirebaseBootstrap.configureIfNeeded()
         // B-0096: migrate any pre-fix un-namespaced local data into the
