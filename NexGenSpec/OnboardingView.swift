@@ -67,11 +67,6 @@ private struct WelcomeScreen: View {
             AppColor.brandPanelGradient
                 .ignoresSafeArea()
 
-            HexWatermark()
-                .frame(width: 460, height: 520)
-                .offset(x: 150, y: -210)
-                .ignoresSafeArea()
-
             VStack(spacing: 32) {
                 Spacer()
 
