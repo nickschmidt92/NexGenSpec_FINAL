@@ -519,6 +519,38 @@ final class InspectionFlagsClearAllTests: XCTestCase {
                          "clearAll must sweep inspector-profile PII key \(key) (5.1.1(v))")
         }
     }
+
+    /// Per-UID scoping (audit follow-up): an account's invoice/archived soft flags
+    /// must be ISOLATED from another account's on a shared device, and PRESERVED
+    /// for the owning account across an account switch (logout/login). Flag keys
+    /// are namespaced by `SessionScope.currentSegment`, overridden here via the
+    /// `uidProvider` test hook.
+    func testInvoiceAndArchivedFlagsAreScopedPerUID() {
+        let job = "job-scope-\(UUID().uuidString)"
+        let savedProvider = SessionScope.uidProvider
+        defer {
+            for uid in ["flagscope-A", "flagscope-B"] {
+                SessionScope.uidProvider = { uid }
+                InspectionFlags.setArchived(false, inspectionId: job)
+            }
+            SessionScope.uidProvider = savedProvider
+        }
+
+        // Account A sets an archived flag.
+        SessionScope.uidProvider = { "flagscope-A" }
+        InspectionFlags.setArchived(true, inspectionId: job)
+        XCTAssertTrue(InspectionFlags.isArchived(inspectionId: job), "A's own flag should read back")
+
+        // Account B on the SAME device must NOT see A's flag.
+        SessionScope.uidProvider = { "flagscope-B" }
+        XCTAssertFalse(InspectionFlags.isArchived(inspectionId: job),
+                       "account B must not see account A's archived flag (cross-account leak)")
+
+        // Back to A — the flag must still be there (logout/login preserves it).
+        SessionScope.uidProvider = { "flagscope-A" }
+        XCTAssertTrue(InspectionFlags.isArchived(inspectionId: job),
+                      "account A's flag must persist across an account switch")
+    }
 }
 
 /// T-01439 — report-facing defect counts must exclude defects not flagged

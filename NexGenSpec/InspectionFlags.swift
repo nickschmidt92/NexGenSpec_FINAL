@@ -16,16 +16,25 @@ public enum InspectionFlags {
 
     // MARK: - Keys
 
+    /// Prefixes a per-inspection UserDefaults key with the active session segment
+    /// (per-UID), so one account's soft flags are isolated from — and preserved
+    /// separately from — another account's on a shared device. Mirrors the per-UID
+    /// scoping of the on-disk store (`FilePaths.appRoot` / `SessionScope.currentSegment`).
+    /// Shared with `InvoiceAndSendView` so the invoice amount keys scope identically.
+    public static func scopedKey(_ base: String) -> String {
+        "\(SessionScope.currentSegment).\(base)"
+    }
+
     private static func sentAtKey(_ inspectionId: String) -> String {
-        "invoice.sentAt.\(inspectionId)"
+        scopedKey("invoice.sentAt.\(inspectionId)")
     }
 
     private static func paidAtKey(_ inspectionId: String) -> String {
-        "invoice.paidAt.\(inspectionId)"
+        scopedKey("invoice.paidAt.\(inspectionId)")
     }
 
     private static func archivedAtKey(_ inspectionId: String) -> String {
-        "inspection.archivedAt.\(inspectionId)"
+        scopedKey("inspection.archivedAt.\(inspectionId)")
     }
 
     // MARK: - Reads
@@ -84,7 +93,18 @@ public enum InspectionFlags {
         // InspectorProfile.clear(), but the force-quit recovery wipe doesn't, so
         // sweeping the prefix here makes every disk-wipe path self-contained and
         // closes the residual-PII gap regardless of which path runs (5.1.1(v)).
-        let prefixes = ["invoice.", "inspection.archivedAt.", "ngs.fallbackEmail.", "NexGenSpec.calendar.", "nexgenspec.profile."]
+        let segment = SessionScope.currentSegment
+        // Per-UID scoped soft flags for the CURRENT (deleting) user — invoice
+        // sent/paid/amounts and archived. Scoping means deleting account A never
+        // clears account B's flags on a shared device. The bare `invoice.` /
+        // `inspection.archivedAt.` prefixes ALSO sweep any legacy un-scoped flags
+        // left by a pre-per-UID build. The rest are un-scoped recovery/identity PII
+        // (not per-UID). Must NOT match `deletion-pending-wipe` (it doesn't).
+        let prefixes = [
+            "\(segment).invoice.", "\(segment).inspection.archivedAt.",
+            "invoice.", "inspection.archivedAt.",
+            "ngs.fallbackEmail.", "NexGenSpec.calendar.", "nexgenspec.profile."
+        ]
         for key in defaults.dictionaryRepresentation().keys
         where prefixes.contains(where: key.hasPrefix) {
             defaults.removeObject(forKey: key)
