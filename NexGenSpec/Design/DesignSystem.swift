@@ -333,7 +333,33 @@ struct BrandLockup: View {
     }
 }
 
-private struct HexagonShape: InsettableShape {
+/// Lightweight haptic feedback for key moments. No-ops gracefully off-device.
+enum Haptics {
+    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .medium) {
+        UIImpactFeedbackGenerator(style: style).impactOccurred()
+    }
+    static func selection() { UISelectionFeedbackGenerator().selectionChanged() }
+}
+
+/// Large, faint hexagon watermark echoing the logo — a decorative brand
+/// signature for navy panels (onboarding, headers). Never over body text;
+/// non-interactive and hidden from accessibility.
+struct HexWatermark: View {
+    var tint: Color = AppColor.brandCyan
+    var opacity: Double = 0.07
+    var lineWidth: CGFloat = 2
+
+    var body: some View {
+        HexagonShape()
+            .stroke(tint.opacity(opacity), lineWidth: lineWidth)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+struct HexagonShape: InsettableShape {
     var insetAmount: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
