@@ -3,10 +3,13 @@
 //  NexGenSpec
 //
 //  Generates a single-page PDF receipt at account deletion time. The receipt
-//  captures who deleted the account, when, and what was wiped, and is saved
-//  outside `FilePaths.appRoot` so it survives `clearAllLocalData()`. The
-//  Delete Account flow attaches it to a pre-composed email so the user has a
-//  permanent record after the local wipe.
+//  captures who deleted the account, when, and what was wiped. It is saved to
+//  `FilePaths.receiptsFolder` (Application Support/NexGenSpecReceipts) — OUTSIDE
+//  `FilePaths.appRoot` so it survives `clearAllLocalData()` (the receipt must
+//  outlive the wipe it documents), and OUTSIDE the file-shared Documents
+//  directory so a previous account's email / recovery-email / UID is never
+//  browsable by the next inspector on a shared device. The Delete Account flow
+//  hands it to the user via the share sheet so they keep a permanent record.
 //
 
 import Foundation
@@ -49,17 +52,14 @@ public enum AccountDeletionReceiptService {
         }
     }
 
-    /// Folder for deletion receipts. Lives at `Documents/NexGenSpecReceipts/` so it
-    /// is OUTSIDE `FilePaths.appRoot` and survives `clearAllLocalData()`. Surfaced
-    /// via UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace so the user can
-    /// retrieve the receipt from the Files app even after deletion.
+    /// Folder for deletion receipts: `FilePaths.receiptsFolder`
+    /// (`Application Support/NexGenSpecReceipts/`). OUTSIDE `FilePaths.appRoot` so it
+    /// survives `clearAllLocalData()` (the receipt outlives the wipe it documents),
+    /// and OUTSIDE the file-shared Documents directory so a previous account's
+    /// email / recovery-email / UID is never browsable by the next inspector. The
+    /// user receives the receipt at deletion time via the share sheet.
     public static var receiptFolder: URL {
-        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            // Documents is guaranteed present on iOS; fall back to tmp rather
-            // than force-unwrap so a missing directory can never crash receipt generation.
-            return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
-        }
-        return docs.appendingPathComponent("NexGenSpecReceipts", isDirectory: true)
+        FilePaths.receiptsFolder
     }
 
     /// Renders a single-page A4 PDF at the canonical receipt path and returns its URL.
@@ -87,16 +87,15 @@ public enum AccountDeletionReceiptService {
 
         // PII (account email, fallback email, Firebase UID) — write with the
         // same data-protection class as inspection files so it isn't readable
-        // at rest on a locked device (it lives in the browsable Documents dir).
+        // at rest on a locked device.
         try FileSecurity.writeProtected(data, to: url)
         return url
     }
 
     public static func ensureReceiptFolder() throws {
-        let folder = receiptFolder
-        if !FileManager.default.fileExists(atPath: folder.path) {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        }
+        // Same data-protection class as the rest of the private store — the
+        // receipt holds account email, recovery email, and Firebase UID.
+        try FileSecurity.ensureProtectedDirectory(receiptFolder)
     }
 
     /// Body text to accompany the receipt PDF when it is shared via the

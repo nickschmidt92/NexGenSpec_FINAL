@@ -2,34 +2,40 @@
 //  FilesAppPublisher.swift
 //  NexGenSpec
 //
-//  Mirrors a finalized inspection's PDF into a clean, Files-app-friendly folder
-//  so the inspector gets one-tap access organized by property address:
+//  Mirrors a finalized inspection's PDF into a clean per-inspection folder,
+//  organized by property address, in the per-UID private store
+//  (`FilePaths.reportsFolder`, under `appRoot` in Application Support):
 //
-//      Files → On My iPhone → NexGenSpec → NexGenSpecReports
-//        └── [Property Address]/
-//            └── Inspection_Report.pdf
+//      <appRoot>/Reports/[Property Address]/Inspection_Report.pdf
 //
 //  PDF ONLY. Raw inspection data (inspection.json, photos, videos, lidar,
-//  signatures) is NEVER mirrored here — it stays in the private working store in
-//  Application Support, which is not file-shared (B-0045). This published folder
-//  is a convenience mirror under Documents, rebuilt on each export, so it never
-//  diverges from the canonical data and a same-address re-export refreshes it.
-//  Visibility in the Files app is granted by UIFileSharingEnabled +
-//  LSSupportsOpeningDocumentsInPlace (the app's Documents directory is what
-//  Files surfaces — and it now holds only these non-sensitive PDF deliverables).
+//  signatures) is NEVER mirrored here — it stays elsewhere in the private store.
+//  The folder is rebuilt on each export, so it never diverges from the canonical
+//  data and a same-address re-export refreshes it.
+//
+//  These PDFs are deliberately NOT placed in the file-shared Documents directory:
+//  iOS surfaces Documents to the Files app app-globally, which would let the next
+//  inspector on a shared device read a previous account's client reports (the
+//  cross-account PII leak this fix closes). The inspector still gets any report
+//  into the Files app / iCloud / Drive on demand via the share sheet
+//  ("Save to Files"). Mirrored reports persist across logout (per-UID) and are
+//  removed only by the Account Deletion `appRoot` wipe.
 //
 
 import Foundation
 
 enum FilesAppPublisher {
 
-    /// Documents-based, Files-app-visible root for published PDF deliverables.
-    /// Only finalized-report PDFs live here — never raw inspection data (B-0045).
+    /// Per-UID, private root for published report PDFs: `FilePaths.reportsFolder`
+    /// (under `appRoot` in Application Support) — NOT the file-shared Documents
+    /// directory — so a previous account's reports are never browsable by the next
+    /// inspector via the Files app. Only finalized-report PDFs live here, never raw
+    /// inspection data (B-0045).
     private static var publishRoot: URL {
-        FilePaths.documentDirectory.appendingPathComponent("NexGenSpecReports", isDirectory: true)
+        FilePaths.reportsFolder
     }
 
-    /// Publishes `version`'s PDF into `NexGenSpecReports/[Property Address]/`.
+    /// Publishes `version`'s PDF into `<appRoot>/Reports/[Property Address]/`.
     /// Idempotent — the address folder is rebuilt each call. Returns the folder
     /// URL on success, or nil on failure (failures are logged, never thrown, so
     /// publishing can never block an export the inspector already completed).
@@ -67,7 +73,7 @@ enum FilesAppPublisher {
         }
     }
 
-    /// The published folder URL for an inspection (NexGenSpecReports/[Property Address]/).
+    /// The published folder URL for an inspection (<appRoot>/Reports/[Property Address]/).
     static func publishedFolderURL(for inspection: Inspection, jobId: UUID) -> URL {
         publishRoot.appendingPathComponent(
             folderName(for: inspection, jobId: jobId),
@@ -89,9 +95,9 @@ enum FilesAppPublisher {
     }
 
     /// Recursively removes the entire published-reports root (all property-address
-    /// subfolders). Called from the Account Deletion wipe: the mirrored report
-    /// PDFs live OUTSIDE `FilePaths.appRoot`, so the appRoot-only wipe leaves them
-    /// behind (T-01447). Best effort: logs (off-disk) but never throws.
+    /// subfolders). The reports root now lives under `appRoot`, so the Account
+    /// Deletion `appRoot` wipe already removes it; this remains as an explicit,
+    /// targeted cleanup. Best effort: logs (off-disk) but never throws.
     static func removeAllPublished() {
         let fm = FileManager.default
         guard fm.fileExists(atPath: publishRoot.path) else { return }

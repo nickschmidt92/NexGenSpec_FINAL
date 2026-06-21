@@ -4,9 +4,11 @@
 //
 //  Bundles a finalized inspection into a single ZIP suitable for client
 //  delivery and the inspector's own 5-year retention obligation. Output lives
-//  at Documents/NexGenSpecExports/ — outside `FilePaths.appRoot`, surfaced via
-//  UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace so the inspector
-//  can grab it from the Files app and copy it to iCloud Drive / Google Drive.
+//  under the per-UID private store (`FilePaths.exportsFolder`, inside `appRoot`
+//  in Application Support) — NOT the file-shared Documents directory — so one
+//  account's client-PII bundles are never browsable by the next inspector on a
+//  shared device. The inspector shares each ZIP out to the Files app / iCloud /
+//  Google Drive on demand via the share sheet at export time.
 //
 //  Bundle contents:
 //    - report.pdf            paginated, signed, integrity-hashed
@@ -33,22 +35,20 @@ public enum InspectionZIPExportError: LocalizedError {
 
 public enum InspectionZIPExportService {
 
-    /// Folder where exported ZIPs land. Lives at Documents/NexGenSpecExports/
-    /// so it is OUTSIDE `FilePaths.appRoot` and reachable from the Files app.
+    /// Folder where exported ZIPs land: the per-UID `FilePaths.exportsFolder`
+    /// (under `appRoot` in Application Support) — NOT the file-shared Documents
+    /// directory — so one account's client-PII bundles are never browsable by the
+    /// next inspector on a shared device. ZIPs persist across logout and are
+    /// removed only by the Account Deletion `appRoot` wipe. The inspector shares
+    /// each one out on demand via the share sheet.
     public static var exportFolder: URL {
-        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            // Documents is guaranteed present on iOS; fall back to tmp rather
-            // than force-unwrap so a missing directory can never crash export.
-            return URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("NexGenSpecExports", isDirectory: true)
-        }
-        return docs.appendingPathComponent("NexGenSpecExports", isDirectory: true)
+        FilePaths.exportsFolder
     }
 
-    /// Recursively removes the entire exports folder. Called from the Account
-    /// Deletion wipe: exported ZIPs (full report + photos + videos + client PII)
-    /// live OUTSIDE `FilePaths.appRoot`, so the appRoot-only wipe leaves them
-    /// behind — a 5.1.1(v) "no copies retained" gap (T-01447). Best effort: logs
-    /// (off-disk) but never throws, so a stuck file can't block deletion.
+    /// Recursively removes the entire exports folder. The exports folder now
+    /// lives under `appRoot`, so the Account Deletion `appRoot` wipe already
+    /// removes it; this remains as an explicit, targeted cleanup. Best effort:
+    /// logs (off-disk) but never throws, so a stuck file can't block deletion.
     static func removeAllExports() {
         let fm = FileManager.default
         guard fm.fileExists(atPath: exportFolder.path) else { return }
@@ -153,10 +153,7 @@ public enum InspectionZIPExportService {
         // 4. Coordinate the directory into a ZIP. iOS surfaces this via the
         //    NSFileCoordinator `.forUploading` option, which produces a
         //    standard ZIP archive at a transient URL.
-        try FileManager.default.createDirectory(
-            at: exportFolder,
-            withIntermediateDirectories: true
-        )
+        try FileSecurity.ensureProtectedDirectory(exportFolder)
         let stamp = Self.filenameDateFormatter.string(from: Date())
         let safeClient = sanitize(version.inspection.clientName, fallback: "Inspection")
         let outURL = exportFolder.appendingPathComponent("NexGenSpec_\(safeClient)_\(stamp).zip")
@@ -173,7 +170,9 @@ public enum InspectionZIPExportService {
             error: &coordError
         ) { tempZipURL in
             do {
-                try FileManager.default.copyItem(at: tempZipURL, to: outURL)
+                // Write with the same data-protection class as the rest of the
+                // private store; the bundle carries full client PII.
+                try FileSecurity.copyProtectedItem(from: tempZipURL, to: outURL)
             } catch {
                 copyError = error
             }

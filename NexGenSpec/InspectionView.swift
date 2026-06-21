@@ -43,9 +43,10 @@ struct InspectionView: View {
     @State private var pendingPostInvoicePrompts = false
 
     // T-01213: Auto-export ZIP backup prompt that fires once a version is
-    // finalized. The bundle lands in Documents/NexGenSpecExports/ and is
-    // surfaced via the share sheet so the inspector can drop it into Files,
-    // iCloud Drive, email, or AirDrop.
+    // finalized. The bundle lands in the per-UID private store
+    // (FilePaths.exportsFolder, under appRoot — not the file-shared Documents
+    // directory) and is surfaced via the share sheet so the inspector can drop it
+    // into Files, iCloud Drive, email, or AirDrop on demand.
     @State private var showExportZIPPrompt = false
     @State private var isExportingZIP = false
     @State private var exportZIPURL: URL?
