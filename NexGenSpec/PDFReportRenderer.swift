@@ -85,8 +85,12 @@ public enum PDFReportRenderer {
     /// `clientName` is used for the output filename; pass nil to fall back to a UUID-based name.
     @MainActor
     public static func generatePDF(fromHTMLFile htmlFileURL: URL, baseURL: URL, clientName: String? = nil) async throws -> URL {
-        // Pre-flight: refuse to spin up WebKit if we're already under memory pressure.
-        if availableMemoryBytes() < 120 * 1024 * 1024 {
+        // Pre-flight: refuse to spin up WebKit only if memory is genuinely
+        // starved. The renderer paginates page-by-page (see below), so peak
+        // memory is already bounded — a high threshold (was 120 MB) needlessly
+        // aborted on constrained devices that would have rendered fine. The
+        // HTML-only fallback handles a true abort without crashing.
+        if availableMemoryBytes() < 60 * 1024 * 1024 {
             Diagnostics.logError(
                 context: "PDFReportRenderer aborted: low memory",
                 error: PDFRenderError.memoryPressure

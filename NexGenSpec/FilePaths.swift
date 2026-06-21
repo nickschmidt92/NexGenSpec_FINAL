@@ -58,6 +58,13 @@ enum FilePaths {
     /// (B-0096). Every other path here derives from `appRoot`, so they all move
     /// with the active user. See `SessionScope.currentSegment` for how the active
     /// segment (signed-in UID / deletion pin / signed-out sentinel) is resolved.
+    ///
+    /// Backup: this store is INTENTIONALLY included in the user's iCloud /
+    /// encrypted device backup (NOT excluded from backup), so a device restore
+    /// brings their inspections back — the right behavior for a local-first app.
+    /// That backup is scoped to the device owner's own Apple ID; it is not a
+    /// cross-account on-device exposure, so it doesn't reopen the privacy concern
+    /// the per-UID Application-Support design closes.
     static var appRoot: URL {
         usersContainer.appendingPathComponent(SessionScope.currentSegment, isDirectory: true)
     }
