@@ -9,7 +9,12 @@ for an inspection-app submission with auto-renewing subscriptions.
 ## Demo Credentials
 
 Email: `appreview@nexgenspec.com`
-Password: `NexGen-Review-2026!`
+Password: **‹not stored in repo — paste directly into App Store Connect ›**
+
+> Do NOT commit the demo password to git. Enter it straight into the App
+> Store Connect → App Review Information field, and keep the live copy in
+> the password manager. The previous password was committed and has been
+> rotated; never paste a real password back into this file.
 
 This account is pre-flagged with full Pro entitlement so the reviewer can
 test every paywalled feature without going through StoreKit. To test the

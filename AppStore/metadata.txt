@@ -96,7 +96,9 @@ APP REVIEW NOTES
 ───────────────────────────────────────────────────────────────
 Demo Account:
   Email: appreview@nexgenspec.com
-  Password: NexGen-Review-2026!
+  Password: <not stored in repo — paste directly into App Store Connect>
+  (Enter the live demo password in App Store Connect's App Review
+   Information field. Never commit it here.)
 
   To test the full app flow:
   1. Log in with the demo account above (or create a new account — both work).
