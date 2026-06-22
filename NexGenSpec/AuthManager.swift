@@ -416,6 +416,13 @@ public final class AuthManager: ObservableObject {
             // (B-0096 sibling). The per-UID file is left in place for this user's
             // own re-login; account deletion wipes it.
             CustomTemplateStore.shared.clear()
+            // Sweep report/PDF/ZIP staging out of the app-global temp dir on the
+            // account boundary (B-0117 sibling). Staging artifacts hold full client
+            // PII but are NOT per-UID and were previously cleared only at Account
+            // Deletion or after 24h+next export — leaving one inspector's client
+            // data in tmp across a logout on a shared device. removeAllTempExports
+            // is nonisolated/static and prefix-scoped to the export staging dirs.
+            ReportExportService.removeAllTempExports()
         } catch {
             authErrorMessage = Self.friendlyMessage(for: error)
         }
