@@ -219,3 +219,69 @@ account's zone as a residual with no durable retry. A robust solution needs a pe
 "teardown-owed" record + a cold-launch sweep, INDEPENDENT of the deletion pin (which a normal
 completed deletion clears) — a sync-GA design decision, **not** a build-22 blocker (build 22 ships
 sync dark). Tests updated to assert the best-effort drop on both transient paths.
+
+## P7 pre-flight — independent fresh-eyes re-verification (2026-06-22)
+
+Orchestrated re-verification of commit `8cfd34d` with fresh eyes (5-dimension adversarial
+fan-out + 2-skeptic verification per finding; build gate re-run from a clean tree), prior to
+the Nick-gated P7 ship. **Bottom line: build-22 verification is GREEN — no build-22-affecting
+code defect.** flag-OFF == build 21 is provably inert; identity and immutability are clean for
+the shipping build.
+
+**Build gate (re-run):** iOS `NexGenSpecTests` **166/166, 0 failures**; Mac (Designed for iPad)
+**BUILD SUCCEEDED**. (One environment snag, not a code defect: a stale SPM artifact-cache entry
+for `GoogleAdsOnDeviceConversion.zip` — "already exists in file system" — blocked package
+resolution until the entry was removed and `-resolvePackageDependencies` re-run clean. Worth
+keeping `~/cleanup.sh` from leaving the SPM artifacts cache half-populated.)
+
+**Adversarial fan-out result:** inertness *provably inert* (all 11 non-sync prod files are strict
+no-ops with the flag off; ports flag-gate to `NoopSyncPort`); identity *clean* (no residual
+cross-account TOCTOU); immutability *clean* for the receiver/resolver/disk-read/hash paths;
+submission surface verified — `CURRENT_PROJECT_VERSION` still 21 (bump not prematurely committed),
+`MARKETING_VERSION` 1.0.0, Mac flag set, and the Info.plist slimming migrated every build-21 usage
+string + `ITSAppUsesNonExemptEncryption=NO` to pbxproj `INFOPLIST_KEY_*` (no shipping data lost).
+
+### Two NEW flag-ON findings (sync-GA, NOT build-22 blockers — sync ships dark)
+Both are flag-ON-only (Release hard-OFF → no effect on the shipping build), both are genuinely
+novel (distinct from the 3 deferrals above and from each other), and both live on the live
+CloudKit push/rebind seams that **no unit test exercises** (only the 2-device manual test does).
+Recommendation: **batch into sync-GA hardening with real device validation, do not fix blind now.**
+
+- **NEW-1 (rebind drops the pending push queue) — MED, more-probable:** `SyncCoordinator.rebind`
+  (`SyncCoordinator.swift:136-160`) unconditionally `port.unbind()` (which does
+  `pending.removeAll()`, `CloudKitSyncPort.swift:109-115`) + rebuilds a fresh port on EVERY
+  `.CKAccountChanged` — including the *spurious same-account* notifications Apple posts on iCloud
+  re-auth / token refresh. A queued-but-unpushed outbound edit (made while offline/slow) is silently
+  dropped: `seedIfNeeded` is one-shot (`seededAt`), nothing re-enqueues local versions on a
+  same-account rebind, so the edit's push is permanently lost (local copy survives → cross-device
+  push DIVERGENCE, not local data loss). Fix-F closed the same-*port* transient-unbind window; this
+  is the uncovered cross-*port* window. Fix: gate the rebuild on an actual identity change (same
+  UID + unchanged iCloud token ⇒ keep the existing port + its queue), or hand off the un-pushed
+  `pending` snapshot to the new port.
+- **NEW-2 (save-policy clobbers a concurrently-finalized record) — HIGH-when-active, low-probability,
+  permanent:** `CKCloudDatabase.save` (`CloudKitBackends.swift:52-102`) protects immutability by
+  fetch-then-`if locked==1 return`, but then saves with `savePolicy: .changedKeys`, which force-writes
+  the changed keys *without* change-tag conflict detection (only `.ifServerRecordUnchanged` checks the
+  tag). In the fetch→save window (temp-file write + network round-trip) another device can finalize the
+  same `versionId`; this device's save then overwrites `status=Draft/locked=0` onto the now-finalized
+  server record. It does NOT self-heal (the finalized-local device never re-pushes an immutable record;
+  the resolver only protects the local copy), so a fresh device later pulls the finalized inspection as
+  an editable DRAFT — the immutability/tamper-evidence invariant is broken cloud-side. Fix: switch to
+  `.ifServerRecordUnchanged` and on `CKError.serverRecordChanged` re-fetch + re-run the locked-guard in
+  a small bounded retry loop (the reused record already carries the fetched change tag).
+
+### Build-22 submission-surface items (owner: Nick — external / decision, no code defect)
+- **CRITICAL portal dependency (must do before archiving build 22):** entitlements now declare the
+  `iCloud.com.nexgenspec.app` CloudKit container + CloudKit service + `aps-environment`. With Automatic
+  signing these are embedded at archive time *regardless of the flag*, so the App ID must have Push +
+  iCloud(CloudKit) capabilities enabled and the container must EXIST in the Developer portal, or the
+  Archive fails to sign / ASC rejects the upload. (The container does NOT need its schema in Prod for
+  build 22 to *function* — sync is dark — but it must EXIST for the signed entitlement to validate.)
+  Verify with a test Archive + Validate in Organizer.
+- **Unused-capability decision (Guideline 2.5.4):** `UIBackgroundModes: remote-notification` +
+  `aps-environment` ship with zero backing code (APNs deferred, D-0184). Strip for build 22 (safest for
+  public review) vs keep as forward-prep — Nick/submission call. `aps-environment=development` is
+  normally rewritten to `production` by the distribution export under Automatic signing; confirm in the
+  exported `.app` entitlements.
+- **Version bump:** `CURRENT_PROJECT_VERSION 21 → 22` (MARKETING_VERSION stays 1.0.0) is **staged in the
+  working tree, not committed** — committed only on Nick's explicit P7 go, together with opening the PR.
