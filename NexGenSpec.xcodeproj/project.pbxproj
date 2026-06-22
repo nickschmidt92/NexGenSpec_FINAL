@@ -12,6 +12,7 @@
 		EBB43AFE2F86138700BE850A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFD2F86138700BE850A /* FirebaseCore */; };
 		EBB43B002F86138700BE850A /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFF2F86138700BE850A /* FirebaseCrashlytics */; };
 		T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */; };
+		T1B2C3D4E5F6000000000101 /* SyncScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */; };
 		U1B2C3D4E5F6000000000001 /* NexGenSpecUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -37,6 +38,7 @@
 		A1B2C3D4E5F6000000000001 /* NexGenSpec.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NexGenSpec.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C4D5E6F7A8B90C1D2E3F4A5B /* NexGenSpec/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = NexGenSpec/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScaffoldTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000004 /* NexGenSpecTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecUITests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000004 /* NexGenSpecUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -119,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */,
+				T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */,
 			);
 			path = NexGenSpecTests;
 			sourceTree = "<group>";
@@ -278,6 +281,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */,
+				T1B2C3D4E5F6000000000101 /* SyncScaffoldTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
