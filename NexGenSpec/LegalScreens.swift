@@ -90,7 +90,7 @@ struct PrivacyPolicyView: View {
                             • Ensuring client privacy in accordance with local laws.
 
                             5. Multi-Device
-                            NexGenSpec stores inspections on the device they were created on. Inspections do NOT sync between devices. Use the Files-app export feature to move inspections between your own devices intentionally.
+                            \(SyncFeature.multiDeviceLegalClause)
 
                             6. Third-Party Services & Email
                             When you export or email a report, the data is subject to the privacy and retention policies of that provider. NexGenSpec does not control it after delivery. Once a PDF is emailed, retention of the delivered copy is governed by the email providers — not by NexGenSpec.
@@ -306,7 +306,7 @@ struct TermsOfServiceView: View {
                             • Retain encrypted copies for the duration of any applicable retention obligations. Industry standard: 5 years. Consult your professional liability insurance carrier and licensing board for jurisdiction-specific requirements.
                             • Manage device storage proactively. iPad storage is finite. The inspector is solely responsible for archiving older inspections to long-term backup before storage runs out.
 
-                            Multi-device note. NexGenSpec inspections live on the device they were created on and do NOT sync between devices. Treat each device as an independent silo. Use the export-to-Files feature to move records intentionally.
+                            \(SyncFeature.multiDeviceTermsClause)
 
                             Email delivery and retention. When you email a PDF report to a client, agent, or any recipient, the report is transmitted by your email provider and received by the recipient's email provider. Once the email leaves the device, retention of the delivered copy is governed entirely by the email providers — not by NexGenSpec. Don't rely on a sent email as the sole long-term archive of an inspection. Always retain a separate backup copy.
 

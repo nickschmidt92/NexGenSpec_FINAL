@@ -865,8 +865,11 @@ struct InspectionOverviewView: View {
     @ViewBuilder
     private var roomScansSection: some View {
         // Hide the whole section on devices that can't scan AND have no saved
-        // scans — nothing to show or do there.
-        if LiDARCapability.isSupported || !lidarScans.isEmpty {
+        // scans — nothing to show or do there. On Mac (review station) we still
+        // render it when empty so the "capture on iPhone/iPad" affordance shows;
+        // the Capture button stays hidden there because it requires LiDAR support
+        // (false on Mac), so no dead control appears (build 22 slice 5).
+        if LiDARCapability.isSupported || !lidarScans.isEmpty || Platform.isMac {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Room Scans (LiDAR)")
@@ -885,7 +888,9 @@ struct InspectionOverviewView: View {
                 if lidarScans.isEmpty {
                     Text(LiDARCapability.isSupported
                          ? "No room scans yet. Tap Capture to scan a room with LiDAR."
-                         : "No room scans attached.")
+                         : (Platform.isMac
+                            ? "Capture room scans on your iPhone or iPad — they'll appear here for review."
+                            : "No room scans attached."))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 } else {
