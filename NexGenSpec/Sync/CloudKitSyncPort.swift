@@ -22,6 +22,8 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
     private let database: CloudDatabase
     private let reader: LocalVersionReader
     private let bindings: BindingStoring
+    private let fetcher: CloudZoneFetcher
+    private let writer: LocalVersionWriter
 
     private let lock = NSLock()
     private var _status: SyncStatus = .off
@@ -32,12 +34,16 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         account: CloudAccountProviding,
         database: CloudDatabase,
         reader: LocalVersionReader = DiskVersionReader(),
-        bindings: BindingStoring = KeychainBindingStore()
+        bindings: BindingStoring = KeychainBindingStore(),
+        fetcher: CloudZoneFetcher = NoopZoneFetcher(),
+        writer: LocalVersionWriter = NoopLocalVersionWriter()
     ) {
         self.account = account
         self.database = database
         self.reader = reader
         self.bindings = bindings
+        self.fetcher = fetcher
+        self.writer = writer
     }
 
     var status: SyncStatus { lock.withLock { _status } }
@@ -82,8 +88,9 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             setState(.paused(reason: reason), binding: nil)
         }
         // After a successful bind, run one-time seeding (no-op if not bound or
-        // already seeded).
+        // already seeded), then pull remote changes (two-way).
         await seedIfNeeded(firebaseUID: firebaseUID)
+        await pull()
     }
 
     func unbind() {
@@ -128,6 +135,49 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         bindings.save(seeded)
         lock.withLock {
             if activeBinding?.zoneName == binding.zoneName { activeBinding = seeded }
+        }
+    }
+
+    /// Pull remote changes for the bound zone and apply them locally, resolving
+    /// conflicts (finalized immutable; draft last-writer-wins). Persists the new
+    /// change token so the next pull is incremental. No-op when not bound.
+    func pull() async {
+        let binding: SyncBinding? = lock.withLock { activeBinding }
+        guard let binding else { return }
+
+        let changes: ZoneChanges
+        do {
+            changes = try await fetcher.fetchChanges(inZone: binding.zoneName, since: binding.changeToken)
+        } catch {
+            Diagnostics.logError(context: "CloudKitSyncPort.pull fetch failed", error: error)
+            return
+        }
+
+        for remote in changes.changed {
+            guard let versionId = UUID(uuidString: remote.record.recordName) else { continue }
+            let local = reader.localState(forVersionId: versionId)
+            let decision = SyncConflictResolver.resolveUpsert(
+                local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
+            )
+            if decision == .applyRemote {
+                await writer.applyRemoteVersion(remote.record.payload)
+            }
+        }
+
+        for recordName in changes.deletedRecordNames {
+            guard let versionId = UUID(uuidString: recordName) else { continue }
+            if SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: versionId)) == .deleteLocal {
+                await writer.deleteLocalVersion(recordName: recordName)
+            }
+        }
+
+        if let newToken = changes.newToken {
+            var updated = binding
+            updated.changeToken = newToken
+            bindings.save(updated)
+            lock.withLock {
+                if activeBinding?.zoneName == binding.zoneName { activeBinding = updated }
+            }
         }
     }
 

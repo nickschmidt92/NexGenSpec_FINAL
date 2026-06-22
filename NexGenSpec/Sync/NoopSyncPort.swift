@@ -24,4 +24,6 @@ public final class NoopSyncPort: SyncPort {
     public func recordLocalChange(_ change: SyncChange) {}
 
     public func seedIfNeeded(firebaseUID: String) async {}
+
+    public func pull() async {}
 }

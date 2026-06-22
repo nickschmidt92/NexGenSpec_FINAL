@@ -77,4 +77,8 @@ public protocol SyncPort: AnyObject, Sendable {
     /// One-time, idempotent, guarded local→cloud seeding for an existing
     /// (build-21) user. No-op once `SyncBinding.seededAt` is set.
     func seedIfNeeded(firebaseUID: String) async
+
+    /// Pull remote changes and apply them locally (two-way sync). No-op when not
+    /// bound. (slice 4)
+    func pull() async
 }

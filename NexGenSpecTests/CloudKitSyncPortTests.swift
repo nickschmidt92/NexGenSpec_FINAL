@@ -43,8 +43,25 @@ private struct FakeAccount: CloudAccountProviding {
 private struct FakeReader: LocalVersionReader, @unchecked Sendable {
     var data: Data? = Data("payload".utf8)
     var snapshots: [LocalVersionSnapshot] = []
+    var state: LocalVersionState = .absent
     func versionData(forVersionId id: UUID) -> Data? { data }
     func allLocalVersions() -> [LocalVersionSnapshot] { snapshots }
+    func localState(forVersionId id: UUID) -> LocalVersionState { state }
+}
+
+private struct FakeFetcher: CloudZoneFetcher {
+    var changes: ZoneChanges
+    func fetchChanges(inZone zoneName: String, since token: Data?) async throws -> ZoneChanges { changes }
+}
+
+private final class FakeWriter: LocalVersionWriter, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var applied: [Data] = []
+    private(set) var deleted: [String] = []
+    func applyRemoteVersion(_ payload: Data) async { lock.withLock { applied.append(payload) } }
+    func deleteLocalVersion(recordName: String) async { lock.withLock { deleted.append(recordName) } }
+    var appliedCount: Int { lock.withLock { applied.count } }
+    var deletedCount: Int { lock.withLock { deleted.count } }
 }
 
 private final class FakeBindings: BindingStoring, @unchecked Sendable {
@@ -73,8 +90,16 @@ final class CloudKitSyncPortTests: XCTestCase {
         )
     }
 
-    private func makePort(token: String?, bindings: FakeBindings, db: FakeDatabase, reader: FakeReader = FakeReader(data: Data("payload".utf8))) -> CloudKitSyncPort {
-        CloudKitSyncPort(account: FakeAccount(token: token), database: db, reader: reader, bindings: bindings)
+    private func makePort(token: String?, bindings: FakeBindings, db: FakeDatabase, reader: FakeReader = FakeReader(), fetcher: CloudZoneFetcher = NoopZoneFetcher(), writer: LocalVersionWriter = NoopLocalVersionWriter()) -> CloudKitSyncPort {
+        CloudKitSyncPort(account: FakeAccount(token: token), database: db, reader: reader, bindings: bindings, fetcher: fetcher, writer: writer)
+    }
+
+    private func remoteRecord(id: UUID, locked: Bool = false) -> InspectionVersionRecord {
+        InspectionVersionRecord(
+            recordName: id.uuidString, inspectionId: UUID().uuidString, versionNumber: 1,
+            status: locked ? "Final" : "Draft", locked: locked, finalizedAt: nil,
+            schemaVersion: 1, payload: Data("remote".utf8)
+        )
     }
 
     func testNoICloudStaysLocalOnlyAndPushesNothing() async {
@@ -244,5 +269,52 @@ final class CloudKitSyncPortTests: XCTestCase {
         port.recordLocalChange(.versionUpserted(meta()))   // draft
         await port.flushPending()
         XCTAssertEqual(db.saved.last?.ifAbsent, false, "Drafts overwrite (last-writer-wins).")
+    }
+
+    // MARK: - Pull / two-way (slice 4) — bind() triggers pull()
+
+    func testPullAppliesNewRemoteVersionAndPersistsToken() async {
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = .absent   // not present locally → apply
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 1, "A new remote version is applied locally.")
+        XCTAssertNotNil(binds.current("uidA")?.changeToken, "The new change token is persisted for incremental pulls.")
+    }
+
+    func testPullNeverOverwritesLocalFinalized() async {
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: UUID(), locked: false), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: nil
+        )
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: FakeBindings(), db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 0, "A finalized local version is never overwritten by a remote change.")
+    }
+
+    func testPullDeletesLocalDraftButKeepsFinalizedOnTombstone() async {
+        let draftChanges = ZoneChanges(changed: [], deletedRecordNames: [UUID().uuidString], newToken: nil)
+        let w1 = FakeWriter()
+        var rDraft = FakeReader(); rDraft.state = LocalVersionState(exists: true, isFinalized: false, updatedAt: Date())
+        let p1 = makePort(token: "t1", bindings: FakeBindings(), db: FakeDatabase(), reader: rDraft, fetcher: FakeFetcher(changes: draftChanges), writer: w1)
+        await p1.bind(firebaseUID: "uidA")
+        XCTAssertEqual(w1.deletedCount, 1, "A remote tombstone deletes a local draft.")
+
+        let finalChanges = ZoneChanges(changed: [], deletedRecordNames: [UUID().uuidString], newToken: nil)
+        let w2 = FakeWriter()
+        var rFinal = FakeReader(); rFinal.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date())
+        let p2 = makePort(token: "t1", bindings: FakeBindings(), db: FakeDatabase(), reader: rFinal, fetcher: FakeFetcher(changes: finalChanges), writer: w2)
+        await p2.bind(firebaseUID: "uidB")
+        XCTAssertEqual(w2.deletedCount, 0, "A finalized report is never deleted via a remote tombstone.")
     }
 }

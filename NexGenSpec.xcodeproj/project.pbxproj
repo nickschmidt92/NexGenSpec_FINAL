@@ -16,6 +16,7 @@
 		T1B2C3D4E5F6000000000103 /* SyncIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */; };
 		T1B2C3D4E5F6000000000105 /* CloudKitSyncPortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */; };
 		T1B2C3D4E5F6000000000107 /* SyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000108 /* SyncCoordinatorTests.swift */; };
+		T1B2C3D4E5F6000000000109 /* SyncConflictResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F600000000010A /* SyncConflictResolverTests.swift */; };
 		U1B2C3D4E5F6000000000001 /* NexGenSpecUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -46,6 +47,7 @@
 		T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncIdentityTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncPortTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000108 /* SyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinatorTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F600000000010A /* SyncConflictResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncConflictResolverTests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecUITests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000004 /* NexGenSpecUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -131,6 +133,7 @@
 				T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */,
 				T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */,
 				T1B2C3D4E5F6000000000108 /* SyncCoordinatorTests.swift */,
+				T1B2C3D4E5F600000000010A /* SyncConflictResolverTests.swift */,
 			);
 			path = NexGenSpecTests;
 			sourceTree = "<group>";
@@ -294,6 +297,7 @@
 				T1B2C3D4E5F6000000000103 /* SyncIdentityTests.swift in Sources */,
 				T1B2C3D4E5F6000000000105 /* CloudKitSyncPortTests.swift in Sources */,
 				T1B2C3D4E5F6000000000107 /* SyncCoordinatorTests.swift in Sources */,
+				T1B2C3D4E5F6000000000109 /* SyncConflictResolverTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

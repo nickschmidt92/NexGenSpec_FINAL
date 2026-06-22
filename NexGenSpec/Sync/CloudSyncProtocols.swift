@@ -41,6 +41,8 @@ protocol LocalVersionReader: Sendable {
     func versionData(forVersionId id: UUID) -> Data?
     /// Every local inspection version, for one-time seeding (slice 3).
     func allLocalVersions() -> [LocalVersionSnapshot]
+    /// The local store's view of one version, for conflict resolution (slice 4).
+    func localState(forVersionId id: UUID) -> LocalVersionState
 }
 
 /// Default reader: the per-UID local store on disk.
@@ -87,6 +89,61 @@ struct DiskVersionReader: LocalVersionReader {
         }
         return snapshots
     }
+
+    func localState(forVersionId id: UUID) -> LocalVersionState {
+        let url = FilePaths.currentVersionFile(jobId: id)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return .absent }
+        // Local last-edit clock for draft last-writer-wins. (current.json is
+        // rewritten on every save; slice 4c may replace this with a model field.)
+        let updatedAt = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        let isFinalized = (try? Data(contentsOf: url))
+            .flatMap { try? JSONDecoder().decode(InspectionVersion.self, from: $0) }?
+            .locked ?? false
+        return LocalVersionState(exists: true, isFinalized: isFinalized, updatedAt: updatedAt)
+    }
+}
+
+// MARK: - Pull (slice 4)
+
+/// A batch of remote changes for a zone, plus the new server change token.
+struct ZoneChanges {
+    let changed: [RemoteVersion]
+    let deletedRecordNames: [String]
+    let newToken: Data?
+}
+
+/// A remote version record plus its server modification time (the LWW clock).
+struct RemoteVersion {
+    let record: InspectionVersionRecord
+    let modifiedAt: Date
+}
+
+/// Fetches incremental changes from a zone since a change token. Separated from
+/// CloudDatabase so the real CloudKit fetch (slice 4c, device-verified) can be
+/// swapped in without forcing it here; the port pulls through this seam.
+protocol CloudZoneFetcher: Sendable {
+    func fetchChanges(inZone zoneName: String, since token: Data?) async throws -> ZoneChanges
+}
+
+/// Default: no remote changes (push-only until the real fetcher is wired).
+struct NoopZoneFetcher: CloudZoneFetcher {
+    func fetchChanges(inZone zoneName: String, since token: Data?) async throws -> ZoneChanges {
+        ZoneChanges(changed: [], deletedRecordNames: [], newToken: token)
+    }
+}
+
+/// Applies remote changes to the LOCAL store. The real impl (slice 4c) is backed
+/// by InspectionStore and suppresses the push-back loop while applying.
+protocol LocalVersionWriter: Sendable {
+    func applyRemoteVersion(_ payload: Data) async
+    func deleteLocalVersion(recordName: String) async
+}
+
+/// Default: applies nothing (used until the InspectionStore-backed writer is wired).
+struct NoopLocalVersionWriter: LocalVersionWriter {
+    func applyRemoteVersion(_ payload: Data) async {}
+    func deleteLocalVersion(recordName: String) async {}
 }
 
 /// Persists the identity binding. Real impl is the Keychain store; tests use an

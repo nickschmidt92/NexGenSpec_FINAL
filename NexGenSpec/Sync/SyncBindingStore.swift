@@ -35,6 +35,8 @@ public struct SyncBinding: Codable, Equatable {
     public var boundAt: Date
     /// Set once one-time seeding completes; nil means "not yet seeded" (idempotency).
     public var seededAt: Date?
+    /// Per-zone CloudKit server change token (opaque), for incremental two-way pulls.
+    public var changeToken: Data?
     public var schemaVersion: Int
 
     public init(
@@ -43,6 +45,7 @@ public struct SyncBinding: Codable, Equatable {
         zoneName: String,
         boundAt: Date,
         seededAt: Date? = nil,
+        changeToken: Data? = nil,
         schemaVersion: Int = 1
     ) {
         self.firebaseUID = firebaseUID
@@ -50,6 +53,7 @@ public struct SyncBinding: Codable, Equatable {
         self.zoneName = zoneName
         self.boundAt = boundAt
         self.seededAt = seededAt
+        self.changeToken = changeToken
         self.schemaVersion = schemaVersion
     }
 }

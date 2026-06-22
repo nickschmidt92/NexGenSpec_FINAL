@@ -22,6 +22,7 @@ private final class FakePort: SyncPort, @unchecked Sendable {
     func unbind() {}
     func recordLocalChange(_ change: SyncChange) { lock.withLock { changes.append(change) } }
     func seedIfNeeded(firebaseUID: String) async {}
+    func pull() async {}
 
     var changeCount: Int { lock.withLock { changes.count } }
     var bindCount: Int { lock.withLock { boundUIDs.count } }
