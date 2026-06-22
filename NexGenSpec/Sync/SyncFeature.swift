@@ -15,12 +15,20 @@ import Foundation
 
 enum SyncFeature {
 
-    /// Master switch. Hard OFF for slice 1 (scaffold only). Later slices flip this
-    /// (or back it with a build config / remote flag) once the real CloudKit port
-    /// exists and the schema is deployed. Computed (not a stored `let`) so callers
-    /// that branch on it don't trip "will never be executed" dead-code warnings as
-    /// the wiring lands in later slices.
-    static var isEnabled: Bool { false }
+    /// Master switch. Hard OFF in Release — sync ships dark. In DEBUG builds ONLY,
+    /// an in-app dev toggle (`devEnabledKey`, surfaced in Settings) can flip it on
+    /// to exercise sync against the Development CloudKit environment on real
+    /// devices without shipping it. Release/TestFlight is compiled hard-OFF.
+    static var isEnabled: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: devEnabledKey)
+        #else
+        return false
+        #endif
+    }
+
+    /// DEBUG-only key backing the in-app dev sync toggle (compiled out of Release).
+    static let devEnabledKey = "ngs.sync.devEnabled"
 
     /// UserDefaults key for the user-facing "Local only" privacy mode. When set,
     /// sync is force-disabled even if `isEnabled` is true and iCloud is available

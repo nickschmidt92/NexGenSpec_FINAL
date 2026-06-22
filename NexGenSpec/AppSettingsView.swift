@@ -25,6 +25,20 @@ struct AppSettingsView: View {
     @EnvironmentObject private var subscriptions: SubscriptionManager
     @ObservedObject private var profile = InspectorProfile.shared
     @State private var showPaywall = false
+#if DEBUG
+    @EnvironmentObject private var syncCoordinator: SyncCoordinator
+    @AppStorage(SyncFeature.devEnabledKey) private var syncDevEnabled = false
+    private var syncStatusLabel: String {
+        switch syncCoordinator.status {
+        case .off: return "Off"
+        case .localOnly: return "Local only (no iCloud account)"
+        case .idle: return "Bound — idle"
+        case .syncing: return "Syncing…"
+        case .paused(let reason): return "Paused — \(reason)"
+        case .error(let message): return "Error — \(message)"
+        }
+    }
+#endif
 
     // Logo picker
     @State private var showLogoPicker = false
@@ -152,6 +166,22 @@ struct AppSettingsView: View {
                     ) {
                         BackupStatusView(metadataCount: store.metadataList.count)
                     }
+#if DEBUG
+                    SettingsSectionCard(
+                        title: "CloudKit Sync (DEBUG)",
+                        subtitle: "Developer-only. Pushes inspection JSON to the DEVELOPMENT CloudKit environment so sync can be tested on a real device. Push-only for now: changes appear in the CloudKit Dashboard, not on other devices. Compiled out of release builds."
+                    ) {
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Toggle("Enable sync (this debug build only)", isOn: $syncDevEnabled)
+                                .onChange(of: syncDevEnabled) { _, _ in
+                                    syncCoordinator.userDidChange(uid: authManager.currentUID)
+                                }
+                            Text("Status: \(syncStatusLabel)")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+#endif
 
                     SettingsSectionCard(
                         title: "Inspector Profile",
@@ -1249,6 +1279,7 @@ private struct CalendarSettingsSection: View {
         AppSettingsView()
             .environmentObject(AuthManager())
             .environmentObject(InspectionStore())
+            .environmentObject(SyncCoordinator())
     }
 }
 #endif

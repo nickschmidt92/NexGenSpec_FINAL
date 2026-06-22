@@ -17,9 +17,17 @@ final class SyncScaffoldTests: XCTestCase {
     // MARK: - Feature flag
 
     func testSyncFeatureFlagIsOffByDefault() {
-        // The single guarantee that makes build 22 safe to ship dark: with the
-        // flag off, no sync may run.
-        XCTAssertFalse(SyncFeature.isEnabled, "Sync must ship OFF by default.")
+        // The guarantee that makes build 22 safe to ship dark: with the DEBUG dev
+        // key unset (its default) the flag is off; Release is hard-OFF regardless.
+        // Save/restore so a developer's live toggle isn't clobbered by the test.
+        let key = SyncFeature.devEnabledKey
+        let original = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertFalse(SyncFeature.isEnabled, "Sync must be OFF by default.")
         XCTAssertFalse(SyncFeature.effectiveSyncAllowed, "Flag off ⇒ no sync allowed.")
     }
 
