@@ -20,12 +20,14 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     private(set) var saved: [(record: InspectionVersionRecord, zone: String)] = []
     private(set) var deleted: [(name: String, zone: String)] = []
     var failEnsureZone = false
+    var failSave = false
 
     func ensureZone(_ zoneName: String) async throws {
         if failEnsureZone { throw NSError(domain: "test", code: 1) }
         lock.withLock { ensuredZones.append(zoneName) }
     }
     func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws {
+        if failSave { throw NSError(domain: "test", code: 2) }
         lock.withLock { saved.append((record, zoneName)) }
     }
     func delete(recordName: String, inZone zoneName: String) async throws {
@@ -38,9 +40,11 @@ private struct FakeAccount: CloudAccountProviding {
     func currentUserToken() async -> String? { token }
 }
 
-private struct FakeReader: LocalVersionReader {
-    let data: Data?
+private struct FakeReader: LocalVersionReader, @unchecked Sendable {
+    var data: Data? = Data("payload".utf8)
+    var snapshots: [LocalVersionSnapshot] = []
     func versionData(forVersionId id: UUID) -> Data? { data }
+    func allLocalVersions() -> [LocalVersionSnapshot] { snapshots }
 }
 
 private final class FakeBindings: BindingStoring, @unchecked Sendable {
@@ -179,5 +183,46 @@ final class CloudKitSyncPortTests: XCTestCase {
         await port.flushPending()
         XCTAssertTrue(db.saved.isEmpty)
         XCTAssertEqual(port.status, .idle, "A missing payload is a skip, not an error.")
+    }
+
+    // MARK: - Seeding (slice 3)
+
+    private func snapshot() -> LocalVersionSnapshot {
+        LocalVersionSnapshot(meta: meta(), payload: Data("seed".utf8))
+    }
+
+    func testSeedingPushesAllLocalVersionsOnceAndMarksSeeded() async {
+        let db = FakeDatabase()
+        let binds = FakeBindings()
+        let port = makePort(token: "tok1", bindings: binds, db: db, reader: FakeReader(snapshots: [snapshot(), snapshot(), snapshot()]))
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(db.saved.count, 3, "Seeding pushes every local version once on first bind.")
+        XCTAssertNotNil(binds.current("uidA")?.seededAt, "seededAt is set after a clean pass.")
+
+        // Re-bind (now seeded) must NOT re-seed.
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(db.saved.count, 3, "Already-seeded ⇒ no duplicate re-seed.")
+    }
+
+    func testInterruptedSeedDoesNotMarkSeededAndReseeds() async {
+        let db = FakeDatabase()
+        db.failSave = true
+        let binds = FakeBindings()
+        let port = makePort(token: "tok1", bindings: binds, db: db, reader: FakeReader(snapshots: [snapshot()]))
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertNil(binds.current("uidA")?.seededAt, "A failed seed pass must not mark seeded.")
+
+        db.failSave = false
+        await port.bind(firebaseUID: "uidA")   // resume → re-seeds
+        XCTAssertNotNil(binds.current("uidA")?.seededAt, "Re-bind after recovery completes seeding.")
+    }
+
+    func testSeedingNeverDeletes() async {
+        let db = FakeDatabase()
+        let port = makePort(token: "tok1", bindings: FakeBindings(), db: db, reader: FakeReader(snapshots: [snapshot(), snapshot()]))
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertTrue(db.deleted.isEmpty, "Seeding is push-only; it never deletes local or cloud data.")
     }
 }

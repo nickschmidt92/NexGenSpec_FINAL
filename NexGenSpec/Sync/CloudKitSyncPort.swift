@@ -81,6 +81,9 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // storage intact (the original iCloud account may return later).
             setState(.paused(reason: reason), binding: nil)
         }
+        // After a successful bind, run one-time seeding (no-op if not bound or
+        // already seeded).
+        await seedIfNeeded(firebaseUID: firebaseUID)
     }
 
     func unbind() {
@@ -96,8 +99,36 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         Task { await flushPending() }
     }
 
+    /// One-time local→cloud seeding for an existing (build-21) user. Idempotent,
+    /// interrupt-safe, lossless:
+    /// - guarded by `binding.seededAt` so it runs at most once per successful pass;
+    /// - dedup-proof because each record's name is its versionId, so re-pushing
+    ///   overwrites rather than duplicates;
+    /// - marks `seededAt` ONLY after a fully clean pass, so a partial/interrupted
+    ///   seed simply re-runs on the next bind;
+    /// - push-only — it never deletes or mutates local data.
     func seedIfNeeded(firebaseUID: String) async {
-        // One-time local→cloud seeding is slice 3.
+        let binding: SyncBinding? = lock.withLock { activeBinding }
+        guard let binding, binding.firebaseUID == firebaseUID, binding.seededAt == nil else { return }
+
+        var allSucceeded = true
+        for snapshot in reader.allLocalVersions() {
+            do {
+                let record = InspectionRecordMapper.make(meta: snapshot.meta, payload: snapshot.payload)
+                try await database.save(record, inZone: binding.zoneName)
+            } catch {
+                allSucceeded = false
+                Diagnostics.logError(context: "CloudKitSyncPort.seed push failed", error: error)
+            }
+        }
+        guard allSucceeded else { return }
+
+        var seeded = binding
+        seeded.seededAt = Date()
+        bindings.save(seeded)
+        lock.withLock {
+            if activeBinding?.zoneName == binding.zoneName { activeBinding = seeded }
+        }
     }
 
     /// Drains pending changes and pushes each. No-op when not bound (local-only /

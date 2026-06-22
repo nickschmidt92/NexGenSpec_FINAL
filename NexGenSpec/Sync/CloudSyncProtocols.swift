@@ -25,16 +25,42 @@ protocol CloudAccountProviding: Sendable {
     func currentUserToken() async -> String?
 }
 
-/// Reads a version's on-disk payload (the `current.json` bytes) for mirroring.
-/// The local store stays the source of truth; the mirror reads from it.
+/// One local inspection version for seeding: its queryable metadata + the raw
+/// `current.json` payload bytes.
+struct LocalVersionSnapshot {
+    let meta: VersionMetadata
+    let payload: Data
+}
+
+/// Reads on-disk version payloads for mirroring. The local store stays the source
+/// of truth; the mirror only ever reads from it.
 protocol LocalVersionReader: Sendable {
+    /// The `current.json` bytes for one version.
     func versionData(forVersionId id: UUID) -> Data?
+    /// Every local inspection version, for one-time seeding (slice 3).
+    func allLocalVersions() -> [LocalVersionSnapshot]
 }
 
 /// Default reader: the per-UID local store on disk.
 struct DiskVersionReader: LocalVersionReader {
     func versionData(forVersionId id: UUID) -> Data? {
         try? Data(contentsOf: FilePaths.currentVersionFile(jobId: id))
+    }
+
+    func allLocalVersions() -> [LocalVersionSnapshot] {
+        let root = FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true)
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return [] }
+        var snapshots: [LocalVersionSnapshot] = []
+        for folder in entries {
+            let current = folder.appendingPathComponent("current.json", isDirectory: false)
+            guard let data = try? Data(contentsOf: current),
+                  let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else { continue }
+            snapshots.append(LocalVersionSnapshot(meta: VersionMetadata(from: version), payload: data))
+        }
+        return snapshots
     }
 }
 
