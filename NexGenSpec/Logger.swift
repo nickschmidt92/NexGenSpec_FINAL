@@ -23,7 +23,7 @@ enum LoggerUtility {
         #if DEBUG
         print("[EVENT] \(message)")
         #else
-        systemLogger.log("ℹ️ Event: \(message, privacy: .public)")
+        systemLogger.log("ℹ️ Event: \(message, privacy: .private)")
         #endif
         LoggerAuditSink.recordEvent(message)
     }
