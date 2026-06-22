@@ -2,37 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>NSCameraUsageDescription</key>
-	<string>NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>NexGenSpec records video walkthroughs of inspection areas to include in your report.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Used for importing/exporting inspection images and annotations.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>NexGenSpec uses your location to attach current weather to an inspection (approximate coordinates are sent to Open-Meteo) and, when you tap "Use Current Location", to auto-fill a property address (resolved on your device using Apple's location services). Location is requested only while you use the app and is never tracked in the background.</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>NexGenSpec adds inspection appointments to the calendar you choose and reads your other events to flag scheduling conflicts. Calendar access is optional.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<!-- B-0045 + deliverable-isolation fix: File sharing stays ON only so the user
-	     can Save a report to Files on demand via the share sheet. The app no longer
-	     auto-writes ANY data into Documents — inspections, photos, signatures, audit
-	     logs, exported ZIPs, report PDFs, AND deletion receipts all live in the
-	     private per-UID store under Application Support, which iOS does NOT surface
-	     in the Files app. Documents is intentionally empty. Do NOT move any app data
-	     (working store OR deliverables) back into Documents — it reopens the
-	     cross-account PII leak this closed. -->
-	<key>UIFileSharingEnabled</key>
-	<true/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
 	<key>PrivacyPolicyURL</key>
 	<string>https://nexgenspec.com/privacy.html</string>
 	<key>TermsAndConditionsURL</key>
 	<string>https://nexgenspec.com/terms.html</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 </dict>
 </plist>
