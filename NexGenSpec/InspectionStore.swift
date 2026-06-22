@@ -350,11 +350,16 @@ public final class InspectionStore: ObservableObject {
     private func writeVersionToFile(_ version: InspectionVersion) throws -> InspectionVersion {
         guard !isWiping else { return version }
         var toWrite = version
-        // Stamp the last-writer-wins clock on genuine LOCAL writes only. When
-        // applying a synced-in remote version we PRESERVE its `updatedAt` (its
-        // origin edit time), otherwise a pull would overwrite it with the local
-        // pull time and break draft conflict arbitration (build 22 slice 4c).
-        if !isApplyingRemote {
+        // Stamp the last-writer-wins clock on genuine LOCAL DRAFT writes only.
+        //  - Applying a synced-in remote version PRESERVES its `updatedAt` (its
+        //    origin edit time); re-stamping it with the local pull time would break
+        //    draft conflict arbitration (build 22 slice 4c).
+        //  - A LOCKED (finalized) version is never re-stamped either (build 22 fix
+        //    I): finalize hashes the version's snapshot, so re-stamping `updatedAt`
+        //    afterward would make `current.json` diverge from the sealed snapshot on
+        //    a hash-covered field. Keeping it fixed also lets a device that pulls the
+        //    finalized version recompute a BYTE-IDENTICAL integrity hash (fix E).
+        if !isApplyingRemote && !toWrite.locked {
             toWrite.updatedAt = Date()
         }
         let url = FilePaths.currentVersionFile(jobId: toWrite.id)
@@ -880,8 +885,48 @@ public extension InspectionStore {
     /// current.json) and returns false so the port skips advancing the change token
     /// and the next pull retries (review F5).
     @discardableResult
-    func applyRemoteVersion(_ version: InspectionVersion) -> Bool {
+    func applyRemoteVersion(_ version: InspectionVersion, expectedUID: String? = nil) -> Bool {
         guard !isWiping else { return false }
+        // Cross-account guard (build 22 fix B / landmine 1). The pulled record was
+        // bound to `expectedUID`; this store writes to the LIVE appRoot
+        // (SessionScope.currentSegment). After an A→B account switch the segment is B
+        // before a stale A-port's in-flight pull resumes, so applying here would write
+        // A's record into B's store. Checked on the MainActor, ATOMICALLY with the
+        // synchronous write below — no `await` between this guard and writeVersionToFile,
+        // and account switches also run on the MainActor, so none can interleave. (The
+        // writer's earlier off-actor check had a real TOCTOU gap; this is the fix.)
+        if let expectedUID, SessionScope.currentSegment != expectedUID {
+            Diagnostics.logError(
+                context: "applyRemoteVersion: refused cross-account apply (bound=\(expectedUID), active=\(SessionScope.currentSegment))",
+                persistToDisk: false
+            )
+            // Return FALSE, not true (round-2 finding): a `true` would let pull() keep
+            // `allApplied` and ADVANCE the bound account's change token past this
+            // un-applied record (Firebase flips to B before the port rebinds, so a
+            // stale A-port pull sees segment==B != A). Incremental pulls never
+            // re-fetch a record once the token passes it, so the bound account's own
+            // edit would be permanently, silently lost. `false` holds the token so the
+            // next pull (under the correct binding) re-delivers it — same contract as
+            // the disk-write-failure path below.
+            return false
+        }
+        // Belt-and-suspenders immutability (build 22 fix D): the port's resolver
+        // already approved this apply from the on-disk `localState`, but if THAT read
+        // failed to decode `current.json` it now fails closed and the resolver keeps
+        // local — still, defend the in-memory truth here too. If we locally hold a
+        // FINALIZED (locked) version for this id, never let a non-finalized remote
+        // overwrite the immutable legal record. A legitimate same-id finalized remote
+        // (byte-identical by construction) is allowed through. Return true: this is a
+        // deliberate keep-local, not a transient failure worth retrying.
+        if let existing = metadataList.first(where: { $0.id == version.id }),
+           !InspectionStateMachine.allowsEdit(existing.state),
+           !version.locked {
+            Diagnostics.logError(
+                context: "applyRemoteVersion: refused to overwrite locked local \(version.id) with a non-finalized remote (immutability)",
+                persistToDisk: false
+            )
+            return true
+        }
         isApplyingRemote = true
         defer { isApplyingRemote = false }
         let written: InspectionVersion
@@ -890,6 +935,22 @@ public extension InspectionStore {
         } catch {
             Diagnostics.logError(context: "applyRemoteVersion: disk write failed; index left untouched, will retry", error: error)
             return false
+        }
+        // Build 22 fix E: only `current.json` syncs — the integrity snapshot lives in
+        // an unsynced `versions/<id>.json` written by `FinalizationService`. Without
+        // it, a finalized report pulled onto this device has no `loadReportHash`, so
+        // the renderer treats it as a DRAFT and exporters emit an empty hash (the Mac
+        // review-station's primary path). Recompute the snapshot locally for a
+        // finalized apply: the hash is over the canonical sorted-keys encoding of the
+        // SAME model bytes, so it is byte-identical to the origin device's. Best
+        // effort — a derived artifact; on failure the apply still stands and the next
+        // pull retries (so do NOT fail the apply / wedge the token over it).
+        if written.locked {
+            do {
+                _ = try FinalizationService.writeSnapshot(written)
+            } catch {
+                Diagnostics.logError(context: "applyRemoteVersion: failed to recompute integrity snapshot for finalized \(written.id)", error: error)
+            }
         }
         if let idx = metadataList.firstIndex(where: { $0.id == written.id }) {
             metadataList[idx] = VersionMetadata(from: written)
@@ -909,8 +970,20 @@ public extension InspectionStore {
     /// Returns true when the version is gone (removed now or already absent); false
     /// on a real removal failure, so the port retries on the next pull.
     @discardableResult
-    func applyRemoteDelete(id: UUID) -> Bool {
+    func applyRemoteDelete(id: UUID, expectedUID: String? = nil) -> Bool {
         guard !isWiping else { return false }
+        // Cross-account guard (build 22 fix B), atomic with the synchronous delete
+        // below — see applyRemoteVersion. Refuse to delete in the wrong account's
+        // store after an account switch raced this pull.
+        if let expectedUID, SessionScope.currentSegment != expectedUID {
+            Diagnostics.logError(
+                context: "applyRemoteDelete: refused cross-account delete (bound=\(expectedUID), active=\(SessionScope.currentSegment))",
+                persistToDisk: false
+            )
+            // FALSE, not true (round-2 finding) — hold the change token for retry
+            // under the correct binding; see applyRemoteVersion.
+            return false
+        }
         // Already absent ⇒ the tombstone is satisfied (idempotent success).
         guard metadataList.contains(where: { $0.id == id }) else { return true }
         isApplyingRemote = true

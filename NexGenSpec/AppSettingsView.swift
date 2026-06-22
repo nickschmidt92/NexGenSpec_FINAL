@@ -737,6 +737,15 @@ struct AppSettingsView: View {
         // authenticated screen for an account that no longer exists. `store` is
         // captured directly so the background wipe survives this view's teardown.
         let store = self.store
+        // Build 22 fix C / edge G: tear down the deleted account's CloudKit zone +
+        // local binding so no residual client PII lingers in the user's private
+        // iCloud (5.1.1(v) parity). The deleting UID is the active deletion pin (set
+        // in proceedAfterFirebaseDelete before Firebase cleared currentUser); capture
+        // it BEFORE the wipe Task below releases the pin. Strict no-op when the sync
+        // flag is off or no binding exists.
+        if let deletedUID = SessionScope.pinnedUID {
+            syncCoordinator.tearDownDeletedAccount(uid: deletedUID)
+        }
         store.beginWipe()
         Task {
             await store.performDiskWipe()

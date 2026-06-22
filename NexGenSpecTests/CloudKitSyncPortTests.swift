@@ -17,22 +17,42 @@ import XCTest
 private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var ensuredZones: [String] = []
-    private(set) var saved: [(record: InspectionVersionRecord, zone: String, ifAbsent: Bool)] = []
+    private(set) var saved: [(record: InspectionVersionRecord, zone: String)] = []
     private(set) var deleted: [(name: String, zone: String)] = []
+    private(set) var deletedZones: [String] = []
+    /// Models the live zone's record store, keyed by recordName, so a finalize that
+    /// re-pushes the SAME versionId can be verified to OVERWRITE a draft (fix A) but
+    /// NEVER overwrite an already-finalized record.
+    private var stored: [String: InspectionVersionRecord] = [:]
     var failEnsureZone = false
     var failSave = false
+    var failDeleteZone = false
 
     func ensureZone(_ zoneName: String) async throws {
         if failEnsureZone { throw NSError(domain: "test", code: 1) }
         lock.withLock { ensuredZones.append(zoneName) }
     }
-    func save(_ record: InspectionVersionRecord, inZone zoneName: String, ifAbsent: Bool) async throws {
+    func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws {
         if failSave { throw NSError(domain: "test", code: 2) }
-        lock.withLock { saved.append((record, zoneName, ifAbsent)) }
+        lock.withLock {
+            // Model CKCloudDatabase (fix A): the save fetches the server record and
+            // NEVER overwrites one that is already finalized/locked (immutability at
+            // the source of truth). Otherwise it creates/overwrites — promoting a
+            // draft to finalized, the core fix-A case.
+            if stored[record.recordName]?.locked == true { return }
+            stored[record.recordName] = record
+            saved.append((record, zoneName))
+        }
     }
     func delete(recordName: String, inZone zoneName: String) async throws {
-        lock.withLock { deleted.append((recordName, zoneName)) }
+        lock.withLock { deleted.append((recordName, zoneName)); stored[recordName] = nil }
     }
+    func deleteZone(_ zoneName: String) async throws {
+        if failDeleteZone { throw NSError(domain: "test", code: 3) }
+        lock.withLock { deletedZones.append(zoneName) }
+    }
+    /// The record currently stored under a name (nil if never saved / clobbered).
+    func record(named recordName: String) -> InspectionVersionRecord? { lock.withLock { stored[recordName] } }
 }
 
 private struct FakeAccount: CloudAccountProviding {
@@ -255,24 +275,213 @@ final class CloudKitSyncPortTests: XCTestCase {
         XCTAssertTrue(db.deleted.isEmpty, "Seeding is push-only; it never deletes local or cloud data.")
     }
 
-    // MARK: - Finalized immutability (review fix)
+    // MARK: - Finalize reaches CloudKit (fix A)
 
-    func testFinalizedUsesNeverClobberSaveAndDraftsOverwrite() async {
+    /// Regression for fix A: finalizing a draft keeps the SAME versionId, so the
+    /// draft record already exists in the zone. The old `ifAbsent: meta.locked`
+    /// never-clobber push hit `serverRecordChanged` (swallowed as "left immutable"),
+    /// so the finalized payload/status/locked NEVER uploaded and device B kept a
+    /// stale draft forever. The push must now OVERWRITE the draft with the finalized
+    /// record. (With the old code this fails: the stored record stays a draft.)
+    func testFinalizePromotionOverwritesDraftRecordInCloud() async {
         let db = FakeDatabase()
-        let port = makePort(token: "tok1", bindings: FakeBindings(), db: db)
+        let vid = UUID()
+        let port = makePort(token: "tok1", bindings: FakeBindings(), db: db, reader: FakeReader(data: Data("json".utf8)))
         await port.bind(firebaseUID: "uidA")
 
-        let locked = VersionMetadata(
-            id: UUID(), inspectionId: UUID(), versionNumber: 2, status: .final,
+        // 1) Push the DRAFT for this versionId.
+        let draft = VersionMetadata(
+            id: vid, inspectionId: UUID(), versionNumber: 1, status: .draft,
+            finalizedAt: nil, locked: false, clientName: "", propertyAddress: "", inspectionDate: Date()
+        )
+        port.recordLocalChange(.versionUpserted(draft))
+        await port.flushPending()
+        XCTAssertEqual(db.record(named: vid.uuidString)?.locked, false, "draft pushed first")
+
+        // 2) Finalize the SAME versionId → push a locked/Final record.
+        let finalized = VersionMetadata(
+            id: vid, inspectionId: draft.inspectionId, versionNumber: 1, status: .final,
             finalizedAt: Date(), locked: true, clientName: "", propertyAddress: "", inspectionDate: Date()
         )
-        port.recordLocalChange(.versionUpserted(locked))
+        port.recordLocalChange(.versionUpserted(finalized))
         await port.flushPending()
-        XCTAssertEqual(db.saved.last?.ifAbsent, true, "Finalized/locked versions must use never-clobber save (immutability).")
 
-        port.recordLocalChange(.versionUpserted(meta()))   // draft
+        let cloud = db.record(named: vid.uuidString)
+        XCTAssertEqual(cloud?.locked, true, "finalize must OVERWRITE the draft cloud record (locked=1) — fix A")
+        XCTAssertEqual(cloud?.status, "Final", "finalize must promote the cloud record's status to Final")
+        XCTAssertNotNil(cloud?.finalizedAt, "the finalized record must carry finalizedAt")
+    }
+
+    /// Immutability at the source of truth (fix A adversarial finding #1): once a
+    /// versionId is finalized in the cloud, a SECOND, divergent finalization of the
+    /// same id (e.g. another device that finalized the shared draft offline, with a
+    /// different finalizedAt) must NOT clobber it. `database.save` refuses to
+    /// overwrite an already-locked server record.
+    func testFinalizedCloudRecordIsNeverClobberedByASecondFinalize() async {
+        let db = FakeDatabase()
+        let vid = UUID()
+        let port = makePort(token: "tok1", bindings: FakeBindings(), db: db, reader: FakeReader(data: Data("json".utf8)))
+        await port.bind(firebaseUID: "uidA")
+
+        let finalA = VersionMetadata(
+            id: vid, inspectionId: UUID(), versionNumber: 1, status: .final,
+            finalizedAt: Date(timeIntervalSince1970: 1000), locked: true,
+            clientName: "", propertyAddress: "", inspectionDate: Date()
+        )
+        port.recordLocalChange(.versionUpserted(finalA))
         await port.flushPending()
-        XCTAssertEqual(db.saved.last?.ifAbsent, false, "Drafts overwrite (last-writer-wins).")
+        XCTAssertEqual(db.record(named: vid.uuidString)?.finalizedAt, Date(timeIntervalSince1970: 1000))
+
+        // A divergent second finalize of the SAME id must be refused at the cloud.
+        let finalB = VersionMetadata(
+            id: vid, inspectionId: finalA.inspectionId, versionNumber: 1, status: .final,
+            finalizedAt: Date(timeIntervalSince1970: 2000), locked: true,
+            clientName: "", propertyAddress: "", inspectionDate: Date()
+        )
+        port.recordLocalChange(.versionUpserted(finalB))
+        await port.flushPending()
+        XCTAssertEqual(db.record(named: vid.uuidString)?.finalizedAt, Date(timeIntervalSince1970: 1000),
+                       "a finalized cloud record is immutable — the second finalize must not clobber the first")
+    }
+
+    // MARK: - Edit queued while unbound is not lost (fix F)
+
+    /// Regression for fix F: `flushPending` used to drain `pending` BEFORE checking
+    /// the binding, so an edit recorded during a transient unbind window was dropped
+    /// (seeding runs once, so it never re-pushed). The queue must survive an unbound
+    /// flush and push on the next bind.
+    func testEditQueuedWhileUnboundIsNotLostAndPushesOnBind() async {
+        let db = FakeDatabase()
+        let binds = FakeBindings()
+        let port = makePort(token: "tok1", bindings: binds, db: db)
+
+        // Record a change BEFORE binding (activeBinding == nil). Flushing while
+        // unbound must NOT drop it.
+        let m = meta()
+        port.recordLocalChange(.versionUpserted(m))
+        await port.flushPending()
+        XCTAssertTrue(db.saved.isEmpty, "nothing is pushed while unbound")
+
+        // Bind: the bind tail re-drives flushPending and the queued edit uploads.
+        await port.bind(firebaseUID: "uidA")
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(db.saved.count, 1, "the edit queued while unbound is pushed once bound (fix F)")
+        XCTAssertEqual(db.saved.first?.record.recordName, m.id.uuidString)
+    }
+
+    // MARK: - Account-deletion teardown (fix C / edge G)
+
+    func testAccountTeardownDeletesZoneAndBindingWhenBound() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+
+        // Current iCloud user still matches the bound account → safe to delete the zone.
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+
+        XCTAssertEqual(db.deletedZones, [zone], "teardown deletes the deleted account's CloudKit zone")
+        XCTAssertNil(binds.current("uidA"), "teardown removes the local binding")
+    }
+
+    /// Finding #4: after an iCloud-account switch the bound zone lives in the OLD,
+    /// inaccessible private DB. Teardown must NOT issue deleteZone against the new
+    /// account (it would falsely "succeed" and leave the real zone behind) — but it
+    /// must still drop the local binding.
+    func testAccountTeardownSkipsZoneDeleteAfterICloudSwitchButDropsBinding() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+
+        // Current iCloud user is DIFFERENT from the bound account (tok2 != tok1).
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok2"), bindings: binds, isEnabled: true)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "must not deleteZone against the wrong iCloud account")
+        XCTAssertNil(binds.current("uidA"), "the local binding is still dropped")
+    }
+
+    func testAccountTeardownIsNoopWhenFlagOff() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: false)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "flag OFF ⇒ no CloudKit zone delete")
+        XCTAssertNotNil(binds.current("uidA"), "flag OFF ⇒ binding left intact")
+    }
+
+    func testAccountTeardownIsNoopWhenNoBinding() async {
+        let db = FakeDatabase(); let binds = FakeBindings()
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        XCTAssertTrue(db.deletedZones.isEmpty, "no binding ⇒ nothing to tear down")
+    }
+
+    /// iCloud unavailable at deletion time (token nil): we can't verify ownership, so
+    /// no zone delete is attempted (it would hit the wrong/unknown DB). Teardown is
+    /// one-shot best-effort, so the binding is still dropped; the zone residual + the
+    /// known durable-retry limitation are documented (sync-GA item).
+    func testAccountTeardownSkipsZoneButDropsBindingWhenICloudUnavailable() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: nil), bindings: binds, isEnabled: true)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "iCloud unavailable ⇒ no zone delete attempted (could hit wrong DB)")
+        XCTAssertNil(binds.current("uidA"), "best-effort teardown is one-shot: the binding is dropped")
+    }
+
+    /// A transient deleteZone failure does not block teardown: the attempt is made and
+    /// the binding is still dropped (best-effort, never blocks the wipe). Durable retry
+    /// of the residual zone is a documented sync-GA item.
+    func testAccountTeardownDropsBindingEvenWhenZoneDeleteFails() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
+        let db = FakeDatabase(); db.failDeleteZone = true
+        let binds = FakeBindings(["uidA": binding])
+
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+
+        XCTAssertNil(binds.current("uidA"), "best-effort: binding dropped even when deleteZone fails")
+    }
+
+    // MARK: - Reader pinned to the bound UID (fix B / landmine 1)
+
+    /// Regression for fix B: `DiskVersionReader` resolved paths against the LIVE
+    /// `appRoot`, so after an A→B account switch an in-flight A-port seed/pull read
+    /// B's disk. A reader pinned to its bound UID must read THAT UID's store
+    /// regardless of who is currently the active (live) user.
+    func testDiskVersionReaderIsPinnedToBoundUIDNotLiveAppRoot() throws {
+        let uidA = "fixB-A-\(UUID().uuidString)"
+        let uidB = "fixB-B-\(UUID().uuidString)"
+        let savedProvider = SessionScope.uidProvider
+        defer {
+            SessionScope.uidProvider = savedProvider
+            try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uidA))
+            try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uidB))
+        }
+
+        // A version exists ONLY in A's per-UID store.
+        let id = UUID()
+        let inspection = Inspection(id: id, clientName: "A-only", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "addr", inspectionDate: Date(), inspectorName: "I", sections: [])
+        let v = InspectionVersion(id: id, versionNumber: 1, status: .draft, finalizedAt: nil, locked: false, inspection: inspection)
+        let urlA = FilePaths.currentVersionFile(jobId: id, inRoot: FilePaths.userRoot(uid: uidA))
+        try FileSecurity.ensureProtectedDirectory(urlA.deletingLastPathComponent())
+        try FileSecurity.writeProtected(try JSONEncoder().encode(v), to: urlA)
+
+        // The LIVE active user is B (B's store has nothing for `id`).
+        SessionScope.uidProvider = { uidB }
+
+        let pinnedA = DiskVersionReader(uid: uidA)
+        XCTAssertTrue(pinnedA.localState(forVersionId: id).exists,
+                      "a reader pinned to A must see A's version even though the live user is B")
+        XCTAssertNotNil(pinnedA.versionData(forVersionId: id), "pinned-A reader must read A's payload")
+
+        let live = DiskVersionReader()
+        XCTAssertEqual(live.localState(forVersionId: id), .absent,
+                       "an unpinned reader follows the live (B) appRoot and must NOT see A's version")
     }
 
     // MARK: - Pull / two-way (slice 4) — bind() triggers pull()

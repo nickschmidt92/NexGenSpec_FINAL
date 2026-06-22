@@ -32,6 +32,13 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
     /// Reentrancy guard for pull() — bind()'s tail pull and the foreground
     /// pullNow() can fire concurrently (review F6). Guarded by `lock`.
     private var _isPulling = false
+    /// Serializes flushPending() so two concurrent flushes (one per
+    /// recordLocalChange Task, plus the bind/foreground re-drives) can't double-push
+    /// the same snapshot. `_flushAgain` re-runs once more if work was requested
+    /// while a flush was in flight, so a change appended mid-flush is still drained
+    /// promptly (build 22 fix F). Guarded by `lock`.
+    private var _isFlushing = false
+    private var _flushAgain = false
 
     init(
         account: CloudAccountProviding,
@@ -91,9 +98,12 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             setState(.paused(reason: reason), binding: nil)
         }
         // After a successful bind, run one-time seeding (no-op if not bound or
-        // already seeded), then pull remote changes (two-way).
+        // already seeded), then pull remote changes (two-way), then flush any
+        // changes that queued while we were unbound/paused (fix F) — by now
+        // `activeBinding` is set, so a previously-stranded edit finally pushes.
         await seedIfNeeded(firebaseUID: firebaseUID)
         await pull()
+        await flushPending()
     }
 
     func unbind() {
@@ -123,9 +133,21 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
 
         var allSucceeded = true
         for snapshot in reader.allLocalVersions() {
+            // TOCTOU guard (fix B / landmine 1): an account switch can detach this
+            // binding (unbind clears `activeBinding`) and cancel this task while we
+            // are suspended at an `await`. Re-check both BEFORE every cloud write so
+            // a captured A-binding can never push into A's zone after the device has
+            // re-scoped to B. (The reader is also pinned to A's disk, so it only ever
+            // reads A's data — this is defense in depth on top of that.)
+            if Task.isCancelled { return }
+            let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
+            guard stillBound else { return }
             do {
                 let record = InspectionRecordMapper.make(meta: snapshot.meta, payload: snapshot.payload)
-                try await database.save(record, inZone: binding.zoneName, ifAbsent: snapshot.meta.locked)
+                // `save` is idempotent on re-seed: it never overwrites an already-
+                // finalized server record, and re-pushing an unchanged draft is a
+                // harmless overwrite (same recordName). (fix A unified the policy.)
+                try await database.save(record, inZone: binding.zoneName)
             } catch {
                 allSucceeded = false
                 Diagnostics.logError(context: "CloudKitSyncPort.seed push failed", error: error)
@@ -184,6 +206,13 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
             )
             if decision == .applyRemote {
+                // TOCTOU guard (fix B / landmine 1): bail before applying a remote
+                // record if an account switch detached/cancelled this pull mid-flight,
+                // so an A-zone record is never written into B's store. The writer is
+                // additionally pinned to its bound UID; this is defense in depth.
+                if Task.isCancelled { return }
+                let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
+                guard stillBound else { return }
                 if await writer.applyRemoteVersion(remote.record.payload) == false { allApplied = false }
             }
         }
@@ -191,6 +220,9 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         for recordName in changes.deletedRecordNames {
             guard let versionId = UUID(uuidString: recordName) else { continue }
             if SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: versionId)) == .deleteLocal {
+                if Task.isCancelled { return }
+                let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
+                guard stillBound else { return }
                 if await writer.deleteLocalVersion(recordName: recordName) == false { allApplied = false }
             }
         }
@@ -205,34 +237,73 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         }
     }
 
-    /// Drains pending changes and pushes each. No-op when not bound (local-only /
-    /// paused / refused) — the local store remains the source of truth and a later
-    /// bind re-seeds. Exposed (non-private) so tests can flush deterministically.
+    /// Pushes pending changes. No-op when not bound (local-only / paused / refused)
+    /// — the local store remains the source of truth and the queue is preserved for
+    /// the next bind/foreground re-drive. A change is removed from the queue ONLY
+    /// after its push succeeds, so a transient unbind never drops an edit (fix F).
+    /// Exposed (non-private) so tests can flush deterministically.
     func flushPending() async {
-        let (binding, changes): (SyncBinding?, [SyncChange]) = lock.withLock {
-            let drained = pending
-            pending.removeAll()
-            return (activeBinding, drained)
+        // Serialize: if a flush is already running, ask it to run once more when it
+        // finishes (so a change appended mid-flush still drains) and return — never
+        // run two flushes over an overlapping snapshot, which would double-push.
+        let shouldRun: Bool = lock.withLock {
+            guard !_isFlushing else { _flushAgain = true; return false }
+            _isFlushing = true
+            return true
         }
-        guard let binding, !changes.isEmpty else { return }
+        guard shouldRun else { return }
+        defer {
+            let runAgain: Bool = lock.withLock {
+                _isFlushing = false
+                guard _flushAgain else { return false }
+                _flushAgain = false
+                return true
+            }
+            if runAgain { Task { await self.flushPending() } }
+        }
+
+        // Snapshot WITHOUT clearing: if we are not bound (local-only / paused /
+        // bind-in-flight) the queued edits must survive — they re-drive on the next
+        // bind() and on foreground. Clearing first (the old bug) dropped any edit
+        // made during a transient unbind, and seeding runs only once so it never
+        // re-pushed.
+        let (binding, snapshot): (SyncBinding?, [SyncChange]) = lock.withLock {
+            (activeBinding, pending)
+        }
+        guard let binding, !snapshot.isEmpty else { return }
         lock.withLock { _status = .syncing }
 
-        var hadError = false
-        for change in changes {
+        var failed: [SyncChange] = []
+        for (i, change) in snapshot.enumerated() {
+            // Stop pushing if a racing rebind/unbind detached this binding (or
+            // cancelled the bind task) mid-flush — but PRESERVE the unprocessed
+            // changes in the queue rather than dropping them (fix B + F).
+            let proceed = !Task.isCancelled && lock.withLock { activeBinding?.zoneName == binding.zoneName }
+            guard proceed else {
+                failed.append(contentsOf: snapshot[i...])
+                break
+            }
             do {
                 try await apply(change, binding: binding)
             } catch {
-                hadError = true
+                failed.append(change)   // keep it queued; do NOT drop on failure
                 Diagnostics.logError(context: "CloudKitSyncPort push failed", error: error)
             }
         }
 
         lock.withLock {
-            // Only settle status if this binding is still the active one (not torn
-            // down by an unbind/refuse that raced the push).
-            if activeBinding?.zoneName == binding.zoneName {
-                _status = hadError ? .error("Some changes couldn't be uploaded; will retry.") : .idle
-            }
+            // Only mutate the queue/status if this binding is still active — an
+            // unbind() already cleared `pending` otherwise, and re-prepending here
+            // would resurrect a detached binding's changes.
+            guard activeBinding?.zoneName == binding.zoneName else { return }
+            // Dequeue ONLY the changes we processed (the snapshot slice): keep the
+            // ones that failed/were-skipped, plus anything appended during the flush.
+            let appendedDuringFlush = pending.count > snapshot.count ? Array(pending[snapshot.count...]) : []
+            pending = failed + appendedDuringFlush
+            // Surface .error only on a GENUINE push failure (something stayed in
+            // `failed`); changes merely appended mid-flush are drained by the re-run,
+            // so they shouldn't masquerade as an upload error.
+            _status = failed.isEmpty ? .idle : .error("Some changes couldn't be uploaded yet; still queued.")
         }
     }
 
@@ -241,9 +312,16 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         case .versionUpserted(let meta):
             guard let data = reader.versionData(forVersionId: meta.id) else { return }
             let record = InspectionRecordMapper.make(meta: meta, payload: data)
-            // Finalized (locked) versions are immutable: never overwrite a stored
-            // record. Drafts overwrite (last-writer-wins).
-            try await database.save(record, inZone: binding.zoneName, ifAbsent: meta.locked)
+            // Push the version (fix A). `database.save` overwrites a draft (LWW is
+            // arbitrated on the receiver) and PROMOTES a draft to finalized — the core
+            // fix-A case the old never-clobber broke: finalize keeps the same
+            // versionId, so the draft record already existed and a tag-less
+            // `.ifServerRecordUnchanged` save failed `serverRecordChanged` (swallowed
+            // as "left immutable"), so the finalized payload never uploaded. The save
+            // still refuses to overwrite an ALREADY-finalized server record (immutable
+            // legal record — enforced inside `save` by a fetch-and-check), so a second
+            // device's divergent finalization of the same id can't clobber the first.
+            try await database.save(record, inZone: binding.zoneName)
         case .versionDeleted(let versionId):
             try await database.delete(recordName: versionId.uuidString, inZone: binding.zoneName)
         case .mediaUpserted, .mediaDeleted:

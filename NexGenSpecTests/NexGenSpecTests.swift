@@ -297,6 +297,172 @@ final class InspectionIndexRecoveryTests: XCTestCase {
     }
 }
 
+/// Build 22 — P6 remediation: the InspectionStore-side fixes (D immutability
+/// belt-and-suspenders, E integrity-snapshot recompute on a finalized apply, I no
+/// re-stamp of a locked version, and B's writer cross-account guard). Coupled to
+/// the real on-disk store, so `setUp` stashes any existing store aside for a clean
+/// deterministic `appRoot` and `tearDown` restores it (mirrors
+/// InspectionIndexRecoveryTests).
+@MainActor
+final class Build22RemediationTests: XCTestCase {
+
+    private var stashDir: URL!
+    private var inspectionsDir: URL { FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true) }
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-b22rem-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        try moveAside(inspectionsDir, named: "Inspections")
+        try moveAside(FilePaths.inspectionsIndex, named: "inspections.json")
+        try moveAside(FilePaths.inspectionsIndexBackup, named: "inspections.json.backup")
+    }
+
+    override func tearDownWithError() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: inspectionsDir)
+        try? fm.removeItem(at: FilePaths.inspectionsIndex)
+        try? fm.removeItem(at: FilePaths.inspectionsIndexBackup)
+        try moveBack(named: "Inspections", to: inspectionsDir)
+        try moveBack(named: "inspections.json", to: FilePaths.inspectionsIndex)
+        try moveBack(named: "inspections.json.backup", to: FilePaths.inspectionsIndexBackup)
+        try? fm.removeItem(at: stashDir)
+        stashDir = nil
+    }
+
+    private func moveAside(_ url: URL, named: String) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        try fm.moveItem(at: url, to: stashDir.appendingPathComponent(named))
+    }
+    private func moveBack(named: String, to dest: URL) throws {
+        let fm = FileManager.default
+        let src = stashDir.appendingPathComponent(named)
+        guard fm.fileExists(atPath: src.path) else { return }
+        try? fm.removeItem(at: dest)
+        try fm.moveItem(at: src, to: dest)
+    }
+
+    private func makeFinalized(id: UUID, updatedAt: Date) -> InspectionVersion {
+        let inspection = Inspection(id: id, clientName: "Final Client", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "1 Seal St", inspectionDate: Date(), inspectorName: "Insp", sections: [])
+        var v = InspectionVersion(id: id, versionNumber: 1, status: .final, finalizedAt: updatedAt, locked: true, inspection: inspection)
+        v.updatedAt = updatedAt
+        return v
+    }
+
+    // MARK: - Fix I: a locked version's updatedAt is never re-stamped on write
+
+    func testFinalizedVersionWriteDoesNotRestampUpdatedAt() throws {
+        let store = InspectionStore()
+        let id = UUID()
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+        store.insert(version: makeFinalized(id: id, updatedAt: t1))   // local write of a LOCKED version
+        let onDisk = try XCTUnwrap(store.loadFullVersion(id: id))
+        XCTAssertEqual(onDisk.updatedAt, t1,
+                       "fix I: a locked version's updatedAt must NOT be re-stamped on write (it must match the sealed snapshot)")
+    }
+
+    // MARK: - Fix E: applying a finalized remote recomputes the integrity snapshot
+
+    func testApplyingFinalizedRemoteRecomputesIntegritySnapshotByteIdentical() throws {
+        let store = InspectionStore()
+        let id = UUID()
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+        let v = makeFinalized(id: id, updatedAt: t1)
+        let jobId = UUID(uuidString: v.inspection.inspectionId) ?? v.id
+
+        // The ORIGIN device's sealed hash, over its in-memory model.
+        let originHash = try FinalizationService.writeSnapshot(v)
+        // Simulate device B: only current.json syncs — the snapshot is NOT present.
+        try? FileManager.default.removeItem(at: FilePaths.versionSnapshotFile(jobId: jobId, versionId: id))
+        XCTAssertNil(FinalizationService.loadReportHash(jobId: jobId, versionId: id),
+                     "precondition: device B starts without the integrity snapshot")
+
+        // Mimic the REAL pull path: the version arrives as JSON payload BYTES and is
+        // decoded before apply (InspectionStoreVersionWriter decodes payload Data).
+        // Round-trip through encode/decode so any Date-precision / optional-field loss
+        // that would break cross-device byte-identity is caught (#8), not bypassed by
+        // reusing the in-memory object.
+        let payload = try JSONEncoder().encode(v)
+        let decoded = try JSONDecoder().decode(InspectionVersion.self, from: payload)
+        XCTAssertTrue(store.applyRemoteVersion(decoded), "a finalized remote version applies")
+
+        let recomputed = FinalizationService.loadReportHash(jobId: jobId, versionId: id)
+        XCTAssertNotNil(recomputed, "fix E: applying a finalized version must recompute the integrity snapshot locally")
+        XCTAssertEqual(recomputed, originHash, "the recomputed hash (over the decoded synced payload) must be byte-identical to the origin's")
+    }
+
+    // MARK: - Fix D: in-memory immutability belt-and-suspenders
+
+    func testApplyRemoteRefusesToOverwriteLockedLocalWithDraft() throws {
+        let store = InspectionStore()
+        let id = UUID()
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+
+        // Local device holds a FINALIZED version for this id.
+        XCTAssertTrue(store.applyRemoteVersion(makeFinalized(id: id, updatedAt: t1)))
+        XCTAssertEqual(store.loadFullVersion(id: id)?.locked, true)
+
+        // A NON-finalized remote arrives for the SAME id (e.g. an undecodable
+        // localState upstream, or a resurrected draft). It must be REFUSED.
+        var draft = makeFinalized(id: id, updatedAt: t1)
+        draft.status = .draft
+        draft.locked = false
+        draft.finalizedAt = nil
+        draft.updatedAt = Date()   // "newer" — must still not win over a locked local
+        XCTAssertTrue(store.applyRemoteVersion(draft),
+                      "a refused immutable overwrite is a deliberate keep-local (true), not a retry")
+
+        let onDisk = try XCTUnwrap(store.loadFullVersion(id: id))
+        XCTAssertEqual(onDisk.locked, true, "fix D: a locked local version must not be overwritten by a non-finalized remote")
+        XCTAssertEqual(onDisk.status, .final)
+        XCTAssertEqual(store.metadataList.first(where: { $0.id == id })?.locked, true)
+    }
+
+    // MARK: - Fix D: real DiskVersionReader.localState fails closed on undecodable JSON
+
+    func testLocalStateFailsClosedOnUndecodableCurrentJson() throws {
+        let id = UUID()
+        let url = FilePaths.currentVersionFile(jobId: id)
+        try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+        try FileSecurity.writeProtected(Data("}{ not valid json".utf8), to: url)   // present but undecodable
+
+        let state = DiskVersionReader().localState(forVersionId: id)
+        XCTAssertTrue(state.exists, "an existing-but-undecodable current.json must report exists:true")
+        XCTAssertTrue(state.isFinalized, "fix D: fail CLOSED — treat undecodable as finalized so it is never overwritten")
+        // And the resolver maps that fail-closed state to keepLocal for BOTH paths.
+        XCTAssertEqual(SyncConflictResolver.resolveUpsert(local: state, remoteLocked: false, remoteUpdatedAt: Date()), .keepLocal,
+                       "undecodable local must keepLocal against a remote upsert")
+        XCTAssertEqual(SyncConflictResolver.resolveDelete(local: state), .keepLocal,
+                       "undecodable local must keepLocal against a remote tombstone")
+    }
+
+    // MARK: - Fix B: the writer refuses to apply across an account switch
+
+    func testWriterRefusesCrossAccountApply() async throws {
+        let store = InspectionStore()
+        let boundUID = "fixB-bound-\(UUID().uuidString)"
+        let otherUID = "fixB-other-\(UUID().uuidString)"
+        let writer = InspectionStoreVersionWriter(store: store, boundUID: boundUID)
+        let savedProvider = SessionScope.uidProvider
+        defer { SessionScope.uidProvider = savedProvider }
+        SessionScope.uidProvider = { otherUID }   // live active user != bound UID
+
+        let id = UUID()
+        let inspection = Inspection(id: id, clientName: "X", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "addr", inspectionDate: Date(), inspectorName: "I", sections: [])
+        let v = InspectionVersion(id: id, versionNumber: 1, status: .draft, finalizedAt: nil, locked: false, inspection: inspection)
+        let before = store.metadataList.count
+
+        let result = await writer.applyRemoteVersion(try JSONEncoder().encode(v))
+        XCTAssertFalse(result, "a refused cross-account apply returns FALSE so pull() HOLDS the change token for retry (round-2 fix) — true would advance it past the bound account's own record and lose it")
+        XCTAssertEqual(store.metadataList.count, before, "fix B: a cross-account apply must not modify the store")
+        XCTAssertFalse(store.metadataList.contains { $0.id == id }, "the cross-account version must not be inserted")
+    }
+}
+
 /// B-0045 — the sensitive working store moved out of file-shared Documents into
 /// Application Support, and the legacy exposed copy is deleted on launch.
 @MainActor
@@ -2780,6 +2946,7 @@ private final class RecordingSyncPort: SyncPort, @unchecked Sendable {
     func recordLocalChange(_ change: SyncChange) { lock.withLock { changes.append(change) } }
     func seedIfNeeded(firebaseUID: String) async {}
     func pull() async {}
+    func flushPending() async {}
     var count: Int { lock.withLock { changes.count } }
 }
 

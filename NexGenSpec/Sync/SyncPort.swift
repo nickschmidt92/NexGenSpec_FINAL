@@ -81,4 +81,10 @@ public protocol SyncPort: AnyObject, Sendable {
     /// Pull remote changes and apply them locally (two-way sync). No-op when not
     /// bound. (slice 4)
     func pull() async
+
+    /// Push any queued-but-unsent local changes now. Idempotent and a no-op when
+    /// not bound or nothing is queued. Re-driven on bind and on app foreground so an
+    /// edit made during a transient unbind window (paused / bind-in-flight) is not
+    /// stranded in the queue (build 22 fix F).
+    func flushPending() async
 }

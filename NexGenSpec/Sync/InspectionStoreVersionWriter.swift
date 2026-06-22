@@ -20,8 +20,18 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
     /// apply a safe no-op. Set once at init; only ever read.
     private weak var store: InspectionStore?
 
-    init(store: InspectionStore?) {
+    /// The Firebase UID this writer was bound to at sync-bind time, passed through to
+    /// the store's apply so the cross-account guard runs ATOMICALLY on the MainActor
+    /// with the disk write (build 22 fix B / landmine 1). Doing the check here (off
+    /// the MainActor) before the `MainActor.run` hop had a real TOCTOU gap — an A→B
+    /// switch in the gap would still let the live-appRoot write land in B's store —
+    /// so the authoritative guard lives in `InspectionStore.applyRemote*`. nil ⇒ no
+    /// pinning (back-compat for any non-bound construction).
+    private let boundUID: String?
+
+    init(store: InspectionStore?, boundUID: String? = nil) {
         self.store = store
+        self.boundUID = boundUID
     }
 
     func applyRemoteVersion(_ payload: Data) async -> Bool {
@@ -37,13 +47,14 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
         }
         // No store (sync detached mid-pull) ⇒ nothing to apply; don't wedge the token.
         guard let store = self.store else { return true }
-        return await MainActor.run { store.applyRemoteVersion(version) }
+        // The cross-account guard runs inside applyRemoteVersion (atomic with the write).
+        return await MainActor.run { store.applyRemoteVersion(version, expectedUID: boundUID) }
     }
 
     func deleteLocalVersion(recordName: String) async -> Bool {
         // Not a version record name (e.g. a later slice's ReportPDF) ⇒ nothing to do.
         guard let id = UUID(uuidString: recordName) else { return true }
         guard let store = self.store else { return true }
-        return await MainActor.run { store.applyRemoteDelete(id: id) }
+        return await MainActor.run { store.applyRemoteDelete(id: id, expectedUID: boundUID) }
     }
 }

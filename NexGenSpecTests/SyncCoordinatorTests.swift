@@ -19,11 +19,13 @@ private final class FakePort: SyncPort, @unchecked Sendable {
     private(set) var pullCount = 0
     var status: SyncStatus = .idle
 
+    private(set) var flushCount = 0
     func bind(firebaseUID: String) async { lock.withLock { boundUIDs.append(firebaseUID) } }
     func unbind() {}
     func recordLocalChange(_ change: SyncChange) { lock.withLock { changes.append(change) } }
     func seedIfNeeded(firebaseUID: String) async {}
     func pull() async { lock.withLock { pullCount += 1 } }
+    func flushPending() async { lock.withLock { flushCount += 1 } }
 
     var changeCount: Int { lock.withLock { changes.count } }
     var bindCount: Int { lock.withLock { boundUIDs.count } }

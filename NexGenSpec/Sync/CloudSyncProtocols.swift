@@ -14,12 +14,19 @@ import Foundation
 protocol CloudDatabase: Sendable {
     /// Idempotently ensure the per-UID custom zone exists.
     func ensureZone(_ zoneName: String) async throws
-    /// Upsert one inspection-version record into the zone. When `ifAbsent` is true
-    /// (a finalized/locked version) the save must NEVER overwrite an existing
-    /// record — finalized reports are immutable (§8).
-    func save(_ record: InspectionVersionRecord, inZone zoneName: String, ifAbsent: Bool) async throws
+    /// Upsert one inspection-version record into the zone. Overwrites a draft (LWW
+    /// is arbitrated on the receiver) and promotes a draft to finalized, but must
+    /// NEVER overwrite a record that is ALREADY finalized/locked on the server —
+    /// finalized reports are immutable, enforced here at the source of truth so a
+    /// second device's divergent finalization of the same versionId can't clobber
+    /// the first (§8 server rule; build 22 fix A).
+    func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws
     /// Delete a record by name from the zone.
     func delete(recordName: String, inZone zoneName: String) async throws
+    /// Delete the entire per-UID custom zone (account-deletion teardown, edge G):
+    /// removes every record it holds in one shot so no residual client PII is left
+    /// in the user's private iCloud after they delete their account (5.1.1(v)).
+    func deleteZone(_ zoneName: String) async throws
 }
 
 /// Resolves the current iCloud user as an opaque token (nil ⇒ no iCloud account).
@@ -47,8 +54,24 @@ protocol LocalVersionReader: Sendable {
 
 /// Default reader: the per-UID local store on disk.
 struct DiskVersionReader: LocalVersionReader {
+    /// When non-nil, path resolution is PINNED to this user's root (captured at
+    /// sync-bind time) instead of the live `appRoot`, so an in-flight seed/pull can
+    /// never follow an A→B account switch onto another UID's disk (build 22 fix B /
+    /// landmine 1). nil ⇒ the live active-user `appRoot` (back-compat default —
+    /// identical to the pinned root in the happy path, where the bound UID is the
+    /// active user).
+    private let pinnedRoot: URL?
+
+    init(uid: String? = nil) {
+        self.pinnedRoot = uid.map { FilePaths.userRoot(uid: $0) }
+    }
+
+    /// The store root all reads resolve against — the pinned per-UID root if set,
+    /// else the live active-user `appRoot`.
+    private var root: URL { pinnedRoot ?? FilePaths.appRoot }
+
     func versionData(forVersionId id: UUID) -> Data? {
-        let url = FilePaths.currentVersionFile(jobId: id)
+        let url = FilePaths.currentVersionFile(jobId: id, inRoot: root)
         // Legitimate absence (e.g. a just-deleted version) is a silent nil; a real
         // read failure (I/O, data-protection) is logged so it can't masquerade as
         // absence (review finding: swallowed errors).
@@ -62,7 +85,7 @@ struct DiskVersionReader: LocalVersionReader {
     }
 
     func allLocalVersions() -> [LocalVersionSnapshot] {
-        let root = FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true)
+        let root = FilePaths.inspectionsContainer(inRoot: self.root)
         let fm = FileManager.default
         var isDir: ObjCBool = false
         // No Inspections directory yet = clean install, not an error.
@@ -91,17 +114,42 @@ struct DiskVersionReader: LocalVersionReader {
     }
 
     func localState(forVersionId id: UUID) -> LocalVersionState {
-        let url = FilePaths.currentVersionFile(jobId: id)
+        let url = FilePaths.currentVersionFile(jobId: id, inRoot: root)
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return .absent }
-        let version = (try? Data(contentsOf: url))
-            .flatMap { try? JSONDecoder().decode(InspectionVersion.self, from: $0) }
-        let isFinalized = version?.locked ?? false
+        let fileMtime = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+
+        // The file EXISTS. Distinguish a transient READ failure from a genuine DECODE
+        // failure (mirrors the B-0044 read-vs-decode split in InspectionStore.load):
+        // both fail CLOSED here (treat as finalized → the resolver keepLocal's, so a
+        // record we couldn't parse is NEVER overwritten by a pull — build 22 fix D),
+        // but the cause is logged distinctly.
+        //   READ failure = data protection (`current.json` is .completeUnlessOpen, so
+        //   it is transiently unreadable while the device is locked) or transient I/O.
+        //   NOTE: in build 22 the only pull triggers are bind + foreground (device
+        //   unlocked), so this branch is not reached in practice; when the deferred
+        //   APNs background pull (D-0184) lands, that slice must additionally avoid
+        //   ADVANCING the change token on a transient read miss (retry next pull)
+        //   rather than treating it as a settled keepLocal. Tracked in the design doc.
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            Diagnostics.logError(context: "DiskVersionReader.localState: current.json TRANSIENTLY unreadable for \(id) (data-protection/I/O); failing CLOSED (keepLocal)", error: error)
+            return LocalVersionState(exists: true, isFinalized: true, updatedAt: fileMtime)
+        }
+        guard let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else {
+            // Read OK but bytes won't decode = genuine corruption (the fix-D case):
+            // a possibly-FINALIZED legal record. Fail closed so `applyRemoteVersion`
+            // (which bypasses `allowsEdit`) can't overwrite the immutable record.
+            Diagnostics.logError(context: "DiskVersionReader.localState: current.json present but UNDECODABLE (corrupt) for \(id); failing CLOSED (treat as finalized → keepLocal)")
+            return LocalVersionState(exists: true, isFinalized: true, updatedAt: fileMtime)
+        }
+        let isFinalized = version.locked
         // Draft last-writer-wins clock: prefer the model's `updatedAt` — the precise
         // edit time stamped on every local write (build 22 slice 4c) — and fall back
         // to the file mtime for legacy versions written before `updatedAt` existed.
-        let fileMtime = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-        let updatedAt = version?.updatedAt ?? fileMtime
+        let updatedAt = version.updatedAt ?? fileMtime
         return LocalVersionState(exists: true, isFinalized: isFinalized, updatedAt: updatedAt)
     }
 }

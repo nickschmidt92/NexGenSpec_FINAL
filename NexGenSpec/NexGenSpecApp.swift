@@ -98,6 +98,14 @@ struct NexGenSpecApp: App {
                         if SessionScope.pinnedUID == nil {
                             SessionMigration.wipeLegacyUnnamespacedData()
                         }
+                        // Build 22 fix C / edge G: an interrupted deletion that left
+                        // a per-UID pin also owes the CloudKit zone + binding teardown
+                        // (5.1.1(v) parity). Capture the deleting UID from the pin
+                        // BEFORE the wipe Task releases it. Strict no-op when the sync
+                        // flag is off or no binding exists.
+                        if let deletedUID = SessionScope.pinnedUID {
+                            syncCoordinator.tearDownDeletedAccount(uid: deletedUID)
+                        }
                         Task {
                             await store.performDiskWipe()
                             UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")

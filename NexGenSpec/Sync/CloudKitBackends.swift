@@ -49,10 +49,32 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         _ = try await database.modifyRecordZones(saving: [zone], deleting: [])
     }
 
-    func save(_ record: InspectionVersionRecord, inZone zoneName: String, ifAbsent: Bool) async throws {
+    func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         let recordID = CKRecord.ID(recordName: record.recordName, zoneID: zoneID)
-        let ck = CKRecord(recordType: CloudKitSchema.RecordType.inspectionVersion, recordID: recordID)
+
+        // Immutability at the source of truth (fix A): fetch the existing server
+        // record first. If it is ALREADY finalized/locked, leave it untouched — a
+        // second device's divergent finalization of the same versionId (different
+        // finalizedAt / snapshot) must never clobber the first finalized record (the
+        // immutable legal/tamper-evidence record). A `serverRecordChanged` that the
+        // OLD `.ifServerRecordUnchanged` path swallowed could not distinguish "draft
+        // present (overwrite)" from "finalized present (protect)"; this fetch can.
+        // Reusing the fetched record also carries its change tag, so the save cleanly
+        // overwrites THAT version (promoting a draft to finalized — the core fix-A
+        // case) rather than failing on a tag-less record.
+        let existing: CKRecord?
+        do {
+            existing = try await database.record(for: recordID)
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            existing = nil  // not present yet → create
+        }
+        if let existing, (existing[CloudKitSchema.Field.locked] as? Int) == 1 {
+            Diagnostics.logInfo("CKCloudDatabase: server record \(record.recordName) is already finalized; left immutable.")
+            return
+        }
+
+        let ck = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.inspectionVersion, recordID: recordID)
         ck[CloudKitSchema.Field.inspectionId] = record.inspectionId as CKRecordValue
         ck[CloudKitSchema.Field.versionNumber] = record.versionNumber as CKRecordValue
         ck[CloudKitSchema.Field.status] = record.status as CKRecordValue
@@ -71,40 +93,26 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: assetURL) }
         ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
 
-        // Immutable (locked) records use a never-clobber policy: a freshly-built
-        // record has no change tag, so .ifServerRecordUnchanged creates it when
-        // absent but FAILS (serverRecordChanged) if one already exists — which for
-        // a finalized report is the correct "leave it immutable" outcome. Drafts
-        // overwrite with .changedKeys (last-writer-wins). Full draft conflict
-        // arbitration by modifiedAt is slice 4.
-        let policy: CKModifyRecordsOperation.RecordSavePolicy = ifAbsent ? .ifServerRecordUnchanged : .changedKeys
-        do {
-            _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: policy, atomically: true)
-        } catch {
-            if ifAbsent, Self.isAlreadyPresentConflict(error) {
-                Diagnostics.logInfo("CKCloudDatabase: locked record \(record.recordName) already present; left immutable.")
-                return
-            }
-            throw error
-        }
-    }
-
-    /// True when a save failed because the record already exists on the server
-    /// (a `serverRecordChanged` conflict, possibly wrapped in a partial error).
-    private static func isAlreadyPresentConflict(_ error: Error) -> Bool {
-        if let ckError = error as? CKError {
-            if ckError.code == .serverRecordChanged { return true }
-            if let partials = ckError.partialErrorsByItemID {
-                return partials.values.contains { ($0 as? CKError)?.code == .serverRecordChanged }
-            }
-        }
-        return false
+        // We either reused the fetched (non-locked) server record — so it carries a
+        // change tag and `.changedKeys` cleanly overwrites THAT version (promoting a
+        // draft to finalized) — or built a fresh record that `.changedKeys` creates.
+        // The immutability of an already-finalized record was enforced by the fetch
+        // guard above, so no never-clobber save policy is needed here.
+        _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .changedKeys, atomically: true)
     }
 
     func delete(recordName: String, inZone zoneName: String) async throws {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
         _ = try await database.modifyRecords(saving: [], deleting: [recordID], savePolicy: .changedKeys, atomically: true)
+    }
+
+    func deleteZone(_ zoneName: String) async throws {
+        // Account-deletion teardown (edge G / 5.1.1(v)): dropping the per-UID custom
+        // zone removes every record (and its payload CKAssets) it holds in one
+        // server op, so no residual client PII remains in the user's private iCloud.
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        _ = try await database.modifyRecordZones(saving: [], deleting: [zoneID])
     }
 
     /// CKAsset must point at a file on disk. Stage the payload in a temp dir;

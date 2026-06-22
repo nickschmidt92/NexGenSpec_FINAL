@@ -43,17 +43,26 @@ final class SyncCoordinator: ObservableObject {
         self.makeCloudPortOverride = makeCloudPort
     }
 
+    /// In-flight bind task for the active port, retained so a racing rebind can
+    /// cancel it before swapping ports — otherwise a stale port's suspended
+    /// seed/pull could resume after an account switch and cross data between UIDs
+    /// (build 22 fix B / landmine 1).
+    private var bindTask: Task<Void, Never>?
+
     /// Constructs the active cloud port: the injected fake when provided, otherwise
     /// the real CloudKit port wired with the live two-way backends (slice 4c) — the
     /// device-verified `CKZoneFetcher` to pull and an InspectionStore-backed writer
-    /// to apply pulled changes locally.
-    private func buildCloudPort() -> SyncPort {
+    /// to apply pulled changes locally. The reader and writer are PINNED to `uid`'s
+    /// per-UID store root (fix B) so a captured binding can never touch another
+    /// UID's disk after an account switch re-points the live `appRoot`.
+    private func buildCloudPort(uid: String) -> SyncPort {
         if let makeCloudPortOverride { return makeCloudPortOverride() }
         return CloudKitSyncPort(
             account: CKAccountProvider(),
             database: CKCloudDatabase(),
+            reader: DiskVersionReader(uid: uid),
             fetcher: CKZoneFetcher(),
-            writer: InspectionStoreVersionWriter(store: store)
+            writer: InspectionStoreVersionWriter(store: store, boundUID: uid)
         )
     }
 
@@ -85,13 +94,49 @@ final class SyncCoordinator: ObservableObject {
     /// whose `pull()` does nothing. Cross-device pulls also run on each bind.
     func pullNow() {
         let active = port
-        Task { @MainActor in await active.pull() }
+        Task { @MainActor in
+            await active.pull()
+            // Also re-drive any outbound changes queued during a transient unbind
+            // window (fix F). Inert on a NoopSyncPort (flag off).
+            await active.flushPending()
+        }
+    }
+
+    /// Tear down a DELETED account's CloudKit footprint (edge G / 5.1.1(v)): drop
+    /// its custom zone — removing every record + payload CKAsset from the user's
+    /// private iCloud — and delete the local binding. Best-effort and STRICTLY
+    /// gated: a strict no-op unless sync is enabled AND a binding exists, so the
+    /// flag-OFF shipping build never touches CloudKit. Call from BOTH account-
+    /// deletion paths (AppSettingsView.finishLocalWipeAndDismiss and the
+    /// NexGenSpecApp interrupted-deletion recovery) BEFORE the local wipe. Never
+    /// blocks the wipe — the zone delete runs detached and failures only log.
+    func tearDownDeletedAccount(uid: String) {
+        // The account is gone — detach the live port so nothing re-binds to the
+        // deleted UID. Inert when the flag is off (the port is already a Noop).
+        bindTask?.cancel()
+        bindTask = nil
+        port.unbind()
+        port = NoopSyncPort()
+        status = .off
+        // Flag-OFF ⇒ no CloudKit is ever touched (strict no-op). Gate on the MASTER
+        // flag, not effectiveSyncAllowed, so a zone created before the user turned on
+        // local-only mode is still torn down. The helper re-checks binding-exists.
+        guard SyncFeature.isEnabled else { return }
+        let database = CKCloudDatabase()
+        let account = CKAccountProvider()
+        Task {
+            await SyncAccountTeardown.tearDown(
+                uid: uid, database: database, account: account, bindings: KeychainBindingStore(), isEnabled: true
+            )
+        }
     }
 
     /// Re-evaluate which port should be active and (re)bind. Port SELECTION is
     /// synchronous; the bind itself runs async. Disabled/no-user ⇒ detach to Noop.
     private func rebind() {
         guard isEnabled(), let uid = currentUID else {
+            bindTask?.cancel()
+            bindTask = nil
             port.unbind()
             port = NoopSyncPort()
             status = .off
@@ -100,11 +145,14 @@ final class SyncCoordinator: ObservableObject {
         // Always detach the old port and bind a FRESH one to the current UID, so
         // no prior account's binding or queued changes can cross into this UID's
         // zone during the bind's await window (cross-account isolation — review
-        // finding). unbind() clears the old port's activeBinding + pending.
+        // finding). Cancel the old port's in-flight bind task FIRST so its suspended
+        // seed/pull can't resume against the new UID's disk (fix B), then unbind()
+        // clears the old port's activeBinding + pending.
+        bindTask?.cancel()
         port.unbind()
-        let active = buildCloudPort()
+        let active = buildCloudPort(uid: uid)
         port = active
-        Task { @MainActor in
+        bindTask = Task { @MainActor in
             await active.bind(firebaseUID: uid)
             // Only reflect status if this is still the active port.
             if self.port === active { self.status = active.status }
@@ -115,5 +163,57 @@ final class SyncCoordinator: ObservableObject {
         if let accountObserver {
             NotificationCenter.default.removeObserver(accountObserver)
         }
+    }
+}
+
+/// Pure, CloudKit-free account-deletion teardown (build 22 fix C / edge G). Kept
+/// out of `SyncCoordinator` so it is unit-testable with the in-memory fakes
+/// (FakeDatabase / FakeBindings): deleting a bound account drops its CloudKit zone
+/// and local binding; an unbound account or a disabled flag is a strict no-op.
+enum SyncAccountTeardown {
+    static func tearDown(
+        uid: String,
+        database: CloudDatabase,
+        account: CloudAccountProviding,
+        bindings: BindingStoring,
+        isEnabled: Bool
+    ) async {
+        // Strict no-op unless sync is on AND a binding actually exists for this UID.
+        guard isEnabled, let binding = bindings.load(forUID: uid) else { return }
+
+        // Best-effort zone delete, ONLY when this device's current iCloud user still
+        // OWNS the zone (finding #4): the zone lives in the iCloud account bound at
+        // `binding.cloudUserToken`. After an Apple-ID switch — or while iCloud is
+        // unavailable (`currentToken == nil`) — deleteZone would target the wrong /
+        // another private DB, so we skip it and log the residual instead of pretending
+        // to delete it.
+        let currentToken = await account.currentUserToken()
+        if currentToken == binding.cloudUserToken {
+            do {
+                try await database.deleteZone(binding.zoneName)
+            } catch {
+                // Best-effort — NEVER block the wipe (spec uses catch + log). A
+                // transient CloudKit failure leaves the zone as a residual (see the
+                // KNOWN LIMITATION below).
+                Diagnostics.logError(context: "SyncAccountTeardown.deleteZone failed for \(uid); zone left as a residual (best-effort)", error: error)
+            }
+        } else {
+            Diagnostics.logError(
+                context: "SyncAccountTeardown: zone for \(uid) not reachable from the current iCloud user (account changed or unavailable); left as a residual",
+                persistToDisk: false
+            )
+        }
+        // Drop the local binding. This teardown is one-shot BEST-EFFORT, exactly as
+        // the spec scopes it (deleteZone + SyncBindingStore.delete, never blocking the
+        // wipe). KNOWN LIMITATION (round-3 finding): a transient deleteZone failure /
+        // iCloud-unavailable at the deletion moment leaves the zone as a residual in
+        // the user's OWN private iCloud (Apple-isolated per Apple ID — NOT a
+        // cross-account leak) with no durable retry — an earlier attempt to "keep the
+        // binding for retry" was a false premise (a normal completed deletion clears
+        // the deletion-pending-wipe flag + pin, so the recovery path never re-fires).
+        // A robust retry (a persisted teardown-owed record + a cold-launch sweep,
+        // independent of the deletion pin) is a sync-GA item, NOT a build-22 blocker
+        // (build 22 ships sync dark). Documented in build-22-p6-remediation.md.
+        bindings.delete(forUID: uid)
     }
 }

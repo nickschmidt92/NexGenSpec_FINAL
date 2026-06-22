@@ -137,3 +137,85 @@ field. No observable consequence today, but a locked record shouldn't be re-stam
   edit) EXCEPT build-setting flips; TEST target needs 4 manual pbxproj entries per new test file
   — prior slices added tests to existing in-target files to avoid that. D-0131: `df -h /` > 10GB
   before any Xcode session.
+
+## Adversarial re-pass (round 2) — results & corrections
+
+The post-implementation adversarial pass (8 reviewers + 2-skeptic verification) surfaced 10
+confirmed issues. Three were real regressions in the first-cut fixes and were **corrected**;
+two are deferred to the sync-GA gate; the rest were test-quality gaps (now closed).
+
+**Corrected in this batch:**
+- **A (immutability at the source):** the first cut pushed every `.versionUpserted` with
+  `ifAbsent:false` (always overwrite). That was wrong: two devices finalizing the SAME versionId
+  offline produce DIVERGENT payloads (`finalizedAt = Date()` per device), so an always-overwrite
+  let the second finalize clobber the first finalized cloud record, and a fresh-pulling device
+  then adopted the clobber. The spec's "two finalized copies are byte-identical / immutability is
+  a receiver guarantee" premise is **false** for this case. Fix now: `CloudDatabase.save` is a
+  **fetch-then-conditional** — it overwrites a draft (promotion works) but NEVER overwrites an
+  already-`locked` server record (immutability enforced at the source). `ifAbsent` param removed.
+- **B (writer cross-account guard):** the first cut checked `SessionScope.currentSegment ==
+  boundUID` inside the writer, OFF the MainActor, then hopped to `MainActor.run` to write — a real
+  TOCTOU gap (the write still resolves the live `appRoot`). The guard now lives INSIDE
+  `InspectionStore.applyRemoteVersion/applyRemoteDelete(expectedUID:)`, synchronous on the
+  MainActor and atomic with the write (account switches also run on the MainActor, so none can
+  interleave). Reader pinning (DiskVersionReader uid) was already correct.
+- **C (deletion teardown after an iCloud switch):** `deleteZone` ran against the CURRENT iCloud
+  account; after an Apple-ID switch the zone lives in the OLD (inaccessible) private DB, so it
+  deleted nothing real while falsely succeeding. Teardown now checks the live `cloudUserToken`
+  against `binding.cloudUserToken` and only deletes the zone when they match; otherwise it logs
+  and still drops the local binding.
+
+**Deferred to the sync-GA gate (NOT build-22 blockers — sync ships dark):**
+- **D / transient read failure (vs decode corruption):** `current.json` is `.completeUnlessOpen`,
+  so a pull while the device is locked could read-fail transiently; failing closed + advancing the
+  change token would strand a legitimate remote update. In build 22 the only pull triggers are
+  bind + foreground (device unlocked), so this is **not reachable**. `localState` now distinguishes
+  read-fail from decode-fail (distinct logs), both fail closed. **When the deferred APNs background
+  pull (D-0184) lands, that slice MUST not advance the change token on a transient read miss
+  (retry next pull) instead of treating it as a settled keepLocal.**
+- **I+E / legacy-finalized hash divergence:** reports finalized on build 21 / pre-fix-I stamped
+  `current.json.updatedAt` to finalize-time AFTER hashing the draft-time snapshot, so for those
+  legacy reports `current.json.updatedAt != snapshot.updatedAt`. Fix E's cross-device recompute
+  hashes `current.json`, so a device that pulls a legacy-finalized report computes a hash that
+  DISAGREES with the origin's stored snapshot hash. Reports finalized under fix I and later are
+  consistent. **Before sync GA, decide for legacy data: (a) accept the divergence, (b) sync the
+  snapshot file instead of recomputing, or (c) a one-time re-seal migration of legacy current.json.**
+
+**Test gaps closed:** direct `DiskVersionReader.localState` undecodable-`current.json` fail-closed
+test (D); the fix-E byte-identical-hash test now round-trips through JSON encode/decode (mimics the
+real payload-decode pull path); finalize-over-finalize immutability test (A); iCloud-switch teardown
+test (C).
+
+### Round-2 pass — corrections to the round-2 corrections (loop-until-dry)
+
+A second adversarial pass over the round-2 corrections found two real bugs the corrections
+introduced; both fixed:
+- **B (token-advance data loss):** the cross-account guard in
+  `InspectionStore.applyRemoteVersion/applyRemoteDelete` returned `true` (skip). `true` keeps
+  `pull()`'s `allApplied`, so it ADVANCED the bound account's change token past the un-applied
+  record — and incremental pulls never re-fetch past the token, so the account's own cross-device
+  edit was permanently, silently lost during the Firebase-flips-before-rebind window. Now returns
+  **`false`** (holds the token for retry under the correct binding — same contract as the
+  disk-write-failure path). The writer test now asserts `false`.
+- **C (orphaned zone):** `SyncAccountTeardown` dropped the binding UNCONDITIONALLY even when the
+  zone wasn't deleted (iCloud unavailable → token nil, or `deleteZone` threw transiently). A first
+  attempt to "keep the binding so the recovery path retries" was then found (round-3) to rest on a
+  FALSE premise — a *normal* completed deletion clears the `deletion-pending-wipe` flag + pin
+  before the detached teardown Task runs, so the recovery branch never re-fires and the kept
+  binding just lingers (no retry, zone still orphaned — arguably worse). **Final:** the teardown is
+  one-shot **best-effort exactly as the spec scopes it** — deleteZone only when the live iCloud
+  token matches the bound one (so it never hits the wrong/unknown DB — finding #4), then drop the
+  binding regardless. A transient failure leaves the zone as a documented residual in the user's
+  OWN private iCloud (Apple-isolated per Apple ID — not a cross-account leak).
+
+### Round-3 pass — C teardown finalized as best-effort; durable retry deferred to sync GA
+
+The round-2 "keep-binding-for-retry" correction was itself wrong (the retry path is unreachable on
+a normal deletion). Reverted to spec-compliant **best-effort**: try deleteZone (only when the
+current iCloud user owns the zone), log on failure, never block the wipe, drop the binding. B's
+`return false` (token-hold) verified clean by this pass. **KNOWN LIMITATION / sync-GA item:** a
+transient `deleteZone` failure or iCloud-unavailable at the exact deletion moment leaves the
+account's zone as a residual with no durable retry. A robust solution needs a persisted
+"teardown-owed" record + a cold-launch sweep, INDEPENDENT of the deletion pin (which a normal
+completed deletion clears) — a sync-GA design decision, **not** a build-22 blocker (build 22 ships
+sync dark). Tests updated to assert the best-effort drop on both transient paths.

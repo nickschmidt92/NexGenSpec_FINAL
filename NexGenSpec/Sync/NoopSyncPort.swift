@@ -26,4 +26,6 @@ public final class NoopSyncPort: SyncPort {
     public func seedIfNeeded(firebaseUID: String) async {}
 
     public func pull() async {}
+
+    public func flushPending() async {}
 }
