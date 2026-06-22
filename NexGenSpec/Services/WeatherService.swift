@@ -281,8 +281,16 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             // decode mismatch, or a malformed response — is identifiable in
             // Console.app and the persistent diagnostics log.
             let ns = error as NSError
-            log.error("Open-Meteo FAILED: \(String(describing: error), privacy: .public) | type=\(String(describing: type(of: error)), privacy: .public) | domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) | \(error.localizedDescription, privacy: .public)")
-            Diagnostics.logError(context: "Weather: Open-Meteo fetch failed [domain=\(ns.domain) code=\(ns.code) type=\(type(of: error))]", error: error)
+            // PII (B-0117): do NOT log `String(describing: error)` or pass the
+            // raw error to Crashlytics here. For a URLSession failure the error's
+            // userInfo carries NSErrorFailingURLStringKey = the request URL, which
+            // embeds the property's latitude/longitude — i.e. the client's
+            // approximate location, leaked off-device to Crashlytics and into the
+            // .public os_log. domain + code + type + localizedDescription fully
+            // diagnose the failure without the coordinates (localizedDescription
+            // for URLError is a plain sentence, no URL).
+            log.error("Open-Meteo FAILED: type=\(String(describing: type(of: error)), privacy: .public) | domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) | \(error.localizedDescription, privacy: .public)")
+            Diagnostics.logError(context: "Weather: Open-Meteo fetch failed [domain=\(ns.domain) code=\(ns.code) type=\(type(of: error))]", error: nil)
             isFetching = false
             errorMessage = "Weather: \(error.localizedDescription)"
             completion?(nil)
