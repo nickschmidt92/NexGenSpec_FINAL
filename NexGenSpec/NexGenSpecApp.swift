@@ -18,6 +18,7 @@ struct NexGenSpecApp: App {
     @StateObject private var store = InspectionStore()
     @StateObject private var authManager = AuthManager()
     @StateObject private var subscriptions = SubscriptionManager()
+    @StateObject private var syncCoordinator = SyncCoordinator()
 
     init() {
         // B-0045: the working store now lives in private Application Support, not
@@ -52,6 +53,7 @@ struct NexGenSpecApp: App {
                 .environmentObject(store)
                 .environmentObject(authManager)
                 .environmentObject(subscriptions)
+                .environmentObject(syncCoordinator)
                 .tint(AppColor.accent)
                 .preferredColorScheme(nil) // Respect system light/dark setting
                 // Keep SubscriptionManager in sync with the signed-in Firebase user
@@ -109,6 +111,13 @@ struct NexGenSpecApp: App {
                     // a Delete App + reinstall is detected immediately rather
                     // than after the abuser has already started a 4th inspection.
                     Task { await subscriptions.refreshDeviceCheckTrial() }
+                    // Build 22: wire the sync seam to the store and bind to the
+                    // current user. With the flag OFF the SyncCoordinator holds a
+                    // NoopSyncPort, so this is inert and the app behaves exactly
+                    // like build 21.
+                    store.syncCoordinator = syncCoordinator
+                    syncCoordinator.start()
+                    syncCoordinator.userDidChange(uid: authManager.currentUID)
                 }
                 .onChange(of: authManager.currentUID) { _, _ in
                     // B-0096: login / logout / account switch changes which
@@ -124,6 +133,10 @@ struct NexGenSpecApp: App {
                     // singleton — re-scope them on the same boundary so account B
                     // never sees account A's custom templates (same bug class).
                     CustomTemplateStore.shared.reload()
+                    // Build 22: rebind the CloudKit mirror to the new user (no-op
+                    // while the flag is OFF). Refuses-and-isolates if the iCloud
+                    // account changed under this Firebase UID.
+                    syncCoordinator.userDidChange(uid: authManager.currentUID)
                 }
                 .onChange(of: authManager.currentUsername) { _, newEmail in
                     subscriptions.applyCurrentUser(email: newEmail)

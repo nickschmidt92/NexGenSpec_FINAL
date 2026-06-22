@@ -48,6 +48,12 @@ public final class InspectionStore: ObservableObject {
     private let saveDebounceInterval: DispatchTimeInterval = .milliseconds(400)
     private let ioQueue = DispatchQueue(label: "com.nexgenspec.inspectionstore.io")
 
+    /// Build 22 sync seam: the local-first store stays the source of truth and
+    /// forwards each successful version write/delete to the CloudKit mirror. nil
+    /// (or a flag-OFF SyncCoordinator holding a NoopSyncPort) ⇒ no sync ⇒
+    /// behavior identical to build 21. Set by NexGenSpecApp.
+    weak var syncCoordinator: SyncCoordinator?
+
     /// True from the moment a Delete-Account wipe begins (`beginWipe()`) until
     /// the off-main disk wipe finishes (`performDiskWipe()`). While set, every
     /// disk-write path (`save`, `writeVersionToFile`, `writeVersionFileOnlyForAutoSave`)
@@ -325,6 +331,7 @@ public final class InspectionStore: ObservableObject {
             let data = try JSONEncoder().encode(version)
             try FileSecurity.writeProtected(data, to: url)
         }
+        syncCoordinator?.recordLocalChange(.versionUpserted(VersionMetadata(from: version)))
     }
 
     private func removeInspectionArtifacts(versionId: UUID, inspectionId: UUID, hasRemainingInspectionReferences: Bool) throws {
@@ -571,6 +578,7 @@ public final class InspectionStore: ObservableObject {
                 Diagnostics.logError(context: "autosave writeVersionFileOnly failed", error: error)
             }
         }
+        syncCoordinator?.recordLocalChange(.versionUpserted(VersionMetadata(from: version)))
     }
 
     /// Schedules a single save after a short delay. Use for draft updates to avoid hammering disk.
@@ -849,6 +857,7 @@ public extension InspectionStore {
 
         metadataList.remove(at: idx)
         save()
+        syncCoordinator?.recordLocalChange(.versionDeleted(versionId: id))
         return true
     }
 

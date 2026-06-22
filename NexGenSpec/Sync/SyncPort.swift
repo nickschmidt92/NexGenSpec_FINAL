@@ -50,8 +50,11 @@ public enum SyncChange: Equatable {
     case mediaDeleted(jobId: UUID, relativePath: String)
 }
 
-/// The injected sync seam. All methods are no-ops in `NoopSyncPort`.
-public protocol SyncPort: AnyObject {
+/// The injected sync seam. All methods are no-ops in `NoopSyncPort`. Sendable so
+/// it can be handed to the mirror's background flush and captured by the
+/// coordinator's bind task; conformers are thread-safe (NoopSyncPort is stateless,
+/// CloudKitSyncPort is lock-guarded).
+public protocol SyncPort: AnyObject, Sendable {
 
     /// Current coarse status (drives the status UI + diagnostics). A later slice
     /// may add a Combine publisher; a plain property keeps slice 1 dependency-free.
