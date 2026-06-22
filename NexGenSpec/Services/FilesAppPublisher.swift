@@ -48,6 +48,23 @@ enum FilesAppPublisher {
         )
         let fm = FileManager.default
 
+        // Defense-in-depth (B-0117): `removeItem` below resolves any "." / ".."
+        // in the path at the syscall layer, so a destFolder that standardizes
+        // OUTSIDE the reports root would delete appRoot (the user's entire
+        // per-UID store). `folderName` already rejects traversal components, but
+        // refuse anything that escapes `publishRoot` here too, so no future
+        // folderName change can ever turn this rebuild-delete into a store wipe.
+        let rootPath = publishRoot.standardizedFileURL.path
+        guard destFolder.standardizedFileURL.path.hasPrefix(rootPath + "/") else {
+            Diagnostics.logError(
+                context: "FilesAppPublisher.publish: refusing destFolder outside reportsFolder (\(destFolder.lastPathComponent))",
+                error: NSError(domain: "FilesAppPublisher", code: 1,
+                               userInfo: [NSLocalizedDescriptionKey: "unsafe destination folder"]),
+                persistToDisk: false
+            )
+            return nil
+        }
+
         do {
             // Rebuild cleanly so stale files from a prior export don't linger
             // (e.g. a photo deleted between exports).
@@ -113,18 +130,36 @@ enum FilesAppPublisher {
 
     /// Builds a filesystem-safe folder name from the property address, falling
     /// back to the client name and finally a short job ID so the folder is never
-    /// empty or ambiguous.
-    private static func folderName(for inspection: Inspection, jobId: UUID) -> String {
+    /// empty, ambiguous, OR a path-traversal component.
+    ///
+    /// SECURITY (B-0117): the property address is free-text and `sanitized`
+    /// removes path separators but NOT lone dots, so a raw address of "." or
+    /// ".." survives sanitization. Because `publish()` does
+    /// `removeItem(at: reportsFolder/<name>)` to rebuild cleanly,
+    /// `reportsFolder/".."` resolves to `appRoot` and would silently wipe the
+    /// user's ENTIRE per-UID store. `isSafeComponent` rejects those (and any
+    /// separator-bearing name) so folderName can only return a single, contained
+    /// subfolder name; the fallback chain guarantees it is never empty.
+    static func folderName(for inspection: Inspection, jobId: UUID) -> String {
         let address = sanitized(inspection.propertyAddress)
-        if !address.isEmpty { return address }
+        if isSafeComponent(address) { return address }
         let client = sanitized(inspection.clientName)
-        if !client.isEmpty { return client }
+        if isSafeComponent(client) { return client }
         return "Inspection-\(jobId.uuidString.prefix(8))"
     }
 
+    /// A folder name is usable only if it is non-empty AND not a path-traversal
+    /// component (".", "..") AND contains no path separator — so appending it to
+    /// `reportsFolder` can never climb out of that directory.
+    static func isSafeComponent(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains("\\")
+    }
+
     /// Strips characters that are illegal or awkward in a folder name and
-    /// collapses whitespace. Keeps it readable in the Files app.
-    private static func sanitized(_ raw: String) -> String {
+    /// collapses whitespace. Keeps it readable in the Files app. NOTE: this does
+    /// NOT strip lone dots, so its output must be passed through
+    /// `isSafeComponent` before use as a path component (see B-0117).
+    static func sanitized(_ raw: String) -> String {
         // `/` and `:` are illegal on the underlying filesystem and HFS-visible
         // layer; the rest just keep folder names tidy.
         let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")

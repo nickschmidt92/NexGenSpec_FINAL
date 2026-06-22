@@ -2720,3 +2720,48 @@ final class TempExportCleanupTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: unrelated.path), "unrelated temp files must be left untouched")
     }
 }
+
+// MARK: - FilesAppPublisher path-traversal safety (B-0117)
+
+/// Regression tests for the data-loss bug where a free-text Property Address of
+/// "." or ".." became the report-mirror folder name, so `publish()`'s
+/// rebuild-delete (`removeItem(at: reportsFolder/<name>)`) climbed to `appRoot`
+/// and silently wiped the user's entire per-UID store.
+final class FilesAppPublisherSafetyTests: XCTestCase {
+
+    func testTraversalAndSeparatorComponentsAreRejected() {
+        XCTAssertFalse(FilesAppPublisher.isSafeComponent(".."), "\"..\" must be rejected — it climbs to appRoot")
+        XCTAssertFalse(FilesAppPublisher.isSafeComponent("."), "\".\" must be rejected — it targets the Reports root")
+        XCTAssertFalse(FilesAppPublisher.isSafeComponent(""), "empty must be rejected")
+        XCTAssertFalse(FilesAppPublisher.isSafeComponent("a/b"), "a forward slash must be rejected")
+        XCTAssertFalse(FilesAppPublisher.isSafeComponent("a\\b"), "a backslash must be rejected")
+        XCTAssertTrue(FilesAppPublisher.isSafeComponent("123 Main St"), "a normal address must be accepted")
+        XCTAssertTrue(FilesAppPublisher.isSafeComponent(".hidden"), "a leading dot (not a traversal token) is fine")
+    }
+
+    func testSanitizedDoesNotStripDotsSoTheGuardIsLoadBearing() {
+        // Documents WHY isSafeComponent must exist: sanitized() removes path
+        // separators but leaves lone dots intact, so "." / ".." survive it and
+        // must be caught downstream. If a future change makes sanitized() strip
+        // dots, this test failing is the signal to re-evaluate the guard.
+        XCTAssertEqual(FilesAppPublisher.sanitized(".."), "..")
+        XCTAssertEqual(FilesAppPublisher.sanitized("  ..  "), "..")
+        XCTAssertEqual(FilesAppPublisher.sanitized("123 Main St / Apt 2"), "123 Main St Apt 2")
+    }
+
+    func testEveryAcceptedNameStaysContainedInReportsFolder() {
+        // The core data-loss invariant (B-0117): a folder name that passes
+        // isSafeComponent, appended to reportsFolder, must resolve to a path
+        // strictly INSIDE reportsFolder — never reportsFolder itself or appRoot —
+        // so publish()'s removeItem can never wipe the store.
+        let root = FilePaths.reportsFolder.standardizedFileURL.path
+        let appRoot = FilePaths.appRoot.standardizedFileURL.path
+        for candidate in ["..", ".", "", "a/b", "123 Main St", ".hidden", "Inspection-1234abcd"] {
+            let name = FilesAppPublisher.isSafeComponent(candidate) ? candidate : "Inspection-fallback"
+            let dest = FilePaths.reportsFolder.appendingPathComponent(name, isDirectory: true).standardizedFileURL.path
+            XCTAssertTrue(dest.hasPrefix(root + "/"), "folder name \"\(candidate)\" escaped reportsFolder → \(dest)")
+            XCTAssertNotEqual(dest, root, "folder name \"\(candidate)\" resolved to the Reports root itself")
+            XCTAssertNotEqual(dest, appRoot, "folder name \"\(candidate)\" resolved to appRoot — store-wipe path")
+        }
+    }
+}
