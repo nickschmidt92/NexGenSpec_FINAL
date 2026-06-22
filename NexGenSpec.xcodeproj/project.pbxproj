@@ -14,6 +14,7 @@
 		T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */; };
 		T1B2C3D4E5F6000000000101 /* SyncScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */; };
 		T1B2C3D4E5F6000000000103 /* SyncIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */; };
+		T1B2C3D4E5F6000000000105 /* CloudKitSyncPortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */; };
 		U1B2C3D4E5F6000000000001 /* NexGenSpecUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -42,6 +43,7 @@
 		T1B2C3D4E5F6000000000004 /* NexGenSpecTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScaffoldTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncIdentityTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncPortTests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecUITests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000004 /* NexGenSpecUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -125,6 +127,7 @@
 				T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */,
 				T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */,
 				T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */,
+				T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */,
 			);
 			path = NexGenSpecTests;
 			sourceTree = "<group>";
@@ -286,6 +289,7 @@
 				T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */,
 				T1B2C3D4E5F6000000000101 /* SyncScaffoldTests.swift in Sources */,
 				T1B2C3D4E5F6000000000103 /* SyncIdentityTests.swift in Sources */,
+				T1B2C3D4E5F6000000000105 /* CloudKitSyncPortTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

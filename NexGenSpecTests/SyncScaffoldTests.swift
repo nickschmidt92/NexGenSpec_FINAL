@@ -47,8 +47,12 @@ final class SyncScaffoldTests: XCTestCase {
         XCTAssertEqual(port.status, .off)
 
         // None of these may crash, throw, or change status.
+        let meta = VersionMetadata(
+            id: UUID(), inspectionId: UUID(), versionNumber: 1, status: .draft,
+            finalizedAt: nil, locked: false, clientName: "", propertyAddress: "", inspectionDate: Date()
+        )
         await port.bind(firebaseUID: "uid-123")
-        port.recordLocalChange(.versionUpserted(versionId: UUID(), inspectionId: UUID(), locked: false))
+        port.recordLocalChange(.versionUpserted(meta))
         port.recordLocalChange(.versionDeleted(versionId: UUID()))
         await port.seedIfNeeded(firebaseUID: "uid-123")
         port.unbind()

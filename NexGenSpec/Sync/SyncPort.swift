@@ -37,10 +37,11 @@ public enum SyncStatus: Equatable {
 /// cheap to record on the existing write paths. Forward-looking; later slices add
 /// cases as media/seeding land.
 public enum SyncChange: Equatable {
-    /// A version's `current.json` was written (draft edit or finalize). `locked`
-    /// distinguishes an immutable finalized record (never overwritten) from a
-    /// draft (last-writer-wins).
-    case versionUpserted(versionId: UUID, inspectionId: UUID, locked: Bool)
+    /// A version's `current.json` was written (draft edit or finalize). Carries
+    /// the lightweight metadata so the mirror builds the record's queryable
+    /// fields without re-decoding the payload; `meta.locked` distinguishes an
+    /// immutable finalized record (never overwritten) from a draft (LWW).
+    case versionUpserted(VersionMetadata)
     /// A version (and its inspection folder) was deleted locally.
     case versionDeleted(versionId: UUID)
     /// A media file under an inspection folder was written.
