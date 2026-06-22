@@ -17,7 +17,7 @@ import XCTest
 private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var ensuredZones: [String] = []
-    private(set) var saved: [(record: InspectionVersionRecord, zone: String)] = []
+    private(set) var saved: [(record: InspectionVersionRecord, zone: String, ifAbsent: Bool)] = []
     private(set) var deleted: [(name: String, zone: String)] = []
     var failEnsureZone = false
     var failSave = false
@@ -26,9 +26,9 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
         if failEnsureZone { throw NSError(domain: "test", code: 1) }
         lock.withLock { ensuredZones.append(zoneName) }
     }
-    func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws {
+    func save(_ record: InspectionVersionRecord, inZone zoneName: String, ifAbsent: Bool) async throws {
         if failSave { throw NSError(domain: "test", code: 2) }
-        lock.withLock { saved.append((record, zoneName)) }
+        lock.withLock { saved.append((record, zoneName, ifAbsent)) }
     }
     func delete(recordName: String, inZone zoneName: String) async throws {
         lock.withLock { deleted.append((recordName, zoneName)) }
@@ -224,5 +224,25 @@ final class CloudKitSyncPortTests: XCTestCase {
         let port = makePort(token: "tok1", bindings: FakeBindings(), db: db, reader: FakeReader(snapshots: [snapshot(), snapshot()]))
         await port.bind(firebaseUID: "uidA")
         XCTAssertTrue(db.deleted.isEmpty, "Seeding is push-only; it never deletes local or cloud data.")
+    }
+
+    // MARK: - Finalized immutability (review fix)
+
+    func testFinalizedUsesNeverClobberSaveAndDraftsOverwrite() async {
+        let db = FakeDatabase()
+        let port = makePort(token: "tok1", bindings: FakeBindings(), db: db)
+        await port.bind(firebaseUID: "uidA")
+
+        let locked = VersionMetadata(
+            id: UUID(), inspectionId: UUID(), versionNumber: 2, status: .final,
+            finalizedAt: Date(), locked: true, clientName: "", propertyAddress: "", inspectionDate: Date()
+        )
+        port.recordLocalChange(.versionUpserted(locked))
+        await port.flushPending()
+        XCTAssertEqual(db.saved.last?.ifAbsent, true, "Finalized/locked versions must use never-clobber save (immutability).")
+
+        port.recordLocalChange(.versionUpserted(meta()))   // draft
+        await port.flushPending()
+        XCTAssertEqual(db.saved.last?.ifAbsent, false, "Drafts overwrite (last-writer-wins).")
     }
 }

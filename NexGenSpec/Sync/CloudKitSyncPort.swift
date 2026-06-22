@@ -115,7 +115,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         for snapshot in reader.allLocalVersions() {
             do {
                 let record = InspectionRecordMapper.make(meta: snapshot.meta, payload: snapshot.payload)
-                try await database.save(record, inZone: binding.zoneName)
+                try await database.save(record, inZone: binding.zoneName, ifAbsent: snapshot.meta.locked)
             } catch {
                 allSucceeded = false
                 Diagnostics.logError(context: "CloudKitSyncPort.seed push failed", error: error)
@@ -167,7 +167,9 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         case .versionUpserted(let meta):
             guard let data = reader.versionData(forVersionId: meta.id) else { return }
             let record = InspectionRecordMapper.make(meta: meta, payload: data)
-            try await database.save(record, inZone: binding.zoneName)
+            // Finalized (locked) versions are immutable: never overwrite a stored
+            // record. Drafts overwrite (last-writer-wins).
+            try await database.save(record, inZone: binding.zoneName, ifAbsent: meta.locked)
         case .versionDeleted(let versionId):
             try await database.delete(recordName: versionId.uuidString, inZone: binding.zoneName)
         case .mediaUpserted, .mediaDeleted:

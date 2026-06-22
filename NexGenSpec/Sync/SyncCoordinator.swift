@@ -69,10 +69,13 @@ final class SyncCoordinator: ObservableObject {
             status = .off
             return
         }
-        if port is NoopSyncPort {
-            port = makeCloudPort()
-        }
-        let active = port
+        // Always detach the old port and bind a FRESH one to the current UID, so
+        // no prior account's binding or queued changes can cross into this UID's
+        // zone during the bind's await window (cross-account isolation — review
+        // finding). unbind() clears the old port's activeBinding + pending.
+        port.unbind()
+        let active = makeCloudPort()
+        port = active
         Task { @MainActor in
             await active.bind(firebaseUID: uid)
             // Only reflect status if this is still the active port.

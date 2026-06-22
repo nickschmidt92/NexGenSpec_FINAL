@@ -578,7 +578,12 @@ public final class InspectionStore: ObservableObject {
                 Diagnostics.logError(context: "autosave writeVersionFileOnly failed", error: error)
             }
         }
-        syncCoordinator?.recordLocalChange(.versionUpserted(VersionMetadata(from: version)))
+        // The CloudKit mirror is intentionally NOT notified from this per-keystroke
+        // ASYNC autosave path — doing so would race the queued write (the mirror
+        // reads the file off-queue) and be needlessly chatty. The authoritative
+        // writeVersionToFile path (view disappear / background / save / finalize)
+        // fires recordLocalChange after a synchronous, ordered write, so every edit
+        // still mirrors on each real save point. (review finding: autosave race)
     }
 
     /// Schedules a single save after a short delay. Use for draft updates to avoid hammering disk.

@@ -49,7 +49,7 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         _ = try await database.modifyRecordZones(saving: [zone], deleting: [])
     }
 
-    func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws {
+    func save(_ record: InspectionVersionRecord, inZone zoneName: String, ifAbsent: Bool) async throws {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         let recordID = CKRecord.ID(recordName: record.recordName, zoneID: zoneID)
         let ck = CKRecord(recordType: CloudKitSchema.RecordType.inspectionVersion, recordID: recordID)
@@ -67,7 +67,34 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: assetURL) }
         ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
 
-        _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .changedKeys, atomically: true)
+        // Immutable (locked) records use a never-clobber policy: a freshly-built
+        // record has no change tag, so .ifServerRecordUnchanged creates it when
+        // absent but FAILS (serverRecordChanged) if one already exists — which for
+        // a finalized report is the correct "leave it immutable" outcome. Drafts
+        // overwrite with .changedKeys (last-writer-wins). Full draft conflict
+        // arbitration by modifiedAt is slice 4.
+        let policy: CKModifyRecordsOperation.RecordSavePolicy = ifAbsent ? .ifServerRecordUnchanged : .changedKeys
+        do {
+            _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: policy, atomically: true)
+        } catch {
+            if ifAbsent, Self.isAlreadyPresentConflict(error) {
+                Diagnostics.logInfo("CKCloudDatabase: locked record \(record.recordName) already present; left immutable.")
+                return
+            }
+            throw error
+        }
+    }
+
+    /// True when a save failed because the record already exists on the server
+    /// (a `serverRecordChanged` conflict, possibly wrapped in a partial error).
+    private static func isAlreadyPresentConflict(_ error: Error) -> Bool {
+        if let ckError = error as? CKError {
+            if ckError.code == .serverRecordChanged { return true }
+            if let partials = ckError.partialErrorsByItemID {
+                return partials.values.contains { ($0 as? CKError)?.code == .serverRecordChanged }
+            }
+        }
+        return false
     }
 
     func delete(recordName: String, inZone zoneName: String) async throws {
