@@ -19,6 +19,7 @@ struct NexGenSpecApp: App {
     @StateObject private var authManager = AuthManager()
     @StateObject private var subscriptions = SubscriptionManager()
     @StateObject private var syncCoordinator = SyncCoordinator()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // B-0045: the working store now lives in private Application Support, not
@@ -114,8 +115,11 @@ struct NexGenSpecApp: App {
                     // Build 22: wire the sync seam to the store and bind to the
                     // current user. With the flag OFF the SyncCoordinator holds a
                     // NoopSyncPort, so this is inert and the app behaves exactly
-                    // like build 21.
+                    // like build 21. `syncCoordinator.store` must be set BEFORE
+                    // userDidChange (which binds and, slice 4c, constructs the
+                    // CloudKit port whose writer applies pulled changes through it).
                     store.syncCoordinator = syncCoordinator
+                    syncCoordinator.store = store
                     syncCoordinator.start()
                     syncCoordinator.userDidChange(uid: authManager.currentUID)
                 }
@@ -146,6 +150,17 @@ struct NexGenSpecApp: App {
                     // Firebase user existed yet — this catches that case.
                     if newEmail != nil {
                         Task { await subscriptions.refreshDeviceCheckTrial() }
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    // Build 22 slice 4c: pull remote changes when the app returns to
+                    // the foreground, so a device backgrounded while another device
+                    // edited catches up without a relaunch. Inert with sync OFF —
+                    // the coordinator then holds a NoopSyncPort (no-op pull) — so
+                    // this preserves build-21 behavior. (Bind-time pull covers the
+                    // cold-launch / account-switch case.)
+                    if newPhase == .active {
+                        syncCoordinator.pullNow()
                     }
                 }
         }

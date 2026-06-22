@@ -58,8 +58,12 @@ private final class FakeWriter: LocalVersionWriter, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var applied: [Data] = []
     private(set) var deleted: [String] = []
-    func applyRemoteVersion(_ payload: Data) async { lock.withLock { applied.append(payload) } }
-    func deleteLocalVersion(recordName: String) async { lock.withLock { deleted.append(recordName) } }
+    /// Simulate a transient apply/delete failure (e.g. disk write error) to prove
+    /// the port does not advance the change token on failure (review F5).
+    var applyResult = true
+    var deleteResult = true
+    func applyRemoteVersion(_ payload: Data) async -> Bool { lock.withLock { applied.append(payload) }; return applyResult }
+    func deleteLocalVersion(recordName: String) async -> Bool { lock.withLock { deleted.append(recordName) }; return deleteResult }
     var appliedCount: Int { lock.withLock { applied.count } }
     var deletedCount: Int { lock.withLock { deleted.count } }
 }
@@ -98,7 +102,7 @@ final class CloudKitSyncPortTests: XCTestCase {
         InspectionVersionRecord(
             recordName: id.uuidString, inspectionId: UUID().uuidString, versionNumber: 1,
             status: locked ? "Final" : "Draft", locked: locked, finalizedAt: nil,
-            schemaVersion: 1, payload: Data("remote".utf8)
+            schemaVersion: 1, updatedAt: nil, payload: Data("remote".utf8)
         )
     }
 
@@ -300,6 +304,23 @@ final class CloudKitSyncPortTests: XCTestCase {
 
         await port.bind(firebaseUID: "uidA")
         XCTAssertEqual(writer.appliedCount, 0, "A finalized local version is never overwritten by a remote change.")
+    }
+
+    func testPullDoesNotAdvanceTokenWhenAnApplyFails() async {
+        // A transient apply failure (e.g. disk write error) must NOT advance the
+        // change token, so the next pull re-fetches and retries (review F5).
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: UUID()), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let writer = FakeWriter(); writer.applyResult = false
+        var reader = FakeReader(); reader.state = .absent
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 1, "The apply was attempted.")
+        XCTAssertNil(binds.current("uidA")?.changeToken, "A failed apply must not advance the change token.")
     }
 
     func testPullDeletesLocalDraftButKeepsFinalizedOnTombstone() async {

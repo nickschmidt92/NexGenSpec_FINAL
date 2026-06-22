@@ -94,12 +94,14 @@ struct DiskVersionReader: LocalVersionReader {
         let url = FilePaths.currentVersionFile(jobId: id)
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return .absent }
-        // Local last-edit clock for draft last-writer-wins. (current.json is
-        // rewritten on every save; slice 4c may replace this with a model field.)
-        let updatedAt = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-        let isFinalized = (try? Data(contentsOf: url))
-            .flatMap { try? JSONDecoder().decode(InspectionVersion.self, from: $0) }?
-            .locked ?? false
+        let version = (try? Data(contentsOf: url))
+            .flatMap { try? JSONDecoder().decode(InspectionVersion.self, from: $0) }
+        let isFinalized = version?.locked ?? false
+        // Draft last-writer-wins clock: prefer the model's `updatedAt` — the precise
+        // edit time stamped on every local write (build 22 slice 4c) — and fall back
+        // to the file mtime for legacy versions written before `updatedAt` existed.
+        let fileMtime = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+        let updatedAt = version?.updatedAt ?? fileMtime
         return LocalVersionState(exists: true, isFinalized: isFinalized, updatedAt: updatedAt)
     }
 }
@@ -135,15 +137,22 @@ struct NoopZoneFetcher: CloudZoneFetcher {
 
 /// Applies remote changes to the LOCAL store. The real impl (slice 4c) is backed
 /// by InspectionStore and suppresses the push-back loop while applying.
+///
+/// Each method returns true when the change is durably applied (or is a safe no-op
+/// — already-absent / not-a-version / sync detached). It returns false ONLY on a
+/// transient failure worth retrying (e.g. a disk-write error); the port then does
+/// NOT advance the change token, so the next pull re-fetches and retries this
+/// window rather than skipping the record permanently (review F5).
 protocol LocalVersionWriter: Sendable {
-    func applyRemoteVersion(_ payload: Data) async
-    func deleteLocalVersion(recordName: String) async
+    func applyRemoteVersion(_ payload: Data) async -> Bool
+    func deleteLocalVersion(recordName: String) async -> Bool
 }
 
 /// Default: applies nothing (used until the InspectionStore-backed writer is wired).
+/// Reports success so it never blocks the change token.
 struct NoopLocalVersionWriter: LocalVersionWriter {
-    func applyRemoteVersion(_ payload: Data) async {}
-    func deleteLocalVersion(recordName: String) async {}
+    func applyRemoteVersion(_ payload: Data) async -> Bool { true }
+    func deleteLocalVersion(recordName: String) async -> Bool { true }
 }
 
 /// Persists the identity binding. Real impl is the Keychain store; tests use an

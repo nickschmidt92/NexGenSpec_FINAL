@@ -29,6 +29,9 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
     private var _status: SyncStatus = .off
     private var activeBinding: SyncBinding?
     private var pending: [SyncChange] = []
+    /// Reentrancy guard for pull() — bind()'s tail pull and the foreground
+    /// pullNow() can fire concurrently (review F6). Guarded by `lock`.
+    private var _isPulling = false
 
     init(
         account: CloudAccountProviding,
@@ -142,6 +145,20 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
     /// conflicts (finalized immutable; draft last-writer-wins). Persists the new
     /// change token so the next pull is incremental. No-op when not bound.
     func pull() async {
+        // Reentrancy guard (review F6): bind()'s tail pull and the foreground
+        // pullNow() can fire concurrently on launch / account switch. Two pulls
+        // threading the same change token can persist them out of order (a slower
+        // fetch clobbering a newer token → a redundant re-fetch). Admit one pull at
+        // a time; a concurrent caller is safely dropped because the in-flight pull
+        // already covers the same zone/token.
+        let begin: Bool = lock.withLock {
+            guard !_isPulling else { return false }
+            _isPulling = true
+            return true
+        }
+        guard begin else { return }
+        defer { lock.withLock { _isPulling = false } }
+
         let binding: SyncBinding? = lock.withLock { activeBinding }
         guard let binding else { return }
 
@@ -153,6 +170,13 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             return
         }
 
+        // Track whether every approved apply persisted. If any failed (e.g. a disk
+        // write error), we must NOT advance the change token, so the next pull
+        // re-fetches and retries this window instead of skipping the record
+        // permanently (review F5). Applies are idempotent (upsert-by-id), so a
+        // retry that re-applies an already-applied record is harmless.
+        var allApplied = true
+
         for remote in changes.changed {
             guard let versionId = UUID(uuidString: remote.record.recordName) else { continue }
             let local = reader.localState(forVersionId: versionId)
@@ -160,24 +184,24 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
             )
             if decision == .applyRemote {
-                await writer.applyRemoteVersion(remote.record.payload)
+                if await writer.applyRemoteVersion(remote.record.payload) == false { allApplied = false }
             }
         }
 
         for recordName in changes.deletedRecordNames {
             guard let versionId = UUID(uuidString: recordName) else { continue }
             if SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: versionId)) == .deleteLocal {
-                await writer.deleteLocalVersion(recordName: recordName)
+                if await writer.deleteLocalVersion(recordName: recordName) == false { allApplied = false }
             }
         }
 
-        if let newToken = changes.newToken {
-            var updated = binding
-            updated.changeToken = newToken
-            bindings.save(updated)
-            lock.withLock {
-                if activeBinding?.zoneName == binding.zoneName { activeBinding = updated }
-            }
+        // Persist the new change token only when the whole batch applied cleanly.
+        guard allApplied, let newToken = changes.newToken else { return }
+        var updated = binding
+        updated.changeToken = newToken
+        bindings.save(updated)
+        lock.withLock {
+            if activeBinding?.zoneName == binding.zoneName { activeBinding = updated }
         }
     }
 

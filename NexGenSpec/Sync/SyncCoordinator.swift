@@ -23,19 +23,38 @@ final class SyncCoordinator: ObservableObject {
     private var currentUID: String?
     private var accountObserver: NSObjectProtocol?
 
+    /// The local-first store, set by NexGenSpecApp. The CloudKit port's
+    /// LocalVersionWriter applies pulled remote changes through it (slice 4c). Weak:
+    /// the app owns the store as an `@StateObject`; the coordinator only observes.
+    weak var store: InspectionStore?
+
     /// Whether sync may run at all (flag + local-only). Injected for testability.
     private let isEnabled: () -> Bool
-    /// Builds the live CloudKit port. Injected so tests use a fake (no CloudKit).
-    private let makeCloudPort: () -> SyncPort
+    /// Optional cloud-port factory. Injected (non-nil) so tests substitute a fake
+    /// port with no CloudKit. nil ⇒ the production CloudKit port, built lazily in
+    /// `buildCloudPort()` once `store` is wired.
+    private let makeCloudPortOverride: (() -> SyncPort)?
 
     init(
         isEnabled: @escaping () -> Bool = { SyncFeature.effectiveSyncAllowed },
-        makeCloudPort: @escaping () -> SyncPort = {
-            CloudKitSyncPort(account: CKAccountProvider(), database: CKCloudDatabase())
-        }
+        makeCloudPort: (() -> SyncPort)? = nil
     ) {
         self.isEnabled = isEnabled
-        self.makeCloudPort = makeCloudPort
+        self.makeCloudPortOverride = makeCloudPort
+    }
+
+    /// Constructs the active cloud port: the injected fake when provided, otherwise
+    /// the real CloudKit port wired with the live two-way backends (slice 4c) — the
+    /// device-verified `CKZoneFetcher` to pull and an InspectionStore-backed writer
+    /// to apply pulled changes locally.
+    private func buildCloudPort() -> SyncPort {
+        if let makeCloudPortOverride { return makeCloudPortOverride() }
+        return CloudKitSyncPort(
+            account: CKAccountProvider(),
+            database: CKCloudDatabase(),
+            fetcher: CKZoneFetcher(),
+            writer: InspectionStoreVersionWriter(store: store)
+        )
     }
 
     /// Begin observing iCloud account changes. Call once after construction.
@@ -60,6 +79,15 @@ final class SyncCoordinator: ObservableObject {
         port.recordLocalChange(change)
     }
 
+    /// Pull remote changes now — e.g. when the app returns to the foreground, so a
+    /// device that was backgrounded while another device edited catches up without
+    /// a relaunch. Inert with sync off: the active port is then a `NoopSyncPort`
+    /// whose `pull()` does nothing. Cross-device pulls also run on each bind.
+    func pullNow() {
+        let active = port
+        Task { @MainActor in await active.pull() }
+    }
+
     /// Re-evaluate which port should be active and (re)bind. Port SELECTION is
     /// synchronous; the bind itself runs async. Disabled/no-user ⇒ detach to Noop.
     private func rebind() {
@@ -74,7 +102,7 @@ final class SyncCoordinator: ObservableObject {
         // zone during the bind's await window (cross-account isolation — review
         // finding). unbind() clears the old port's activeBinding + pending.
         port.unbind()
-        let active = makeCloudPort()
+        let active = buildCloudPort()
         port = active
         Task { @MainActor in
             await active.bind(firebaseUID: uid)

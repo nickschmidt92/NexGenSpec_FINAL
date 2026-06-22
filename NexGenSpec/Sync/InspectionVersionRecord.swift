@@ -24,6 +24,10 @@ struct InspectionVersionRecord: Equatable {
     let locked: Bool
     let finalizedAt: Date?
     let schemaVersion: Int
+    /// Last local-edit time (LWW clock, build 22 slice 4c). Pushed to the record's
+    /// queryable `modifiedAt` field so a pull can arbitrate draft conflicts by edit
+    /// time without downloading the payload. Optional: nil for legacy versions.
+    let updatedAt: Date?
     /// Encoded InspectionVersion JSON (the current.json bytes). Becomes a CKAsset.
     let payload: Data
 }
@@ -47,6 +51,7 @@ enum InspectionRecordMapper {
             locked: meta.locked,
             finalizedAt: meta.finalizedAt,
             schemaVersion: schemaVersion,
+            updatedAt: meta.updatedAt,
             payload: payload
         )
     }

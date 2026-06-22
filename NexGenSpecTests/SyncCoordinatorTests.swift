@@ -16,16 +16,18 @@ private final class FakePort: SyncPort, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var boundUIDs: [String] = []
     private(set) var changes: [SyncChange] = []
+    private(set) var pullCount = 0
     var status: SyncStatus = .idle
 
     func bind(firebaseUID: String) async { lock.withLock { boundUIDs.append(firebaseUID) } }
     func unbind() {}
     func recordLocalChange(_ change: SyncChange) { lock.withLock { changes.append(change) } }
     func seedIfNeeded(firebaseUID: String) async {}
-    func pull() async {}
+    func pull() async { lock.withLock { pullCount += 1 } }
 
     var changeCount: Int { lock.withLock { changes.count } }
     var bindCount: Int { lock.withLock { boundUIDs.count } }
+    var pulls: Int { lock.withLock { pullCount } }
 }
 
 @MainActor
@@ -70,5 +72,32 @@ final class SyncCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(fake.changeCount, 0, "After logout, changes are not forwarded to the cloud port.")
         XCTAssertEqual(coord.status, .off)
+    }
+
+    // MARK: - Foreground pull (slice 4c)
+
+    func testPullNowRoutesToActiveCloudPort() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(isEnabled: { true }, makeCloudPort: { fake })
+
+        coord.userDidChange(uid: "u")   // selects the cloud port synchronously
+        coord.pullNow()                 // e.g. app returned to foreground
+
+        // pullNow dispatches into a Task; let it run.
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertGreaterThanOrEqual(fake.pulls, 1, "pullNow forwards a pull to the active cloud port.")
+    }
+
+    func testPullNowIsInertWhenDisabled() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(isEnabled: { false }, makeCloudPort: { fake })
+
+        coord.userDidChange(uid: "u")   // stays Noop (flag off)
+        coord.pullNow()
+
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(fake.pulls, 0, "Flag OFF ⇒ pullNow never reaches a cloud port (Noop no-op).")
     }
 }
