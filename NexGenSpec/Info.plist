@@ -6,10 +6,6 @@
 	<string>https://nexgenspec.com/privacy.html</string>
 	<key>TermsAndConditionsURL</key>
 	<string>https://nexgenspec.com/terms.html</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 </dict>

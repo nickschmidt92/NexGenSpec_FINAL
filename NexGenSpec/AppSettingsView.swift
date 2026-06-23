@@ -25,8 +25,12 @@ struct AppSettingsView: View {
     @EnvironmentObject private var subscriptions: SubscriptionManager
     @ObservedObject private var profile = InspectorProfile.shared
     @State private var showPaywall = false
-#if DEBUG
+    // SyncCoordinator is always created + injected by NexGenSpecApp (it's inert
+    // when the sync flag is off), so this reference must compile in Release too —
+    // the account-deletion teardown below (tearDownDeletedAccount) uses it
+    // outside any DEBUG guard. Only the dev-only sync toggle UI is #if DEBUG.
     @EnvironmentObject private var syncCoordinator: SyncCoordinator
+#if DEBUG
     @AppStorage(SyncFeature.devEnabledKey) private var syncDevEnabled = false
     private var syncStatusLabel: String {
         switch syncCoordinator.status {
