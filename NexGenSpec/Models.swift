@@ -476,6 +476,14 @@ public struct InspectionVersion: Identifiable, Codable, Equatable {
     public var status: VersionStatus
     public var finalizedAt: Date?
     public var locked: Bool
+    /// Last local-edit time — the last-writer-wins clock for draft sync conflict
+    /// resolution (build 22, slice 4c). Stamped by `InspectionStore.writeVersionToFile`
+    /// on every genuine local write, and deliberately PRESERVED (never re-stamped)
+    /// when a synced-in remote version is applied, so a pull doesn't overwrite the
+    /// remote's edit time with the local pull time. Additive + optional: legacy JSON
+    /// written before build 22 decodes to nil and falls back to the file mtime in
+    /// `DiskVersionReader.localState`.
+    public var updatedAt: Date?
     public var inspection: Inspection
 
     public var id: UUID { inspectionVersionId }
@@ -487,6 +495,7 @@ public struct InspectionVersion: Identifiable, Codable, Equatable {
         finalizedAt: Date? = nil,
         locked: Bool,
         inspection: Inspection,
+        updatedAt: Date? = nil,
         schemaVersion: Int = 1
     ) {
         self.schemaVersion = schemaVersion
@@ -495,6 +504,7 @@ public struct InspectionVersion: Identifiable, Codable, Equatable {
         self.status = status
         self.finalizedAt = finalizedAt
         self.locked = locked
+        self.updatedAt = updatedAt
         self.inspection = inspection
     }
 
@@ -505,6 +515,7 @@ public struct InspectionVersion: Identifiable, Codable, Equatable {
         case status
         case finalizedAt
         case locked
+        case updatedAt
         case inspection
     }
 
@@ -516,6 +527,7 @@ public struct InspectionVersion: Identifiable, Codable, Equatable {
         self.status = try c.decode(VersionStatus.self, forKey: .status)
         self.finalizedAt = try c.decodeIfPresent(Date.self, forKey: .finalizedAt)
         self.locked = try c.decode(Bool.self, forKey: .locked)
+        self.updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
         self.inspection = try c.decode(Inspection.self, forKey: .inspection)
     }
 }

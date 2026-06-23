@@ -24,6 +24,11 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
     /// `Inspection` JSON. Refreshed every time `VersionMetadata(from:)` runs
     /// after a save.
     public var coverPhotoFileName: String?
+    /// Last local-edit time, mirrored from `InspectionVersion.updatedAt` — the
+    /// last-writer-wins clock carried into the CloudKit record so a pull can
+    /// arbitrate draft conflicts by edit time (build 22, slice 4c). Optional +
+    /// additive: nil for legacy rows / versions written before build 22.
+    public var updatedAt: Date?
 
     public init(
         id: UUID,
@@ -35,7 +40,8 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
         clientName: String,
         propertyAddress: String,
         inspectionDate: Date,
-        coverPhotoFileName: String? = nil
+        coverPhotoFileName: String? = nil,
+        updatedAt: Date? = nil
     ) {
         self.id = id
         self.inspectionId = inspectionId
@@ -47,6 +53,7 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
         self.propertyAddress = propertyAddress
         self.inspectionDate = inspectionDate
         self.coverPhotoFileName = coverPhotoFileName
+        self.updatedAt = updatedAt
     }
 
     public init(from version: InspectionVersion) {
@@ -60,6 +67,7 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
         self.propertyAddress = version.inspection.propertyAddress
         self.inspectionDate = version.inspection.inspectionDate
         self.coverPhotoFileName = version.inspection.coverPhotoFileName
+        self.updatedAt = version.updatedAt
     }
 
     // MARK: - Codable (backward-compat for older inspections.json)
@@ -68,6 +76,7 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
         case id, inspectionId, versionNumber, status, finalizedAt, locked
         case clientName, propertyAddress, inspectionDate
         case coverPhotoFileName
+        case updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -82,6 +91,7 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
         propertyAddress = try c.decode(String.self, forKey: .propertyAddress)
         inspectionDate = try c.decode(Date.self, forKey: .inspectionDate)
         coverPhotoFileName = try c.decodeIfPresent(String.self, forKey: .coverPhotoFileName)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -96,6 +106,7 @@ public struct VersionMetadata: Identifiable, Codable, Equatable {
         try c.encode(propertyAddress, forKey: .propertyAddress)
         try c.encode(inspectionDate, forKey: .inspectionDate)
         try c.encodeIfPresent(coverPhotoFileName, forKey: .coverPhotoFileName)
+        try c.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
 
     /// Lifecycle state derived from status + locked (for state machine checks).

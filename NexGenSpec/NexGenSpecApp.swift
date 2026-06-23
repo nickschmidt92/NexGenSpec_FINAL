@@ -18,6 +18,8 @@ struct NexGenSpecApp: App {
     @StateObject private var store = InspectionStore()
     @StateObject private var authManager = AuthManager()
     @StateObject private var subscriptions = SubscriptionManager()
+    @StateObject private var syncCoordinator = SyncCoordinator()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // B-0045: the working store now lives in private Application Support, not
@@ -52,6 +54,7 @@ struct NexGenSpecApp: App {
                 .environmentObject(store)
                 .environmentObject(authManager)
                 .environmentObject(subscriptions)
+                .environmentObject(syncCoordinator)
                 .tint(AppColor.accent)
                 .preferredColorScheme(nil) // Respect system light/dark setting
                 // Keep SubscriptionManager in sync with the signed-in Firebase user
@@ -95,6 +98,14 @@ struct NexGenSpecApp: App {
                         if SessionScope.pinnedUID == nil {
                             SessionMigration.wipeLegacyUnnamespacedData()
                         }
+                        // Build 22 fix C / edge G: an interrupted deletion that left
+                        // a per-UID pin also owes the CloudKit zone + binding teardown
+                        // (5.1.1(v) parity). Capture the deleting UID from the pin
+                        // BEFORE the wipe Task releases it. Strict no-op when the sync
+                        // flag is off or no binding exists.
+                        if let deletedUID = SessionScope.pinnedUID {
+                            syncCoordinator.tearDownDeletedAccount(uid: deletedUID)
+                        }
                         Task {
                             await store.performDiskWipe()
                             UserDefaults.standard.removeObject(forKey: "deletion-pending-wipe")
@@ -109,6 +120,16 @@ struct NexGenSpecApp: App {
                     // a Delete App + reinstall is detected immediately rather
                     // than after the abuser has already started a 4th inspection.
                     Task { await subscriptions.refreshDeviceCheckTrial() }
+                    // Build 22: wire the sync seam to the store and bind to the
+                    // current user. With the flag OFF the SyncCoordinator holds a
+                    // NoopSyncPort, so this is inert and the app behaves exactly
+                    // like build 21. `syncCoordinator.store` must be set BEFORE
+                    // userDidChange (which binds and, slice 4c, constructs the
+                    // CloudKit port whose writer applies pulled changes through it).
+                    store.syncCoordinator = syncCoordinator
+                    syncCoordinator.store = store
+                    syncCoordinator.start()
+                    syncCoordinator.userDidChange(uid: authManager.currentUID)
                 }
                 .onChange(of: authManager.currentUID) { _, _ in
                     // B-0096: login / logout / account switch changes which
@@ -124,6 +145,10 @@ struct NexGenSpecApp: App {
                     // singleton — re-scope them on the same boundary so account B
                     // never sees account A's custom templates (same bug class).
                     CustomTemplateStore.shared.reload()
+                    // Build 22: rebind the CloudKit mirror to the new user (no-op
+                    // while the flag is OFF). Refuses-and-isolates if the iCloud
+                    // account changed under this Firebase UID.
+                    syncCoordinator.userDidChange(uid: authManager.currentUID)
                 }
                 .onChange(of: authManager.currentUsername) { _, newEmail in
                     subscriptions.applyCurrentUser(email: newEmail)
@@ -133,6 +158,17 @@ struct NexGenSpecApp: App {
                     // Firebase user existed yet — this catches that case.
                     if newEmail != nil {
                         Task { await subscriptions.refreshDeviceCheckTrial() }
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    // Build 22 slice 4c: pull remote changes when the app returns to
+                    // the foreground, so a device backgrounded while another device
+                    // edited catches up without a relaunch. Inert with sync OFF —
+                    // the coordinator then holds a NoopSyncPort (no-op pull) — so
+                    // this preserves build-21 behavior. (Bind-time pull covers the
+                    // cold-launch / account-switch case.)
+                    if newPhase == .active {
+                        syncCoordinator.pullNow()
                     }
                 }
         }

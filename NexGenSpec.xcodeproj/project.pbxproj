@@ -12,6 +12,11 @@
 		EBB43AFE2F86138700BE850A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFD2F86138700BE850A /* FirebaseCore */; };
 		EBB43B002F86138700BE850A /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = EBB43AFF2F86138700BE850A /* FirebaseCrashlytics */; };
 		T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */; };
+		T1B2C3D4E5F6000000000101 /* SyncScaffoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */; };
+		T1B2C3D4E5F6000000000103 /* SyncIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */; };
+		T1B2C3D4E5F6000000000105 /* CloudKitSyncPortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */; };
+		T1B2C3D4E5F6000000000107 /* SyncCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000108 /* SyncCoordinatorTests.swift */; };
+		T1B2C3D4E5F6000000000109 /* SyncConflictResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F600000000010A /* SyncConflictResolverTests.swift */; };
 		U1B2C3D4E5F6000000000001 /* NexGenSpecUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -38,6 +43,11 @@
 		C4D5E6F7A8B90C1D2E3F4A5B /* NexGenSpec/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = NexGenSpec/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000004 /* NexGenSpecTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScaffoldTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncIdentityTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncPortTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000108 /* SyncCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinatorTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F600000000010A /* SyncConflictResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncConflictResolverTests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecUITests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000004 /* NexGenSpecUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -119,6 +129,11 @@
 			isa = PBXGroup;
 			children = (
 				T1B2C3D4E5F6000000000002 /* NexGenSpecTests.swift */,
+				T1B2C3D4E5F6000000000102 /* SyncScaffoldTests.swift */,
+				T1B2C3D4E5F6000000000104 /* SyncIdentityTests.swift */,
+				T1B2C3D4E5F6000000000106 /* CloudKitSyncPortTests.swift */,
+				T1B2C3D4E5F6000000000108 /* SyncCoordinatorTests.swift */,
+				T1B2C3D4E5F600000000010A /* SyncConflictResolverTests.swift */,
 			);
 			path = NexGenSpecTests;
 			sourceTree = "<group>";
@@ -278,6 +293,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				T1B2C3D4E5F6000000000001 /* NexGenSpecTests.swift in Sources */,
+				T1B2C3D4E5F6000000000101 /* SyncScaffoldTests.swift in Sources */,
+				T1B2C3D4E5F6000000000103 /* SyncIdentityTests.swift in Sources */,
+				T1B2C3D4E5F6000000000105 /* CloudKitSyncPortTests.swift in Sources */,
+				T1B2C3D4E5F6000000000107 /* SyncCoordinatorTests.swift in Sources */,
+				T1B2C3D4E5F6000000000109 /* SyncConflictResolverTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -420,7 +440,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = NexGenSpec/NexGenSpec.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CPTLCQYSJJ;
 				ENABLE_PREVIEWS = YES;
@@ -428,11 +448,18 @@
 				INFOPLIST_FILE = NexGenSpec/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "NexGenSpec adds inspection appointments to the calendar you choose and reads your other events to flag scheduling conflicts. Calendar access is optional.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NexGenSpec needs access to your photo library to attach photos to inspection items.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "NexGenSpec uses your location to attach current weather to an inspection (approximate coordinates are sent to Open-Meteo) and, when you tap \"Use Current Location\", to auto-fill a property address (resolved on your device using Apple's location services). Location is requested only while you use the app and is never tracked in the background.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NexGenSpec records video walkthroughs of inspection areas to include in your report.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Used for importing/exporting inspection images and annotations.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -443,7 +470,7 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexgenspec.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -457,7 +484,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = NexGenSpec/NexGenSpec.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CPTLCQYSJJ;
 				ENABLE_PREVIEWS = YES;
@@ -465,11 +492,18 @@
 				INFOPLIST_FILE = NexGenSpec/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NexGenSpec;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "NexGenSpec adds inspection appointments to the calendar you choose and reads your other events to flag scheduling conflicts. Calendar access is optional.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "NexGenSpec adds inspection appointments to the calendar you choose so you can see them alongside the rest of your schedule.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "NexGenSpec uses the camera to capture inspection photos and to scan rooms with LiDAR.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "NexGenSpec needs access to your photo library to attach photos to inspection items.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "NexGenSpec uses your location to attach current weather to an inspection (approximate coordinates are sent to Open-Meteo) and, when you tap \"Use Current Location\", to auto-fill a property address (resolved on your device using Apple's location services). Location is requested only while you use the app and is never tracked in the background.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NexGenSpec records video walkthroughs of inspection areas to include in your report.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Used for importing/exporting inspection images and annotations.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -480,7 +514,7 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nexgenspec.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -492,7 +526,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
@@ -510,7 +544,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
@@ -527,7 +561,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;
@@ -544,7 +578,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.0;

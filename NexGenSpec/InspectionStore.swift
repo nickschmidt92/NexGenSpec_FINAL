@@ -48,11 +48,26 @@ public final class InspectionStore: ObservableObject {
     private let saveDebounceInterval: DispatchTimeInterval = .milliseconds(400)
     private let ioQueue = DispatchQueue(label: "com.nexgenspec.inspectionstore.io")
 
+    /// Build 22 sync seam: the local-first store stays the source of truth and
+    /// forwards each successful version write/delete to the CloudKit mirror. nil
+    /// (or a flag-OFF SyncCoordinator holding a NoopSyncPort) ⇒ no sync ⇒
+    /// behavior identical to build 21. Set by NexGenSpecApp.
+    weak var syncCoordinator: SyncCoordinator?
+
     /// True from the moment a Delete-Account wipe begins (`beginWipe()`) until
     /// the off-main disk wipe finishes (`performDiskWipe()`). While set, every
     /// disk-write path (`save`, `writeVersionToFile`, `writeVersionFileOnlyForAutoSave`)
     /// no-ops so nothing can re-create the directory being deleted mid-wipe.
     public private(set) var isWiping = false
+
+    /// True only while a synced-in remote version/delete is being applied to the
+    /// local store (`applyRemoteVersion` / `applyRemoteDelete`, build 22 slice 4c).
+    /// While set, the local write paths do NOT (a) re-stamp `updatedAt` — the
+    /// remote's edit time is authoritative — nor (b) emit a `recordLocalChange`,
+    /// which would otherwise push the just-applied remote change straight back to
+    /// CloudKit and loop (apply→push→apply). Mirrors the `isWiping` gating pattern.
+    /// Set/cleared synchronously on the main actor, so there is no flag race.
+    public private(set) var isApplyingRemote = false
 
     /// Finalize metadata updates staged by `finalize(version:)` but NOT yet
     /// published into `metadataList`. Deliberately a plain (non-`@Published`)
@@ -201,9 +216,18 @@ public final class InspectionStore: ObservableObject {
             metadataList = metadata
         case .legacyVersions(let legacy):
             metadataList = legacy.map { VersionMetadata(from: $0) }
+            // One-shot build-21→22 migration: write each legacy version to its
+            // current.json. Reuse the remote-apply guard so the write PRESERVES
+            // each version's own `updatedAt` (we must not stamp a fake migration
+            // clock onto legacy data, nor rewrite a finalized legacy record's
+            // bytes) AND does not echo a per-file push — bulk legacy data is pushed
+            // once by seeding. This keeps the index (built above from the same
+            // versions) in agreement with the bytes on disk (review F1 follow-up).
+            isApplyingRemote = true
             for v in legacy {
                 try? writeVersionToFile(v)
             }
+            isApplyingRemote = false
             try? saveMetadataIndex()
         }
         return true
@@ -317,14 +341,40 @@ public final class InspectionStore: ObservableObject {
         }
     }
 
-    private func writeVersionToFile(_ version: InspectionVersion) throws {
-        guard !isWiping else { return }
-        let url = FilePaths.currentVersionFile(jobId: version.id)
+    /// Writes the version's `current.json` and returns the exact bytes-as-written
+    /// version. Callers MUST build their `VersionMetadata` from the returned value
+    /// (not the argument) so the published `metadataList` + on-disk index agree with
+    /// `current.json` on `updatedAt` (the LWW clock) — otherwise the index would
+    /// carry a stale/nil clock while disk carries the fresh stamp (review F1).
+    @discardableResult
+    private func writeVersionToFile(_ version: InspectionVersion) throws -> InspectionVersion {
+        guard !isWiping else { return version }
+        var toWrite = version
+        // Stamp the last-writer-wins clock on genuine LOCAL DRAFT writes only.
+        //  - Applying a synced-in remote version PRESERVES its `updatedAt` (its
+        //    origin edit time); re-stamping it with the local pull time would break
+        //    draft conflict arbitration (build 22 slice 4c).
+        //  - A LOCKED (finalized) version is never re-stamped either (build 22 fix
+        //    I): finalize hashes the version's snapshot, so re-stamping `updatedAt`
+        //    afterward would make `current.json` diverge from the sealed snapshot on
+        //    a hash-covered field. Keeping it fixed also lets a device that pulls the
+        //    finalized version recompute a BYTE-IDENTICAL integrity hash (fix E).
+        if !isApplyingRemote && !toWrite.locked {
+            toWrite.updatedAt = Date()
+        }
+        let url = FilePaths.currentVersionFile(jobId: toWrite.id)
         try ioQueue.sync {
             try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
-            let data = try JSONEncoder().encode(version)
+            let data = try JSONEncoder().encode(toWrite)
             try FileSecurity.writeProtected(data, to: url)
         }
+        // Suppress the mirror push while applying a remote change — emitting here
+        // would push the just-pulled record straight back and loop. The push meta
+        // is built from the STAMPED copy so the record carries the fresh edit time.
+        if !isApplyingRemote {
+            syncCoordinator?.recordLocalChange(.versionUpserted(VersionMetadata(from: toWrite)))
+        }
+        return toWrite
     }
 
     private func removeInspectionArtifacts(versionId: UUID, inspectionId: UUID, hasRemainingInspectionReferences: Bool) throws {
@@ -571,6 +621,12 @@ public final class InspectionStore: ObservableObject {
                 Diagnostics.logError(context: "autosave writeVersionFileOnly failed", error: error)
             }
         }
+        // The CloudKit mirror is intentionally NOT notified from this per-keystroke
+        // ASYNC autosave path — doing so would race the queued write (the mirror
+        // reads the file off-queue) and be needlessly chatty. The authoritative
+        // writeVersionToFile path (view disappear / background / save / finalize)
+        // fires recordLocalChange after a synchronous, ordered write, so every edit
+        // still mirrors on each real save point. (review finding: autosave race)
     }
 
     /// Schedules a single save after a short delay. Use for draft updates to avoid hammering disk.
@@ -677,8 +733,8 @@ public extension InspectionStore {
             }
         }
 
-        try? writeVersionToFile(newVersion)
-        metadataList.insert(VersionMetadata(from: newVersion), at: 0)
+        let written = (try? writeVersionToFile(newVersion)) ?? newVersion
+        metadataList.insert(VersionMetadata(from: written), at: 0)
         save()
         return true
     }
@@ -717,7 +773,7 @@ public extension InspectionStore {
                 saveError = "Couldn't finalize: the integrity snapshot could not be written (\(error.localizedDescription)). The inspection has not been finalized. Reopen the app after unlocking the device and try again."
                 return
             }
-            try? writeVersionToFile(updated)
+            let written = (try? writeVersionToFile(updated)) ?? updated
             // Persist the finalize WITHOUT any @Published mutation, because the
             // Dashboard/Calendar/Archived screens observe the WHOLE store via
             // @EnvironmentObject — so ANY published change (not just metadataList:
@@ -738,7 +794,7 @@ public extension InspectionStore {
             // when the user next lands on a list screen — never while the
             // inspection is on screen.
             _ = idx
-            pendingFinalizedMetadata[updated.id] = VersionMetadata(from: updated)
+            pendingFinalizedMetadata[written.id] = VersionMetadata(from: written)
             try? saveMetadataIndex()
         case .failure:
             break
@@ -785,10 +841,10 @@ public extension InspectionStore {
                 locked: false,
                 inspection: copy
             )
-            try? writeVersionToFile(revision)
-            metadataList.insert(VersionMetadata(from: revision), at: 0)
+            let written = (try? writeVersionToFile(revision)) ?? revision
+            metadataList.insert(VersionMetadata(from: written), at: 0)
             save()
-            return revision.id
+            return written.id
         case .failure:
             return nil
         }
@@ -798,15 +854,141 @@ public extension InspectionStore {
     func update(version: InspectionVersion) {
         guard let idx = metadataList.firstIndex(where: { $0.id == version.id }) else { return }
         guard InspectionStateMachine.allowsEdit(version.state) else { return }
-        try? writeVersionToFile(version)
-        metadataList[idx] = VersionMetadata(from: version)
+        let written = (try? writeVersionToFile(version)) ?? version
+        metadataList[idx] = VersionMetadata(from: written)
         scheduleDebouncedSave()
     }
 
     func insert(version: InspectionVersion) {
-        try? writeVersionToFile(version)
-        metadataList.insert(VersionMetadata(from: version), at: 0)
+        let written = (try? writeVersionToFile(version)) ?? version
+        metadataList.insert(VersionMetadata(from: written), at: 0)
         save()
+    }
+
+    /// Applies a synced-in remote version to the local-first store (build 22 slice
+    /// 4c). Upsert by id: REPLACES an existing entry — including a local draft that
+    /// a remote FINALIZATION supersedes (a case `update(version:)` would refuse via
+    /// its `allowsEdit` guard) — or inserts a brand-new one. Routed through the
+    /// normal `writeVersionToFile` path so disk + the published `metadataList` stay
+    /// consistent, but with `isApplyingRemote` set so (a) the remote's `updatedAt`
+    /// is preserved rather than re-stamped, and (b) no push is emitted back (which
+    /// would loop apply→push→apply).
+    ///
+    /// Quota-safe: like `insert`, it never calls `recordInspectionCreated()`, so a
+    /// report created on another device and synced in here never burns this device's
+    /// free-trial slot — the quota is on creation and was already counted at the
+    /// origin. The apply-vs-keep-local decision is made upstream by the port via
+    /// `SyncConflictResolver`; this method only applies an already-approved version.
+    ///
+    /// Returns true on success. On a disk-write failure it is FAIL-CLOSED: it leaves
+    /// `metadataList`/the index untouched (no "phantom" row pointing at a missing
+    /// current.json) and returns false so the port skips advancing the change token
+    /// and the next pull retries (review F5).
+    @discardableResult
+    func applyRemoteVersion(_ version: InspectionVersion, expectedUID: String? = nil) -> Bool {
+        guard !isWiping else { return false }
+        // Cross-account guard (build 22 fix B / landmine 1). The pulled record was
+        // bound to `expectedUID`; this store writes to the LIVE appRoot
+        // (SessionScope.currentSegment). After an A→B account switch the segment is B
+        // before a stale A-port's in-flight pull resumes, so applying here would write
+        // A's record into B's store. Checked on the MainActor, ATOMICALLY with the
+        // synchronous write below — no `await` between this guard and writeVersionToFile,
+        // and account switches also run on the MainActor, so none can interleave. (The
+        // writer's earlier off-actor check had a real TOCTOU gap; this is the fix.)
+        if let expectedUID, SessionScope.currentSegment != expectedUID {
+            Diagnostics.logError(
+                context: "applyRemoteVersion: refused cross-account apply (bound=\(expectedUID), active=\(SessionScope.currentSegment))",
+                persistToDisk: false
+            )
+            // Return FALSE, not true (round-2 finding): a `true` would let pull() keep
+            // `allApplied` and ADVANCE the bound account's change token past this
+            // un-applied record (Firebase flips to B before the port rebinds, so a
+            // stale A-port pull sees segment==B != A). Incremental pulls never
+            // re-fetch a record once the token passes it, so the bound account's own
+            // edit would be permanently, silently lost. `false` holds the token so the
+            // next pull (under the correct binding) re-delivers it — same contract as
+            // the disk-write-failure path below.
+            return false
+        }
+        // Belt-and-suspenders immutability (build 22 fix D): the port's resolver
+        // already approved this apply from the on-disk `localState`, but if THAT read
+        // failed to decode `current.json` it now fails closed and the resolver keeps
+        // local — still, defend the in-memory truth here too. If we locally hold a
+        // FINALIZED (locked) version for this id, never let a non-finalized remote
+        // overwrite the immutable legal record. A legitimate same-id finalized remote
+        // (byte-identical by construction) is allowed through. Return true: this is a
+        // deliberate keep-local, not a transient failure worth retrying.
+        if let existing = metadataList.first(where: { $0.id == version.id }),
+           !InspectionStateMachine.allowsEdit(existing.state),
+           !version.locked {
+            Diagnostics.logError(
+                context: "applyRemoteVersion: refused to overwrite locked local \(version.id) with a non-finalized remote (immutability)",
+                persistToDisk: false
+            )
+            return true
+        }
+        isApplyingRemote = true
+        defer { isApplyingRemote = false }
+        let written: InspectionVersion
+        do {
+            written = try writeVersionToFile(version)
+        } catch {
+            Diagnostics.logError(context: "applyRemoteVersion: disk write failed; index left untouched, will retry", error: error)
+            return false
+        }
+        // Build 22 fix E: only `current.json` syncs — the integrity snapshot lives in
+        // an unsynced `versions/<id>.json` written by `FinalizationService`. Without
+        // it, a finalized report pulled onto this device has no `loadReportHash`, so
+        // the renderer treats it as a DRAFT and exporters emit an empty hash (the Mac
+        // review-station's primary path). Recompute the snapshot locally for a
+        // finalized apply: the hash is over the canonical sorted-keys encoding of the
+        // SAME model bytes, so it is byte-identical to the origin device's. Best
+        // effort — a derived artifact; on failure the apply still stands and the next
+        // pull retries (so do NOT fail the apply / wedge the token over it).
+        if written.locked {
+            do {
+                _ = try FinalizationService.writeSnapshot(written)
+            } catch {
+                Diagnostics.logError(context: "applyRemoteVersion: failed to recompute integrity snapshot for finalized \(written.id)", error: error)
+            }
+        }
+        if let idx = metadataList.firstIndex(where: { $0.id == written.id }) {
+            metadataList[idx] = VersionMetadata(from: written)
+        } else {
+            metadataList.insert(VersionMetadata(from: written), at: 0)
+        }
+        save()
+        return true
+    }
+
+    /// Applies a remote tombstone: removes a local DRAFT version that was deleted on
+    /// another device (build 22 slice 4c). Delegates to `deleteVersion`, which
+    /// already refuses to remove a finalized/locked report (the immutable legal
+    /// record) — matching `SyncConflictResolver.resolveDelete`. `isApplyingRemote`
+    /// suppresses both the echo-push AND the external-mirror cleanup (calendar /
+    /// Files-app export) that only a user-initiated delete should perform (review F4).
+    /// Returns true when the version is gone (removed now or already absent); false
+    /// on a real removal failure, so the port retries on the next pull.
+    @discardableResult
+    func applyRemoteDelete(id: UUID, expectedUID: String? = nil) -> Bool {
+        guard !isWiping else { return false }
+        // Cross-account guard (build 22 fix B), atomic with the synchronous delete
+        // below — see applyRemoteVersion. Refuse to delete in the wrong account's
+        // store after an account switch raced this pull.
+        if let expectedUID, SessionScope.currentSegment != expectedUID {
+            Diagnostics.logError(
+                context: "applyRemoteDelete: refused cross-account delete (bound=\(expectedUID), active=\(SessionScope.currentSegment))",
+                persistToDisk: false
+            )
+            // FALSE, not true (round-2 finding) — hold the change token for retry
+            // under the correct binding; see applyRemoteVersion.
+            return false
+        }
+        // Already absent ⇒ the tombstone is satisfied (idempotent success).
+        guard metadataList.contains(where: { $0.id == id }) else { return true }
+        isApplyingRemote = true
+        defer { isApplyingRemote = false }
+        return deleteVersion(id: id)
     }
 
     /// Removes a version if it is still a draft (not signed by both parties / not finalized). Returns true if deleted.
@@ -819,12 +1001,17 @@ public extension InspectionStore {
             offset != idx && other.inspectionId == metadata.inspectionId
         }
 
-        // Load the full version once: we need it both to cascade-delete a
-        // mirrored calendar event (before we lose the identifier) and to
-        // resolve the property address for the published Files-app folder.
-        // The metadata list only carries the lightweight fields.
-        let full = loadFullVersion(id: id)
-        if let eventIdentifier = full?.inspection.calendarEventIdentifier {
+        // External-mirror cleanup — deleting the user's iCloud/Google calendar event
+        // and their exported Files-app report folder — is a USER-INITIATED-delete
+        // concern only. A synced-in remote tombstone (isApplyingRemote) must NOT
+        // reach outside the local version store: CloudKit is an observer/mirror of
+        // that store, and nothing in the contract authorizes a pulled change to
+        // mutate the user's calendar or Files-app exports (design §3; review F4).
+        // We therefore load the full version (needed for both side effects) and run
+        // them ONLY on a genuine local delete. The local version record + index are
+        // removed below in BOTH cases.
+        let full = isApplyingRemote ? nil : loadFullVersion(id: id)
+        if !isApplyingRemote, let eventIdentifier = full?.inspection.calendarEventIdentifier {
             try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
         }
 
@@ -839,16 +1026,22 @@ public extension InspectionStore {
             return false
         }
 
-        // Also remove the published Files-app mirror (NexGenSpec/[Address]/)
-        // if one was exported, so the report + _data don't outlive the
-        // inspection. No-op when nothing was published.
-        if let inspection = full?.inspection, !hasRemainingInspectionReferences {
+        // Remove the published Files-app mirror (NexGenSpec/[Address]/) if one was
+        // exported, so the report + _data don't outlive the inspection. No-op when
+        // nothing was published — and skipped entirely for a remote tombstone (F4).
+        if !isApplyingRemote, let inspection = full?.inspection, !hasRemainingInspectionReferences {
             let jobId = UUID(uuidString: inspection.inspectionId) ?? metadata.id
             FilesAppPublisher.removePublished(for: inspection, jobId: jobId)
         }
 
         metadataList.remove(at: idx)
         save()
+        // Suppress the mirror push when this delete is itself the application of a
+        // remote tombstone (build 22 slice 4c) — otherwise we'd echo the delete
+        // back to CloudKit. Genuine local deletes still propagate.
+        if !isApplyingRemote {
+            syncCoordinator?.recordLocalChange(.versionDeleted(versionId: id))
+        }
         return true
     }
 

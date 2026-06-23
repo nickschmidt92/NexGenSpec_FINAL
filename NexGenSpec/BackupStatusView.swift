@@ -34,7 +34,7 @@ struct BackupStatusView: View {
                 Label("Local-First — Your Evidence, Your Control", systemImage: "internaldrive")
                     .font(AppFont.subheadline.weight(.semibold))
                     .foregroundStyle(AppColor.brandBlue)
-                Text("All inspections, photos, signatures, and reports are stored on this device only. NexGenSpec does NOT keep server-side copies and cannot recover lost data.")
+                Text(SyncFeature.localFirstBannerText)
                     .font(AppFont.footnote)
                     .foregroundStyle(.primary)
             }
@@ -66,7 +66,7 @@ struct BackupStatusView: View {
                     icon: "ipad",
                     color: AppColor.brandBlue,
                     title: "\(metadataCount) inspection\(metadataCount == 1 ? "" : "s") on this device",
-                    subtitle: "Inspections do NOT sync between devices. Each iPad you use holds its own independent set. Use the Files-app export inside an inspection to move records between your own devices."
+                    subtitle: SyncFeature.multiDeviceBackupSubtitle
                 )
 
                 statusRow(

@@ -297,6 +297,172 @@ final class InspectionIndexRecoveryTests: XCTestCase {
     }
 }
 
+/// Build 22 — P6 remediation: the InspectionStore-side fixes (D immutability
+/// belt-and-suspenders, E integrity-snapshot recompute on a finalized apply, I no
+/// re-stamp of a locked version, and B's writer cross-account guard). Coupled to
+/// the real on-disk store, so `setUp` stashes any existing store aside for a clean
+/// deterministic `appRoot` and `tearDown` restores it (mirrors
+/// InspectionIndexRecoveryTests).
+@MainActor
+final class Build22RemediationTests: XCTestCase {
+
+    private var stashDir: URL!
+    private var inspectionsDir: URL { FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true) }
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-b22rem-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        try moveAside(inspectionsDir, named: "Inspections")
+        try moveAside(FilePaths.inspectionsIndex, named: "inspections.json")
+        try moveAside(FilePaths.inspectionsIndexBackup, named: "inspections.json.backup")
+    }
+
+    override func tearDownWithError() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: inspectionsDir)
+        try? fm.removeItem(at: FilePaths.inspectionsIndex)
+        try? fm.removeItem(at: FilePaths.inspectionsIndexBackup)
+        try moveBack(named: "Inspections", to: inspectionsDir)
+        try moveBack(named: "inspections.json", to: FilePaths.inspectionsIndex)
+        try moveBack(named: "inspections.json.backup", to: FilePaths.inspectionsIndexBackup)
+        try? fm.removeItem(at: stashDir)
+        stashDir = nil
+    }
+
+    private func moveAside(_ url: URL, named: String) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        try fm.moveItem(at: url, to: stashDir.appendingPathComponent(named))
+    }
+    private func moveBack(named: String, to dest: URL) throws {
+        let fm = FileManager.default
+        let src = stashDir.appendingPathComponent(named)
+        guard fm.fileExists(atPath: src.path) else { return }
+        try? fm.removeItem(at: dest)
+        try fm.moveItem(at: src, to: dest)
+    }
+
+    private func makeFinalized(id: UUID, updatedAt: Date) -> InspectionVersion {
+        let inspection = Inspection(id: id, clientName: "Final Client", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "1 Seal St", inspectionDate: Date(), inspectorName: "Insp", sections: [])
+        var v = InspectionVersion(id: id, versionNumber: 1, status: .final, finalizedAt: updatedAt, locked: true, inspection: inspection)
+        v.updatedAt = updatedAt
+        return v
+    }
+
+    // MARK: - Fix I: a locked version's updatedAt is never re-stamped on write
+
+    func testFinalizedVersionWriteDoesNotRestampUpdatedAt() throws {
+        let store = InspectionStore()
+        let id = UUID()
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+        store.insert(version: makeFinalized(id: id, updatedAt: t1))   // local write of a LOCKED version
+        let onDisk = try XCTUnwrap(store.loadFullVersion(id: id))
+        XCTAssertEqual(onDisk.updatedAt, t1,
+                       "fix I: a locked version's updatedAt must NOT be re-stamped on write (it must match the sealed snapshot)")
+    }
+
+    // MARK: - Fix E: applying a finalized remote recomputes the integrity snapshot
+
+    func testApplyingFinalizedRemoteRecomputesIntegritySnapshotByteIdentical() throws {
+        let store = InspectionStore()
+        let id = UUID()
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+        let v = makeFinalized(id: id, updatedAt: t1)
+        let jobId = UUID(uuidString: v.inspection.inspectionId) ?? v.id
+
+        // The ORIGIN device's sealed hash, over its in-memory model.
+        let originHash = try FinalizationService.writeSnapshot(v)
+        // Simulate device B: only current.json syncs — the snapshot is NOT present.
+        try? FileManager.default.removeItem(at: FilePaths.versionSnapshotFile(jobId: jobId, versionId: id))
+        XCTAssertNil(FinalizationService.loadReportHash(jobId: jobId, versionId: id),
+                     "precondition: device B starts without the integrity snapshot")
+
+        // Mimic the REAL pull path: the version arrives as JSON payload BYTES and is
+        // decoded before apply (InspectionStoreVersionWriter decodes payload Data).
+        // Round-trip through encode/decode so any Date-precision / optional-field loss
+        // that would break cross-device byte-identity is caught (#8), not bypassed by
+        // reusing the in-memory object.
+        let payload = try JSONEncoder().encode(v)
+        let decoded = try JSONDecoder().decode(InspectionVersion.self, from: payload)
+        XCTAssertTrue(store.applyRemoteVersion(decoded), "a finalized remote version applies")
+
+        let recomputed = FinalizationService.loadReportHash(jobId: jobId, versionId: id)
+        XCTAssertNotNil(recomputed, "fix E: applying a finalized version must recompute the integrity snapshot locally")
+        XCTAssertEqual(recomputed, originHash, "the recomputed hash (over the decoded synced payload) must be byte-identical to the origin's")
+    }
+
+    // MARK: - Fix D: in-memory immutability belt-and-suspenders
+
+    func testApplyRemoteRefusesToOverwriteLockedLocalWithDraft() throws {
+        let store = InspectionStore()
+        let id = UUID()
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+
+        // Local device holds a FINALIZED version for this id.
+        XCTAssertTrue(store.applyRemoteVersion(makeFinalized(id: id, updatedAt: t1)))
+        XCTAssertEqual(store.loadFullVersion(id: id)?.locked, true)
+
+        // A NON-finalized remote arrives for the SAME id (e.g. an undecodable
+        // localState upstream, or a resurrected draft). It must be REFUSED.
+        var draft = makeFinalized(id: id, updatedAt: t1)
+        draft.status = .draft
+        draft.locked = false
+        draft.finalizedAt = nil
+        draft.updatedAt = Date()   // "newer" — must still not win over a locked local
+        XCTAssertTrue(store.applyRemoteVersion(draft),
+                      "a refused immutable overwrite is a deliberate keep-local (true), not a retry")
+
+        let onDisk = try XCTUnwrap(store.loadFullVersion(id: id))
+        XCTAssertEqual(onDisk.locked, true, "fix D: a locked local version must not be overwritten by a non-finalized remote")
+        XCTAssertEqual(onDisk.status, .final)
+        XCTAssertEqual(store.metadataList.first(where: { $0.id == id })?.locked, true)
+    }
+
+    // MARK: - Fix D: real DiskVersionReader.localState fails closed on undecodable JSON
+
+    func testLocalStateFailsClosedOnUndecodableCurrentJson() throws {
+        let id = UUID()
+        let url = FilePaths.currentVersionFile(jobId: id)
+        try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+        try FileSecurity.writeProtected(Data("}{ not valid json".utf8), to: url)   // present but undecodable
+
+        let state = DiskVersionReader().localState(forVersionId: id)
+        XCTAssertTrue(state.exists, "an existing-but-undecodable current.json must report exists:true")
+        XCTAssertTrue(state.isFinalized, "fix D: fail CLOSED — treat undecodable as finalized so it is never overwritten")
+        // And the resolver maps that fail-closed state to keepLocal for BOTH paths.
+        XCTAssertEqual(SyncConflictResolver.resolveUpsert(local: state, remoteLocked: false, remoteUpdatedAt: Date()), .keepLocal,
+                       "undecodable local must keepLocal against a remote upsert")
+        XCTAssertEqual(SyncConflictResolver.resolveDelete(local: state), .keepLocal,
+                       "undecodable local must keepLocal against a remote tombstone")
+    }
+
+    // MARK: - Fix B: the writer refuses to apply across an account switch
+
+    func testWriterRefusesCrossAccountApply() async throws {
+        let store = InspectionStore()
+        let boundUID = "fixB-bound-\(UUID().uuidString)"
+        let otherUID = "fixB-other-\(UUID().uuidString)"
+        let writer = InspectionStoreVersionWriter(store: store, boundUID: boundUID)
+        let savedProvider = SessionScope.uidProvider
+        defer { SessionScope.uidProvider = savedProvider }
+        SessionScope.uidProvider = { otherUID }   // live active user != bound UID
+
+        let id = UUID()
+        let inspection = Inspection(id: id, clientName: "X", clientEmail: "", clientPhone: "",
+                                    propertyAddress: "addr", inspectionDate: Date(), inspectorName: "I", sections: [])
+        let v = InspectionVersion(id: id, versionNumber: 1, status: .draft, finalizedAt: nil, locked: false, inspection: inspection)
+        let before = store.metadataList.count
+
+        let result = await writer.applyRemoteVersion(try JSONEncoder().encode(v))
+        XCTAssertFalse(result, "a refused cross-account apply returns FALSE so pull() HOLDS the change token for retry (round-2 fix) — true would advance it past the bound account's own record and lose it")
+        XCTAssertEqual(store.metadataList.count, before, "fix B: a cross-account apply must not modify the store")
+        XCTAssertFalse(store.metadataList.contains { $0.id == id }, "the cross-account version must not be inserted")
+    }
+}
+
 /// B-0045 — the sensitive working store moved out of file-shared Documents into
 /// Application Support, and the legacy exposed copy is deleted on launch.
 @MainActor
@@ -2763,5 +2929,274 @@ final class FilesAppPublisherSafetyTests: XCTestCase {
             XCTAssertNotEqual(dest, root, "folder name \"\(candidate)\" resolved to the Reports root itself")
             XCTAssertNotEqual(dest, appRoot, "folder name \"\(candidate)\" resolved to appRoot — store-wipe path")
         }
+    }
+}
+
+// MARK: - Build 22 slice 4c — two-way apply (remote → local)
+
+/// Records changes the store forwards to the cloud port, so a test can prove a
+/// genuine local edit pushes but applying a synced-in remote change does NOT echo
+/// back (the apply→push→apply loop the `isApplyingRemote` flag exists to break).
+private final class RecordingSyncPort: SyncPort, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var changes: [SyncChange] = []
+    var status: SyncStatus = .idle
+    func bind(firebaseUID: String) async {}
+    func unbind() {}
+    func recordLocalChange(_ change: SyncChange) { lock.withLock { changes.append(change) } }
+    func seedIfNeeded(firebaseUID: String) async {}
+    func pull() async {}
+    func flushPending() async {}
+    var count: Int { lock.withLock { changes.count } }
+}
+
+/// Slice 4c — the InspectionStore-backed remote-apply path: it must suppress the
+/// push-back loop, be quota-safe (upsert, never `recordInspectionCreated`), let a
+/// remote finalization supersede a local draft, and preserve the remote's edit
+/// time while stamping local edits. Coupled to the on-disk store (no injectable
+/// root), so it stashes `appRoot` aside for determinism like the B-0044 suite.
+@MainActor
+final class Build22Slice4cSyncTests: XCTestCase {
+
+    private var stashDir: URL!
+    private var inspectionsDir: URL { FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true) }
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        stashDir = fm.temporaryDirectory.appendingPathComponent("ngs-s4c-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stashDir, withIntermediateDirectories: true)
+        try moveAside(inspectionsDir, named: "Inspections")
+        try moveAside(FilePaths.inspectionsIndex, named: "inspections.json")
+        try moveAside(FilePaths.inspectionsIndexBackup, named: "inspections.json.backup")
+    }
+
+    override func tearDownWithError() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: inspectionsDir)
+        try? fm.removeItem(at: FilePaths.inspectionsIndex)
+        try? fm.removeItem(at: FilePaths.inspectionsIndexBackup)
+        try moveBack(named: "Inspections", to: inspectionsDir)
+        try moveBack(named: "inspections.json", to: FilePaths.inspectionsIndex)
+        try moveBack(named: "inspections.json.backup", to: FilePaths.inspectionsIndexBackup)
+        try? fm.removeItem(at: stashDir)
+        stashDir = nil
+    }
+
+    private func moveAside(_ url: URL, named: String) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        try fm.moveItem(at: url, to: stashDir.appendingPathComponent(named))
+    }
+    private func moveBack(named: String, to dest: URL) throws {
+        let fm = FileManager.default
+        let src = stashDir.appendingPathComponent(named)
+        guard fm.fileExists(atPath: src.path) else { return }
+        try? fm.removeItem(at: dest)
+        try fm.moveItem(at: src, to: dest)
+    }
+
+    private func makeVersion(id: UUID = UUID(), locked: Bool = false, status: VersionStatus = .draft, marker: String = "x") -> InspectionVersion {
+        let inspection = Inspection(
+            id: id, clientName: "Client", clientEmail: "", clientPhone: "",
+            propertyAddress: marker, inspectionDate: Date(), inspectorName: "Inspector", sections: []
+        )
+        return InspectionVersion(
+            id: id, versionNumber: 1, status: status,
+            finalizedAt: locked ? Date() : nil, locked: locked, inspection: inspection
+        )
+    }
+
+    func testApplyRemoteVersionDoesNotEchoPushButLocalEditDoes() {
+        let port = RecordingSyncPort()
+        let coord = SyncCoordinator(isEnabled: { true }, makeCloudPort: { port })
+        let store = InspectionStore()
+        store.syncCoordinator = coord
+        coord.userDidChange(uid: "u")   // binds the recording port (selection is synchronous)
+
+        store.insert(version: makeVersion(marker: "local"))
+        XCTAssertEqual(port.count, 1, "A genuine local write mirrors to the cloud port.")
+
+        let remote = makeVersion(marker: "remote")
+        store.applyRemoteVersion(remote)
+        XCTAssertEqual(port.count, 1, "Applying a synced-in version must not push it back (no apply→push loop).")
+        XCTAssertTrue(store.metadataList.contains { $0.id == remote.id }, "The remote version is applied locally.")
+    }
+
+    func testApplyRemoteDeleteRemovesDraftWithoutEcho() {
+        let port = RecordingSyncPort()
+        let coord = SyncCoordinator(isEnabled: { true }, makeCloudPort: { port })
+        let store = InspectionStore()
+        store.syncCoordinator = coord
+        coord.userDidChange(uid: "u")
+
+        let v = makeVersion(marker: "to-delete")
+        store.applyRemoteVersion(v)
+        XCTAssertEqual(port.count, 0, "apply does not push")
+        XCTAssertTrue(store.metadataList.contains { $0.id == v.id })
+
+        store.applyRemoteDelete(id: v.id)
+        XCTAssertFalse(store.metadataList.contains { $0.id == v.id }, "A remote tombstone removes the local draft.")
+        XCTAssertEqual(port.count, 0, "Applying a remote delete must not echo a delete push.")
+    }
+
+    func testRemoteFinalizationSupersedesLocalDraftAsUpsert() {
+        let store = InspectionStore()
+        let id = UUID()
+        store.insert(version: makeVersion(id: id, locked: false, status: .draft, marker: "draft"))
+        XCTAssertEqual(store.metadataList.filter { $0.id == id }.count, 1)
+        XCTAssertEqual(store.metadataList.first { $0.id == id }?.locked, false)
+
+        var finalized = makeVersion(id: id, locked: true, status: .final, marker: "final")
+        finalized.updatedAt = Date()
+        store.applyRemoteVersion(finalized)
+
+        XCTAssertEqual(store.metadataList.filter { $0.id == id }.count, 1, "Upsert replaces in place — never duplicates a row.")
+        XCTAssertEqual(store.metadataList.first { $0.id == id }?.locked, true, "A remote finalization supersedes the local draft (a case update() would refuse).")
+        XCTAssertEqual(store.loadFullVersion(id: id)?.status, .final)
+    }
+
+    func testApplyRemoteVersionPreservesRemoteUpdatedAtButLocalWriteStamps() {
+        let store = InspectionStore()
+
+        // Applying a remote version preserves its edit time (no re-stamp to pull time).
+        let remoteTime = Date(timeIntervalSince1970: 1_600_000_000)
+        var remote = makeVersion(marker: "remote-ts")
+        remote.updatedAt = remoteTime
+        store.applyRemoteVersion(remote)
+        XCTAssertEqual(store.loadFullVersion(id: remote.id)?.updatedAt, remoteTime,
+                       "Applying a remote version preserves its updatedAt (no re-stamp).")
+
+        // A genuine local write stamps updatedAt to ~now.
+        let before = Date().addingTimeInterval(-2)
+        let local = makeVersion(marker: "local-stamp")
+        store.insert(version: local)
+        let stamped = store.loadFullVersion(id: local.id)?.updatedAt
+        XCTAssertNotNil(stamped, "A local write stamps updatedAt.")
+        if let stamped { XCTAssertGreaterThanOrEqual(stamped, before, "Local updatedAt is ~now.") }
+    }
+
+    func testLiveWriterDecodesPayloadAndAppliesViaStore() async {
+        let store = InspectionStore()
+        let writer = InspectionStoreVersionWriter(store: store)
+        let v = makeVersion(marker: "via-writer")
+        let payload = try! JSONEncoder().encode(v)
+
+        let applied = await writer.applyRemoteVersion(payload)
+        XCTAssertTrue(applied, "applyRemoteVersion reports success.")
+        XCTAssertTrue(store.metadataList.contains { $0.id == v.id }, "The live writer decodes the payload and applies it via the store.")
+
+        let deleted = await writer.deleteLocalVersion(recordName: v.id.uuidString)
+        XCTAssertTrue(deleted, "deleteLocalVersion reports success.")
+        XCTAssertFalse(store.metadataList.contains { $0.id == v.id }, "The live writer applies a remote tombstone.")
+    }
+
+    func testRemoteTombstoneLeavesFilesAppExportButLocalDeleteRemovesIt() throws {
+        let store = InspectionStore()
+
+        // A REMOTE tombstone removes the local version but must NOT reach into the
+        // user's exported Files-app report folder (observer/mirror contract, F4).
+        let id = UUID()
+        let v = makeVersion(id: id, marker: "F4-remote-\(id.uuidString.prefix(6))")
+        store.insert(version: v)
+        let folder = FilesAppPublisher.publishedFolderURL(for: v.inspection, jobId: id)
+        try FileSecurity.ensureProtectedDirectory(folder)
+        let marker = folder.appendingPathComponent("report.pdf")
+        try FileSecurity.writeProtected(Data("pdf".utf8), to: marker)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+
+        _ = store.applyRemoteDelete(id: id)
+        XCTAssertFalse(store.metadataList.contains { $0.id == id }, "Remote tombstone removes the local version.")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path),
+                      "Remote tombstone must NOT delete the user's Files-app export (F4).")
+
+        // Control: a genuine USER delete DOES remove its export.
+        let id2 = UUID()
+        let v2 = makeVersion(id: id2, marker: "F4-local-\(id2.uuidString.prefix(6))")
+        store.insert(version: v2)
+        let folder2 = FilesAppPublisher.publishedFolderURL(for: v2.inspection, jobId: id2)
+        try FileSecurity.ensureProtectedDirectory(folder2)
+        let marker2 = folder2.appendingPathComponent("report.pdf")
+        try FileSecurity.writeProtected(Data("pdf".utf8), to: marker2)
+        defer { try? FileManager.default.removeItem(at: folder2) }
+
+        _ = store.deleteVersion(id: id2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker2.path),
+                       "A user-initiated delete still removes the export (control).")
+    }
+
+    func testLegacyMigrationKeepsIndexAndDiskUpdatedAtInAgreement() throws {
+        // Write a legacy-format index (bare [InspectionVersion] array) with a known
+        // updatedAt, then load a fresh store (init→load→applyDecodedIndex legacy
+        // migration) and assert the migration PRESERVED the clock identically on the
+        // index row and current.json — no fabricated migration-time stamp, no
+        // index↔disk divergence (review F1 follow-up).
+        let id = UUID()
+        let legacyTime = Date(timeIntervalSince1970: 1_500_000_000)
+        var v = makeVersion(id: id, marker: "legacy-migrate")
+        v.updatedAt = legacyTime
+        let legacyArray = try JSONEncoder().encode([v])   // bare array == legacy format
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        try FileSecurity.writeProtected(legacyArray, to: FilePaths.inspectionsIndex)
+
+        let store = InspectionStore()
+        let row = store.metadataList.first { $0.id == id }
+        XCTAssertNotNil(row, "Legacy version migrated into the index.")
+        XCTAssertEqual(row?.updatedAt, legacyTime, "Migration preserves the legacy updatedAt in the index.")
+        XCTAssertEqual(store.loadFullVersion(id: id)?.updatedAt, legacyTime, "Migration preserves the legacy updatedAt on disk.")
+        XCTAssertEqual(row?.updatedAt, store.loadFullVersion(id: id)?.updatedAt,
+                       "Index and current.json agree on updatedAt after migration (F1 follow-up).")
+    }
+
+    func testLocalWriteKeepsMetadataUpdatedAtConsistentWithDisk() {
+        let store = InspectionStore()
+        let v = makeVersion(marker: "F1-consistency")
+        store.insert(version: v)
+        XCTAssertEqual(store.metadataList.first { $0.id == v.id }?.updatedAt,
+                       store.loadFullVersion(id: v.id)?.updatedAt,
+                       "insert: metadataList updatedAt matches current.json — no stale index clock (F1).")
+
+        var edited = store.loadFullVersion(id: v.id)!
+        edited.inspection.clientName = "Edited"
+        store.update(version: edited)
+        XCTAssertEqual(store.metadataList.first { $0.id == v.id }?.updatedAt,
+                       store.loadFullVersion(id: v.id)?.updatedAt,
+                       "update: metadataList updatedAt matches current.json (F1).")
+    }
+
+    func testDiskReaderLocalStatePrefersModelUpdatedAt() {
+        let store = InspectionStore()
+        let ts = Date(timeIntervalSince1970: 1_650_000_000)
+        var v = makeVersion(marker: "disk-ts")
+        v.updatedAt = ts
+        store.applyRemoteVersion(v)
+
+        let state = DiskVersionReader().localState(forVersionId: v.id)
+        XCTAssertTrue(state.exists)
+        XCTAssertFalse(state.isFinalized)
+        XCTAssertEqual(state.updatedAt, ts, "localState uses the model's updatedAt as the LWW clock.")
+    }
+
+    func testUpdatedAtCodableIsAdditiveAndRoundTrips() throws {
+        var v = makeVersion(marker: "codable")
+
+        // nil ⇒ key omitted (back-compat: legacy readers/JSON unaffected), decodes to nil.
+        v.updatedAt = nil
+        let dataNil = try JSONEncoder().encode(v)
+        XCTAssertFalse(String(decoding: dataNil, as: UTF8.self).contains("updatedAt"),
+                       "updatedAt is omitted when nil (additive / forward-compatible).")
+        XCTAssertNil(try JSONDecoder().decode(InspectionVersion.self, from: dataNil).updatedAt)
+
+        // set ⇒ round-trips through both the version and its metadata projection.
+        let ts = Date(timeIntervalSince1970: 1_680_000_000)
+        v.updatedAt = ts
+        let data = try JSONEncoder().encode(v)
+        XCTAssertEqual(try JSONDecoder().decode(InspectionVersion.self, from: data).updatedAt, ts)
+
+        let meta = VersionMetadata(from: v)
+        XCTAssertEqual(meta.updatedAt, ts, "VersionMetadata mirrors the version's updatedAt.")
+        let metaData = try JSONEncoder().encode(meta)
+        XCTAssertEqual(try JSONDecoder().decode(VersionMetadata.self, from: metaData).updatedAt, ts)
     }
 }

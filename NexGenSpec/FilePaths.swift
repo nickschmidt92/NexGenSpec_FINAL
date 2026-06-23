@@ -127,9 +127,31 @@ enum FilePaths {
     }
 
     static func inspectionFolder(jobId: UUID) -> URL {
-        appRoot
-            .appendingPathComponent("Inspections", isDirectory: true)
+        inspectionFolder(jobId: jobId, inRoot: appRoot)
+    }
+
+    // MARK: - UID-pinned variants (sync isolation, build 22 fix B / landmine 1)
+    //
+    // Resolve paths against an EXPLICIT store root (a per-UID `userRoot`) captured
+    // at sync-bind time instead of the live `appRoot`. The CloudKit mirror's reader
+    // is pinned to its bound UID's root so an in-flight seed/pull can never follow
+    // an A→B account switch onto another UID's disk. In the happy path the bound UID
+    // IS the active user, so `userRoot(uid) == appRoot` and these are identical to
+    // the live variants above.
+
+    /// The `Inspections` container under an explicit store root.
+    static func inspectionsContainer(inRoot root: URL) -> URL {
+        root.appendingPathComponent("Inspections", isDirectory: true)
+    }
+
+    static func inspectionFolder(jobId: UUID, inRoot root: URL) -> URL {
+        inspectionsContainer(inRoot: root)
             .appendingPathComponent(jobId.uuidString, isDirectory: true)
+    }
+
+    static func currentVersionFile(jobId: UUID, inRoot root: URL) -> URL {
+        inspectionFolder(jobId: jobId, inRoot: root)
+            .appendingPathComponent("current.json", isDirectory: false)
     }
 
     static func inspectionFile(jobId: UUID) -> URL {
@@ -169,7 +191,7 @@ enum FilePaths {
 
     /// Current (editable or last) full version for an inspection. Used for metadata-only index.
     static func currentVersionFile(jobId: UUID) -> URL {
-        inspectionFolder(jobId: jobId).appendingPathComponent("current.json", isDirectory: false)
+        currentVersionFile(jobId: jobId, inRoot: appRoot)
     }
 
     static var auditLog: URL {

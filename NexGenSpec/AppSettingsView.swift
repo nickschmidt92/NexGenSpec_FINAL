@@ -25,6 +25,24 @@ struct AppSettingsView: View {
     @EnvironmentObject private var subscriptions: SubscriptionManager
     @ObservedObject private var profile = InspectorProfile.shared
     @State private var showPaywall = false
+    // SyncCoordinator is always created + injected by NexGenSpecApp (it's inert
+    // when the sync flag is off), so this reference must compile in Release too —
+    // the account-deletion teardown below (tearDownDeletedAccount) uses it
+    // outside any DEBUG guard. Only the dev-only sync toggle UI is #if DEBUG.
+    @EnvironmentObject private var syncCoordinator: SyncCoordinator
+#if DEBUG
+    @AppStorage(SyncFeature.devEnabledKey) private var syncDevEnabled = false
+    private var syncStatusLabel: String {
+        switch syncCoordinator.status {
+        case .off: return "Off"
+        case .localOnly: return "Local only (no iCloud account)"
+        case .idle: return "Bound — idle"
+        case .syncing: return "Syncing…"
+        case .paused(let reason): return "Paused — \(reason)"
+        case .error(let message): return "Error — \(message)"
+        }
+    }
+#endif
 
     // Logo picker
     @State private var showLogoPicker = false
@@ -152,6 +170,22 @@ struct AppSettingsView: View {
                     ) {
                         BackupStatusView(metadataCount: store.metadataList.count)
                     }
+#if DEBUG
+                    SettingsSectionCard(
+                        title: "CloudKit Sync (DEBUG)",
+                        subtitle: "Developer-only. Pushes inspection JSON to the DEVELOPMENT CloudKit environment so sync can be tested on a real device. Push-only for now: changes appear in the CloudKit Dashboard, not on other devices. Compiled out of release builds."
+                    ) {
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Toggle("Enable sync (this debug build only)", isOn: $syncDevEnabled)
+                                .onChange(of: syncDevEnabled) { _, _ in
+                                    syncCoordinator.userDidChange(uid: authManager.currentUID)
+                                }
+                            Text("Status: \(syncStatusLabel)")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+#endif
 
                     SettingsSectionCard(
                         title: "Inspector Profile",
@@ -707,6 +741,15 @@ struct AppSettingsView: View {
         // authenticated screen for an account that no longer exists. `store` is
         // captured directly so the background wipe survives this view's teardown.
         let store = self.store
+        // Build 22 fix C / edge G: tear down the deleted account's CloudKit zone +
+        // local binding so no residual client PII lingers in the user's private
+        // iCloud (5.1.1(v) parity). The deleting UID is the active deletion pin (set
+        // in proceedAfterFirebaseDelete before Firebase cleared currentUser); capture
+        // it BEFORE the wipe Task below releases the pin. Strict no-op when the sync
+        // flag is off or no binding exists.
+        if let deletedUID = SessionScope.pinnedUID {
+            syncCoordinator.tearDownDeletedAccount(uid: deletedUID)
+        }
         store.beginWipe()
         Task {
             await store.performDiskWipe()
@@ -1249,6 +1292,7 @@ private struct CalendarSettingsSection: View {
         AppSettingsView()
             .environmentObject(AuthManager())
             .environmentObject(InspectionStore())
+            .environmentObject(SyncCoordinator())
     }
 }
 #endif
