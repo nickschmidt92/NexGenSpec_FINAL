@@ -32,6 +32,20 @@ private final class FakePort: SyncPort, @unchecked Sendable {
     var pulls: Int { lock.withLock { pullCount } }
 }
 
+/// A CloudAccountProviding stub with a mutable token, so tests can simulate a benign
+/// same-account `.CKAccountChanged` (token unchanged) vs a real iCloud switch (token
+/// changes) WITHOUT touching CloudKit.
+private final class StubAccount: CloudAccountProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _token: String?
+    init(token: String?) { _token = token }
+    var token: String? {
+        get { lock.withLock { _token } }
+        set { lock.withLock { _token = newValue } }
+    }
+    func currentUserToken() async -> String? { lock.withLock { _token } }
+}
+
 @MainActor
 final class SyncCoordinatorTests: XCTestCase {
 
@@ -44,7 +58,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     func testDisabledStaysInertAndForwardsNothing() {
         let fake = FakePort()
-        let coord = SyncCoordinator(isEnabled: { false }, makeCloudPort: { fake })
+        let coord = SyncCoordinator(isEnabled: { false }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
 
         coord.userDidChange(uid: "u")
         coord.recordLocalChange(.versionUpserted(meta()))
@@ -56,7 +70,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     func testEnabledRoutesChangesToCloudPort() {
         let fake = FakePort()
-        let coord = SyncCoordinator(isEnabled: { true }, makeCloudPort: { fake })
+        let coord = SyncCoordinator(isEnabled: { true }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
 
         coord.userDidChange(uid: "u")   // selects the cloud port synchronously
         coord.recordLocalChange(.versionDeleted(versionId: UUID()))
@@ -66,7 +80,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     func testLogoutDetachesBackToNoop() {
         let fake = FakePort()
-        let coord = SyncCoordinator(isEnabled: { true }, makeCloudPort: { fake })
+        let coord = SyncCoordinator(isEnabled: { true }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
 
         coord.userDidChange(uid: "u")
         coord.userDidChange(uid: nil)   // logout → detach to Noop
@@ -80,7 +94,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     func testPullNowRoutesToActiveCloudPort() async {
         let fake = FakePort()
-        let coord = SyncCoordinator(isEnabled: { true }, makeCloudPort: { fake })
+        let coord = SyncCoordinator(isEnabled: { true }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
 
         coord.userDidChange(uid: "u")   // selects the cloud port synchronously
         coord.pullNow()                 // e.g. app returned to foreground
@@ -93,7 +107,7 @@ final class SyncCoordinatorTests: XCTestCase {
 
     func testPullNowIsInertWhenDisabled() async {
         let fake = FakePort()
-        let coord = SyncCoordinator(isEnabled: { false }, makeCloudPort: { fake })
+        let coord = SyncCoordinator(isEnabled: { false }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
 
         coord.userDidChange(uid: "u")   // stays Noop (flag off)
         coord.pullNow()
@@ -101,5 +115,36 @@ final class SyncCoordinatorTests: XCTestCase {
         await Task.yield()
         try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(fake.pulls, 0, "Flag OFF ⇒ pullNow never reaches a cloud port (Noop no-op).")
+    }
+
+    // MARK: - .CKAccountChanged identity gate (NEW-1)
+
+    func testSameAccountChangeKeepsPortButSwitchRebuilds() async {
+        // A benign same-account .CKAccountChanged (iCloud token unchanged) must NOT
+        // tear down + rebuild the port — that would clear the un-pushed outbound queue
+        // (NEW-1). A real switch (token changes) MUST rebuild (cross-account isolation).
+        var buildCount = 0
+        let account = StubAccount(token: "tokA")
+        let coord = SyncCoordinator(
+            isEnabled: { true },
+            account: account,
+            makeCloudPort: { buildCount += 1; return FakePort() }
+        )
+
+        coord.userDidChange(uid: "u")   // builds port #1; records boundCloudToken async
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(buildCount, 1, "Initial bind builds the cloud port once.")
+
+        // Same iCloud account → no rebuild (the live port + its queue are preserved).
+        await coord.handleAccountChange()
+        XCTAssertEqual(buildCount, 1, "A same-account CKAccountChange must NOT rebuild the port (NEW-1).")
+
+        // Genuine iCloud account switch → rebuild.
+        account.token = "tokB"
+        await coord.handleAccountChange()
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(buildCount, 2, "A real iCloud account switch rebuilds the port (cross-account isolation).")
     }
 }

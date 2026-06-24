@@ -30,6 +30,14 @@ final class SyncCoordinator: ObservableObject {
 
     /// Whether sync may run at all (flag + local-only). Injected for testability.
     private let isEnabled: () -> Bool
+    /// Resolves the current iCloud user token — used ONLY to tell a benign same-account
+    /// `.CKAccountChanged` (token refresh / re-auth) from a real account switch, so a
+    /// spurious notification doesn't tear down the live port and drop its queued
+    /// outbound edits (NEW-1). Injected for testability.
+    private let account: CloudAccountProviding
+    /// The iCloud token the live port is bound to (nil ⇒ Noop / no bound user). Set by
+    /// `rebind()` after a (re)bind; compared in `handleAccountChange()`.
+    private var boundCloudToken: String?
     /// Optional cloud-port factory. Injected (non-nil) so tests substitute a fake
     /// port with no CloudKit. nil ⇒ the production CloudKit port, built lazily in
     /// `buildCloudPort()` once `store` is wired.
@@ -37,9 +45,11 @@ final class SyncCoordinator: ObservableObject {
 
     init(
         isEnabled: @escaping () -> Bool = { SyncFeature.effectiveSyncAllowed },
+        account: CloudAccountProviding = CKAccountProvider(),
         makeCloudPort: (() -> SyncPort)? = nil
     ) {
         self.isEnabled = isEnabled
+        self.account = account
         self.makeCloudPortOverride = makeCloudPort
     }
 
@@ -72,8 +82,33 @@ final class SyncCoordinator: ObservableObject {
         accountObserver = NotificationCenter.default.addObserver(
             forName: .CKAccountChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebind() }
+            Task { @MainActor in await self?.handleAccountChange() }
         }
+    }
+
+    /// Entry point for a `.CKAccountChanged` notification. Apple posts this on benign
+    /// SAME-account events (token refresh / re-auth), not just real switches. A naive
+    /// `rebind()` on every notification tears down the live port — and `unbind()`
+    /// clears the un-pushed `pending` queue, which `seedIfNeeded` won't re-enqueue
+    /// (one-shot) — so a queued outbound edit would be silently dropped: cross-device
+    /// push divergence (NEW-1). Gate it: only a GENUINE iCloud identity change (the
+    /// token actually changed) tears down + rebuilds (cross-account isolation); an
+    /// unchanged token keeps the live port + its queue and just re-drives a pull/flush.
+    /// Internal (not private) so it is unit-testable without posting a real
+    /// NotificationCenter event.
+    func handleAccountChange() async {
+        // Not bound / sync off ⇒ fall through to rebind (which detaches to Noop).
+        guard isEnabled(), currentUID != nil else { rebind(); return }
+        let token = await account.currentUserToken()
+        if token == boundCloudToken {
+            // Same iCloud identity → keep the live port and its pending queue intact;
+            // re-drive a pull + flush so a token refresh still catches up.
+            pullNow()
+            return
+        }
+        // The iCloud account genuinely changed → full rebind: tear down (clearing the
+        // queue), and bind fresh / refuse-and-isolate per SyncIdentityResolver.
+        rebind()
     }
 
     /// Called from the identity seam when the signed-in Firebase UID changes
@@ -139,6 +174,7 @@ final class SyncCoordinator: ObservableObject {
             bindTask = nil
             port.unbind()
             port = NoopSyncPort()
+            boundCloudToken = nil
             status = .off
             return
         }
@@ -153,6 +189,11 @@ final class SyncCoordinator: ObservableObject {
         let active = buildCloudPort(uid: uid)
         port = active
         bindTask = Task { @MainActor in
+            // Record the iCloud token this port is bound to, so a later
+            // `.CKAccountChanged` can tell a benign same-account refresh from a real
+            // switch (NEW-1). The port fetches its own copy at bind; approximate
+            // consistency is fine for the gate.
+            self.boundCloudToken = await self.account.currentUserToken()
             await active.bind(firebaseUID: uid)
             // Only reflect status if this is still the active port.
             if self.port === active { self.status = active.status }
