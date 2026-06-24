@@ -31,7 +31,7 @@ KEY FEATURES
 - AI defect detection: on-device photo analysis suggests defect tags as you work; accepted tags carry through to the report.
 - Structured findings: rate each item's status (Inspected / Not Inspected / Not Present) and severity, write up Location, Observed, Implication, Recommendation, and comments, add a contractor referral tag, or omit any item from the client report.
 - Add custom items to any section on the fly, beyond your template.
-- Attach it all: in-app photos and walk-through video, plus drone and thermal imagery you import (e.g. AirDropped photos and video), organized right on the inspection.
+- Attach it all: in-app photos and walk-through video, plus drone and thermal imagery you import (added from your photo library, e.g. AirDropped media), organized right on the inspection.
 - Reminders and to-dos: set per-inspection reminders with optional due dates and checkable task lists so nothing gets missed on site.
 - Custom templates: duplicate the built-in template or create your own sections and items, reorder, and reuse across jobs.
 - Severity-rated reports: cover page, a dedicated severity-sorted defect summary table with safety/major/marginal/minor badges, and per-item photo cards with annotations baked in.
@@ -51,7 +51,7 @@ START FREE
 Run 3 full inspections free, every feature included, with watermarked reports. Upgrade to Pro for unlimited inspections and clean, watermark-free reports. No credit card required to start.
 
 PLATFORM
-Universal app for iPhone and iPad, and runs on Apple Silicon Mac. Apple Pencil supported for annotation on iPad. LiDAR scanning requires a compatible device.
+Universal app for iPhone and iPad, and runs on Apple Silicon Mac. Apple Pencil supported for annotation on iPad. LiDAR scanning requires a compatible device. Photo and video capture need a device camera (on Mac, import from your photo library); current-location address auto-fill is available on iPhone and iPad.
 
 Terms of Use: https://nexgenspec.com/terms.html
 Privacy Policy: https://nexgenspec.com/privacy.html

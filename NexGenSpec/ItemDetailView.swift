@@ -403,6 +403,7 @@ struct ItemDetailView: View {
                                                     .font(.caption2)
                                             }
                                             .buttonStyle(.plain).hoverEffect(.lift)
+                                            .accessibilityLabel("Remove defect tag \(tag)")
                                         }
                                     }
                                     .padding(.horizontal, 8)
