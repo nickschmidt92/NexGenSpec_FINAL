@@ -246,7 +246,10 @@ public final class InspectionStore: ObservableObject {
     /// after it has run. (For a first public release this only ever touches pre-build-22
     /// dev/TestFlight data; public users never finalized on a pre-fix-I build.)
     private func healLegacyFinalizedHashesIfNeeded() {
-        let key = "ngs.migration.ieReseal.v1"
+        // Per-UID one-shot: each account heals its OWN legacy reports. A device-global
+        // key meant only the first account loaded after update got healed — a
+        // multi-account / TestFlight gap.
+        let key = "ngs.migration.ieReseal.v1.\(SessionScope.currentSegment)"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         defer { UserDefaults.standard.set(true, forKey: key) }
         for meta in metadataList where !InspectionStateMachine.allowsEdit(meta.state) {

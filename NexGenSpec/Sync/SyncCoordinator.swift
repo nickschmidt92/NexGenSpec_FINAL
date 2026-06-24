@@ -115,10 +115,17 @@ final class SyncCoordinator: ObservableObject {
     func handleAccountChange() async {
         // Not bound / sync off ⇒ fall through to rebind (which detaches to Noop).
         guard isEnabled(), currentUID != nil else { rebind(); return }
+        // Wait for any in-flight bind to finish publishing `boundCloudToken` before
+        // comparing. A `.CKAccountChanged` arriving in the bind→token window would
+        // otherwise compare a real token against a still-nil `boundCloudToken`,
+        // spuriously rebuild, and DROP the un-pushed queue — the exact NEW-1 bug,
+        // narrowed but not closed. (bindTask is nil when no bind is in flight.)
+        await bindTask?.value
         let token = await account.currentUserToken()
         if token == boundCloudToken {
             // Same iCloud identity → keep the live port and its pending queue intact;
-            // re-drive a pull + flush so a token refresh still catches up.
+            // re-drive a pull + flush (pullNow awaits pull then flushPending) so a token
+            // refresh still catches up.
             pullNow()
             return
         }

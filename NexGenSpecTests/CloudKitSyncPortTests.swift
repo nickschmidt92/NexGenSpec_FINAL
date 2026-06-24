@@ -326,7 +326,14 @@ final class CloudKitSyncPortTests: XCTestCase {
             finalizedAt: Date(), locked: true, clientName: "", propertyAddress: "", inspectionDate: Date()
         )
         port.recordLocalChange(.versionUpserted(finalized))
-        await port.flushPending()
+        // `await flushPending()` is not a strict barrier: a re-run spawned by the prior
+        // flush's `_flushAgain` can hold the flush lock, so the explicit call may return
+        // before the finalize push lands. Pump until it does — the re-run mechanism
+        // guarantees the queue drains (eventual, not immediate, consistency).
+        for _ in 0..<200 where db.record(named: vid.uuidString)?.locked != true {
+            await port.flushPending()
+            await Task.yield()
+        }
 
         let cloud = db.record(named: vid.uuidString)
         XCTAssertEqual(cloud?.locked, true, "finalize must OVERWRITE the draft cloud record (locked=1) — fix A")
@@ -584,6 +591,45 @@ final class CloudKitSyncPortTests: XCTestCase {
 
         XCTAssertEqual(writer.appliedCount, 0, "a tombstoned record is never applied")
         XCTAssertEqual(writer.deletedCount, 0, "a FINALIZED local is never deleted by sync (immutability wins over the tombstone)")
+    }
+
+    func testPushDoesNotSuppressFinalizedLocal() async {
+        // A FINALIZED local whose id is tombstoned (an older draft of the same id was
+        // deleted elsewhere) must still be PUSHED — a finalize WINS over a draft-tombstone
+        // (immutable legal record); it must never be stranded off-cloud (A-F5).
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, writer: writer)
+        await port.bind(firebaseUID: "uidA")
+
+        let m = meta()
+        db.seedTombstones([m.id.uuidString])
+        port.recordLocalChange(.versionUpserted(m))
+        await port.flushPending()
+
+        XCTAssertEqual(db.saved.count, 1, "a finalized local is pushed despite a draft-tombstone (finalize wins)")
+        XCTAssertEqual(writer.deletedCount, 0, "a finalized local is never deleted by a tombstone")
+    }
+
+    func testPullAppliesFinalizedRecordDespiteTombstone() async {
+        // A tombstoned but FINALIZED remote must be APPLIED, not suppressed — finalize
+        // wins over an older draft-tombstone (the pull dual of A-F5).
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id, locked: true), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let db = FakeDatabase(); db.seedTombstones([id.uuidString])
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = .absent   // not present locally → apply
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+
+        XCTAssertEqual(writer.appliedCount, 1, "a tombstoned FINALIZED remote is applied (finalize wins over a draft-tombstone)")
+        XCTAssertEqual(writer.deletedCount, 0, "and it is not deleted as a resurrection")
     }
 
     // MARK: - Reader pinned to the bound UID (fix B / landmine 1)

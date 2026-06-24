@@ -58,7 +58,10 @@ struct KeychainTeardownOwedStore: TeardownOwedStoring {
     }
 
     func record(_ owed: SyncTeardownOwed) {
-        guard let data = try? JSONEncoder().encode(owed) else { return }
+        guard let data = try? JSONEncoder().encode(owed) else {
+            Diagnostics.logError(context: "KeychainTeardownOwedStore.record: encode failed; teardown-owed NOT persisted for \(owed.firebaseUID)", persistToDisk: false)
+            return
+        }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

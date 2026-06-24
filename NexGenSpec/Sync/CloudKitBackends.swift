@@ -142,6 +142,11 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
             let meta = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.syncMeta, recordID: recordID)
             var ids = (meta[CloudKitSchema.Field.deletedIds] as? [String]) ?? []
             if ids.contains(versionId) { return }   // already tombstoned — idempotent
+            // NOTE (sync-GA follow-up): the deletion log is append-only and currently
+            // UN-pruned. For a first release the count stays small, but before it can
+            // approach the CKRecord field-size limit a GC pass is needed (drop
+            // tombstones older than the max plausible offline window, or cap + evict
+            // oldest). Tracked as a sync-GA item.
             ids.append(versionId)
             meta[CloudKitSchema.Field.deletedIds] = ids as CKRecordValue
             do {

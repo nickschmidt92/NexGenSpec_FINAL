@@ -131,20 +131,18 @@ final class SyncCoordinatorTests: XCTestCase {
             makeCloudPort: { buildCount += 1; return FakePort() }
         )
 
-        coord.userDidChange(uid: "u")   // builds port #1; records boundCloudToken async
-        await Task.yield()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        coord.userDidChange(uid: "u")   // rebind() builds port #1 synchronously
         XCTAssertEqual(buildCount, 1, "Initial bind builds the cloud port once.")
 
-        // Same iCloud account → no rebuild (the live port + its queue are preserved).
+        // Same iCloud account → no rebuild. handleAccountChange() awaits the in-flight
+        // bind so boundCloudToken is settled before the comparison — deterministic, no
+        // sleep (this await is also the NEW-1 race fix).
         await coord.handleAccountChange()
         XCTAssertEqual(buildCount, 1, "A same-account CKAccountChange must NOT rebuild the port (NEW-1).")
 
         // Genuine iCloud account switch → rebuild.
         account.token = "tokB"
         await coord.handleAccountChange()
-        await Task.yield()
-        try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(buildCount, 2, "A real iCloud account switch rebuilds the port (cross-account isolation).")
     }
 }
