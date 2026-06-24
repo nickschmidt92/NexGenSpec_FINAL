@@ -34,6 +34,9 @@ enum HTMLReportRenderer {
         let counts = inspection.summaryCounts(includeInReportOnly: true)
         let jobId = UUID(uuidString: inspection.inspectionId) ?? version.id
         let reportHash = version.state.isFinalized ? FinalizationService.loadReportHash(jobId: jobId, versionId: version.id) : nil
+        // H1: re-verify the live finalized data against its sealed hash on EVERY
+        // render (preview / PDF / ZIP all flow through here) — not just once at finalize.
+        let integrity: FinalizationService.IntegrityResult = version.state.isFinalized ? FinalizationService.verify(version) : .unavailable
         let isDraft = version.state.isEditable
         if let folder = imageFolderURL {
             try? FileSecurity.ensureProtectedDirectory(folder)
@@ -360,6 +363,9 @@ enum HTMLReportRenderer {
             html += "<div class=\"hash-label\">Integrity Hash (SHA-256)</div>"
             html += "<span class=\"hash\">\(hash)</span>"
             html += "</div>"
+            if integrity == .mismatch {
+                html += "<p style=\"margin-top: 10px; padding: 8px; border: 2px solid #c00; color: #c00; font-weight: 700; font-size: 0.8rem; line-height: 1.4;\">\u{26A0} INTEGRITY CHECK FAILED — this report&rsquo;s data does not match the fingerprint sealed at finalization. The file may be corrupted or altered; do not rely on this copy. Contact contact@nexgenspec.com.</p>"
+            }
             html += "<p style=\"margin-top: 10px; font-size: 0.7rem; color: #888; line-height: 1.4;\">This hash is a cryptographic fingerprint of the inspection data captured at finalization. Any subsequent edit produces a different hash. To verify integrity, cite the Report ID and hash above to the inspector or contact@nexgenspec.com.</p>"
         } else if isDraft {
             html += "This is a draft. Finalized reports include a Report ID and integrity hash."

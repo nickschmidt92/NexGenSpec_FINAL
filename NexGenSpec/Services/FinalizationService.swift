@@ -27,13 +27,11 @@ enum FinalizationService {
             reportHash: "", // filled below
             finalizedAt: version.finalizedAt ?? Date()
         )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(snapshot.version)
-        let hash = SHA256.hash(data: data)
-        let hexHash = hash.map { String(format: "%02x", $0) }.joined()
+        let hexHash = try canonicalHash(snapshot.version)
         var snapshotWithHash = snapshot
         snapshotWithHash.reportHash = hexHash
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
         let snapshotData = try encoder.encode(snapshotWithHash)
         let url = FilePaths.versionSnapshotFile(jobId: jobId, versionId: version.id)
         try FileSecurity.writeProtected(snapshotData, to: url)
@@ -46,5 +44,31 @@ enum FinalizationService {
         guard let data = try? Data(contentsOf: url),
               let snapshot = try? JSONDecoder().decode(FinalizedVersionSnapshot.self, from: data) else { return nil }
         return snapshot.reportHash
+    }
+
+    /// Canonical SHA-256 of a version — the SINGLE hashing path shared by sealing
+    /// (writeSnapshot) and re-verification (verify), so the two can never drift
+    /// and yield a false "tampered" result.
+    static func canonicalHash(_ version: InspectionVersion) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(version)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    enum IntegrityResult { case verified, mismatch, unavailable }
+
+    /// Re-checks a finalized version's live data against the hash sealed at
+    /// finalization. Pre-build-23 the sealed hash was written + verified once,
+    /// then only displayed — never re-checked — so altered bytes (a bad restore,
+    /// partial write, or sync divergence) would show the original hash over
+    /// changed data (audit H1). Uses canonicalHash on both sides → no false positive.
+    static func verify(_ version: InspectionVersion) -> IntegrityResult {
+        let jobId = UUID(uuidString: version.inspection.inspectionId) ?? version.id
+        guard let sealed = loadReportHash(jobId: jobId, versionId: version.id), !sealed.isEmpty else {
+            return .unavailable
+        }
+        guard let live = try? canonicalHash(version) else { return .unavailable }
+        return live == sealed ? .verified : .mismatch
     }
 }
