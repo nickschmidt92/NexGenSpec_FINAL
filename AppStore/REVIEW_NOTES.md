@@ -6,6 +6,19 @@ for an inspection-app submission with auto-renewing subscriptions.
 
 ---
 
+## Subscription Value (Guideline 3.1.2(a))
+
+NexGenSpec Pro is an ongoing professional-software service: it provides
+unlimited generation of branded, client-ready inspection reports across
+iPhone, iPad, and Mac, supported by a continually updated app and live
+inspection-day weather data fetched fresh for each report. The free tier
+(3 full inspections) lets any reviewer or user evaluate the complete
+workflow before subscribing, and Pro delivers continuous, repeated value
+to working inspectors who generate reports on every job — it is not a
+one-time feature unlock.
+
+---
+
 ## Demo Credentials
 
 Email: `appreview@nexgenspec.com`

@@ -78,7 +78,7 @@ struct ScreenshotHost: View {
                 Text("No demo inspection seeded")
             }
         case "annotation":
-            if let image = firstDefectPhoto() {
+            if let image = UIImage(contentsOfFile: "/Users/nicholasschmidt/Developer/NexGenSpec_FINAL/marketing/screenshot-assets/annotation-demo.jpg") ?? firstDefectPhoto() {
                 NavigationStack {
                     PencilKitPhotoAnnotationView(
                         baseImage: image,
@@ -89,6 +89,8 @@ struct ScreenshotHost: View {
             } else {
                 Text("No demo photo available")
             }
+        case "calendar":
+            NavigationStack { CalendarView() }
         default: // "dashboard"
             MainTabView()
         }
@@ -112,6 +114,21 @@ struct ScreenshotHost: View {
             }
         }
         return nil
+    }
+
+    /// Screenshot-only: a red circle + red arrow already drawn over the defect,
+    /// so the annotation capture shows a COMPLETE annotated photo with no taps.
+    private static var seededAnnotationOverlay: AnnotationOverlay {
+        AnnotationOverlay(
+            arrows: [
+                ArrowAnnotation(startX: 60, startY: 110, endX: 190, endY: 250, colorName: "red")
+            ],
+            circles: [
+                CircleAnnotation(centerX: 215, centerY: 285, radius: 70, colorName: "red")
+            ],
+            canvasWidth: 390,
+            canvasHeight: 720
+        )
     }
 }
 #endif
