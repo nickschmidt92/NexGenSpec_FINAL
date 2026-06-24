@@ -2,10 +2,10 @@
 //  SyncScaffoldTests.swift
 //  NexGenSpecTests
 //
-//  Slice 1 (build 22 CloudKit sync) regression tests. Proves the sync scaffold is
-//  inert: the feature flag is OFF by default, the NoopSyncPort does nothing, and
-//  the Keychain binding table round-trips with per-UID isolation. The flag-OFF
-//  guarantee is the load-bearing "behaviorally identical to build 21" invariant.
+//  CloudKit sync scaffold regression tests. Sync now ships LIVE (default-ON in
+//  Release). These pin the flag semantics — DEBUG is dev-toggle-gated, the Release
+//  default is ON, and Local-Only mode force-disables it regardless — plus the
+//  NoopSyncPort inertness and the Keychain binding round-trip with per-UID isolation.
 //  See docs/design/build-22-cloudkit-sync.md §5, §6, §18.
 //
 
@@ -16,10 +16,12 @@ final class SyncScaffoldTests: XCTestCase {
 
     // MARK: - Feature flag
 
-    func testSyncFeatureFlagIsOffByDefault() {
-        // The guarantee that makes build 22 safe to ship dark: with the DEBUG dev
-        // key unset (its default) the flag is off; Release is hard-OFF regardless.
-        // Save/restore so a developer's live toggle isn't clobbered by the test.
+    func testSyncFeatureFlagSemantics() {
+        // Sync ships LIVE: DEFAULT-ON in Release. In DEBUG it is gated by the dev toggle
+        // (default off) so developers opt in deliberately against the Development CloudKit
+        // environment; the Release default is compiled (`#else return true`) and can't be
+        // exercised from a DEBUG test host. Save/restore so a developer's live toggle
+        // isn't clobbered by the test.
         let key = SyncFeature.devEnabledKey
         let original = UserDefaults.standard.object(forKey: key)
         defer {
@@ -27,22 +29,40 @@ final class SyncScaffoldTests: XCTestCase {
             else { UserDefaults.standard.removeObject(forKey: key) }
         }
         UserDefaults.standard.removeObject(forKey: key)
-        XCTAssertFalse(SyncFeature.isEnabled, "Sync must be OFF by default.")
-        XCTAssertFalse(SyncFeature.effectiveSyncAllowed, "Flag off ⇒ no sync allowed.")
+        #if DEBUG
+        XCTAssertFalse(SyncFeature.isEnabled, "DEBUG: sync is off until the dev toggle is set.")
+        XCTAssertFalse(SyncFeature.effectiveSyncAllowed, "DEBUG dev toggle off ⇒ no sync.")
+        UserDefaults.standard.set(true, forKey: key)
+        XCTAssertTrue(SyncFeature.isEnabled, "DEBUG: the dev toggle enables sync.")
+        XCTAssertTrue(SyncFeature.effectiveSyncAllowed, "DEBUG dev toggle on ⇒ sync allowed.")
+        #else
+        XCTAssertTrue(SyncFeature.isEnabled, "Release: sync is ON by default (cross-device iCloud ships live).")
+        #endif
     }
 
     func testLocalOnlyModeForcesNoSyncAndDefaultsFalse() {
-        let key = SyncFeature.localOnlyModeKey
-        let original = UserDefaults.standard.object(forKey: key)
+        let localKey = SyncFeature.localOnlyModeKey
+        let devKey = SyncFeature.devEnabledKey
+        let originalLocal = UserDefaults.standard.object(forKey: localKey)
+        let originalDev = UserDefaults.standard.object(forKey: devKey)
         defer {
-            if let original { UserDefaults.standard.set(original, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
+            if let originalLocal { UserDefaults.standard.set(originalLocal, forKey: localKey) }
+            else { UserDefaults.standard.removeObject(forKey: localKey) }
+            if let originalDev { UserDefaults.standard.set(originalDev, forKey: devKey) }
+            else { UserDefaults.standard.removeObject(forKey: devKey) }
         }
 
-        UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: localKey)
         XCTAssertFalse(SyncFeature.isLocalOnlyMode, "Local-only mode defaults to false.")
 
-        UserDefaults.standard.set(true, forKey: key)
+        // Turn the master switch ON (in DEBUG via the dev toggle) so this genuinely
+        // tests that Local-Only WINS over an ENABLED master, not just over default-off.
+        #if DEBUG
+        UserDefaults.standard.set(true, forKey: devKey)
+        #endif
+        XCTAssertTrue(SyncFeature.isEnabled, "precondition: the master switch is on")
+
+        UserDefaults.standard.set(true, forKey: localKey)
         XCTAssertTrue(SyncFeature.isLocalOnlyMode)
         // Fail-closed: local-only wins regardless of the master switch.
         XCTAssertFalse(SyncFeature.effectiveSyncAllowed, "Local-only mode must force no sync.")

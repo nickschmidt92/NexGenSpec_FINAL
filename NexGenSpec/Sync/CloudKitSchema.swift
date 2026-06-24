@@ -27,6 +27,11 @@ enum CloudKitSchema {
         static let syncMeta = "SyncMeta"
     }
 
+    /// The fixed recordName of the per-zone `SyncMeta` singleton that holds the
+    /// deletion log (§8 tombstones). One per zone; read-modify-written under optimistic
+    /// concurrency.
+    static let syncMetaRecordName = "syncMeta"
+
     enum Field {
         static let inspectionId = "inspectionId"
         static let versionNumber = "versionNumber"
@@ -39,6 +44,9 @@ enum CloudKitSchema {
         /// bytes). All client PII lives here, inside the user's encrypted-at-rest
         /// private DB — never in a queryable metadata field.
         static let payload = "payload"
+        /// SyncMeta deletion log: the list of deleted versionId strings (§8 tombstones)
+        /// that stop a stale offline device from resurrecting a deleted draft.
+        static let deletedIds = "deletedIds"
     }
 
     /// Deterministic custom-zone name for a Firebase UID. One zone per UID gives

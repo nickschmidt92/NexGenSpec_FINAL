@@ -30,6 +30,14 @@ final class SyncCoordinator: ObservableObject {
 
     /// Whether sync may run at all (flag + local-only). Injected for testability.
     private let isEnabled: () -> Bool
+    /// Resolves the current iCloud user token — used ONLY to tell a benign same-account
+    /// `.CKAccountChanged` (token refresh / re-auth) from a real account switch, so a
+    /// spurious notification doesn't tear down the live port and drop its queued
+    /// outbound edits (NEW-1). Injected for testability.
+    private let account: CloudAccountProviding
+    /// The iCloud token the live port is bound to (nil ⇒ Noop / no bound user). Set by
+    /// `rebind()` after a (re)bind; compared in `handleAccountChange()`.
+    private var boundCloudToken: String?
     /// Optional cloud-port factory. Injected (non-nil) so tests substitute a fake
     /// port with no CloudKit. nil ⇒ the production CloudKit port, built lazily in
     /// `buildCloudPort()` once `store` is wired.
@@ -37,9 +45,11 @@ final class SyncCoordinator: ObservableObject {
 
     init(
         isEnabled: @escaping () -> Bool = { SyncFeature.effectiveSyncAllowed },
+        account: CloudAccountProviding = CKAccountProvider(),
         makeCloudPort: (() -> SyncPort)? = nil
     ) {
         self.isEnabled = isEnabled
+        self.account = account
         self.makeCloudPortOverride = makeCloudPort
     }
 
@@ -72,8 +82,56 @@ final class SyncCoordinator: ObservableObject {
         accountObserver = NotificationCenter.default.addObserver(
             forName: .CKAccountChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebind() }
+            Task { @MainActor in await self?.handleAccountChange() }
         }
+        // Cold-launch sweep (fix C): retry any account-deletion zone teardowns a prior
+        // run couldn't finish. Independent of the deletion pin; a no-op when sync is off
+        // or nothing is owed (a fast Keychain check before any CloudKit call).
+        Task { await Self.runTeardownSweep() }
+    }
+
+    /// Retries owed account-deletion zone teardowns at launch (fix C). Static + builds
+    /// its own CloudKit backends so it never touches the live port's state.
+    private static func runTeardownSweep() async {
+        guard SyncFeature.isEnabled else { return }
+        await SyncTeardownSweep.run(
+            database: CKCloudDatabase(),
+            account: CKAccountProvider(),
+            owed: KeychainTeardownOwedStore(),
+            isEnabled: true
+        )
+    }
+
+    /// Entry point for a `.CKAccountChanged` notification. Apple posts this on benign
+    /// SAME-account events (token refresh / re-auth), not just real switches. A naive
+    /// `rebind()` on every notification tears down the live port — and `unbind()`
+    /// clears the un-pushed `pending` queue, which `seedIfNeeded` won't re-enqueue
+    /// (one-shot) — so a queued outbound edit would be silently dropped: cross-device
+    /// push divergence (NEW-1). Gate it: only a GENUINE iCloud identity change (the
+    /// token actually changed) tears down + rebuilds (cross-account isolation); an
+    /// unchanged token keeps the live port + its queue and just re-drives a pull/flush.
+    /// Internal (not private) so it is unit-testable without posting a real
+    /// NotificationCenter event.
+    func handleAccountChange() async {
+        // Not bound / sync off ⇒ fall through to rebind (which detaches to Noop).
+        guard isEnabled(), currentUID != nil else { rebind(); return }
+        // Wait for any in-flight bind to finish publishing `boundCloudToken` before
+        // comparing. A `.CKAccountChanged` arriving in the bind→token window would
+        // otherwise compare a real token against a still-nil `boundCloudToken`,
+        // spuriously rebuild, and DROP the un-pushed queue — the exact NEW-1 bug,
+        // narrowed but not closed. (bindTask is nil when no bind is in flight.)
+        await bindTask?.value
+        let token = await account.currentUserToken()
+        if token == boundCloudToken {
+            // Same iCloud identity → keep the live port and its pending queue intact;
+            // re-drive a pull + flush (pullNow awaits pull then flushPending) so a token
+            // refresh still catches up.
+            pullNow()
+            return
+        }
+        // The iCloud account genuinely changed → full rebind: tear down (clearing the
+        // queue), and bind fresh / refuse-and-isolate per SyncIdentityResolver.
+        rebind()
     }
 
     /// Called from the identity seam when the signed-in Firebase UID changes
@@ -126,7 +184,8 @@ final class SyncCoordinator: ObservableObject {
         let account = CKAccountProvider()
         Task {
             await SyncAccountTeardown.tearDown(
-                uid: uid, database: database, account: account, bindings: KeychainBindingStore(), isEnabled: true
+                uid: uid, database: database, account: account, bindings: KeychainBindingStore(),
+                owed: KeychainTeardownOwedStore(), isEnabled: true
             )
         }
     }
@@ -139,6 +198,7 @@ final class SyncCoordinator: ObservableObject {
             bindTask = nil
             port.unbind()
             port = NoopSyncPort()
+            boundCloudToken = nil
             status = .off
             return
         }
@@ -153,6 +213,11 @@ final class SyncCoordinator: ObservableObject {
         let active = buildCloudPort(uid: uid)
         port = active
         bindTask = Task { @MainActor in
+            // Record the iCloud token this port is bound to, so a later
+            // `.CKAccountChanged` can tell a benign same-account refresh from a real
+            // switch (NEW-1). The port fetches its own copy at bind; approximate
+            // consistency is fine for the gate.
+            self.boundCloudToken = await self.account.currentUserToken()
             await active.bind(firebaseUID: uid)
             // Only reflect status if this is still the active port.
             if self.port === active { self.status = active.status }
@@ -176,6 +241,7 @@ enum SyncAccountTeardown {
         database: CloudDatabase,
         account: CloudAccountProviding,
         bindings: BindingStoring,
+        owed: TeardownOwedStoring,
         isEnabled: Bool
     ) async {
         // Strict no-op unless sync is on AND a binding actually exists for this UID.
@@ -185,35 +251,34 @@ enum SyncAccountTeardown {
         // OWNS the zone (finding #4): the zone lives in the iCloud account bound at
         // `binding.cloudUserToken`. After an Apple-ID switch — or while iCloud is
         // unavailable (`currentToken == nil`) — deleteZone would target the wrong /
-        // another private DB, so we skip it and log the residual instead of pretending
-        // to delete it.
+        // another private DB, so we DON'T attempt it; instead we record a teardown-owed
+        // marker so the cold-launch sweep retries it later, under the owning account.
         let currentToken = await account.currentUserToken()
         if currentToken == binding.cloudUserToken {
             do {
                 try await database.deleteZone(binding.zoneName)
+                // Zone is gone — clear any prior owed marker for this UID.
+                owed.remove(forUID: uid)
             } catch {
-                // Best-effort — NEVER block the wipe (spec uses catch + log). A
-                // transient CloudKit failure leaves the zone as a residual (see the
-                // KNOWN LIMITATION below).
-                Diagnostics.logError(context: "SyncAccountTeardown.deleteZone failed for \(uid); zone left as a residual (best-effort)", error: error)
+                // Durable retry (fix C): never block the wipe, but record what's owed so
+                // a later launch retries the residual zone (no longer logged-and-lost).
+                owed.record(SyncTeardownOwed(firebaseUID: uid, zoneName: binding.zoneName, cloudUserToken: binding.cloudUserToken))
+                Diagnostics.logError(context: "SyncAccountTeardown.deleteZone failed for \(uid); recorded teardown-owed for the cold-launch sweep", error: error)
             }
         } else {
+            // Not reachable from the current iCloud user — record it owed so the sweep
+            // retries when the owning account returns (never deleteZone the wrong DB).
+            owed.record(SyncTeardownOwed(firebaseUID: uid, zoneName: binding.zoneName, cloudUserToken: binding.cloudUserToken))
             Diagnostics.logError(
-                context: "SyncAccountTeardown: zone for \(uid) not reachable from the current iCloud user (account changed or unavailable); left as a residual",
+                context: "SyncAccountTeardown: zone for \(uid) not reachable from the current iCloud user (account changed or unavailable); recorded teardown-owed for retry",
                 persistToDisk: false
             )
         }
-        // Drop the local binding. This teardown is one-shot BEST-EFFORT, exactly as
-        // the spec scopes it (deleteZone + SyncBindingStore.delete, never blocking the
-        // wipe). KNOWN LIMITATION (round-3 finding): a transient deleteZone failure /
-        // iCloud-unavailable at the deletion moment leaves the zone as a residual in
-        // the user's OWN private iCloud (Apple-isolated per Apple ID — NOT a
-        // cross-account leak) with no durable retry — an earlier attempt to "keep the
-        // binding for retry" was a false premise (a normal completed deletion clears
-        // the deletion-pending-wipe flag + pin, so the recovery path never re-fires).
-        // A robust retry (a persisted teardown-owed record + a cold-launch sweep,
-        // independent of the deletion pin) is a sync-GA item, NOT a build-22 blocker
-        // (build 22 ships sync dark). Documented in build-22-p6-remediation.md.
+        // Drop the local binding (never blocks the wipe). Any residual zone is now
+        // tracked by the teardown-owed marker above and retried by SyncTeardownSweep at
+        // the next launch — INDEPENDENT of the deletion pin (which a normal completed
+        // deletion clears, so the old recovery path couldn't re-fire). This closes the
+        // round-3 KNOWN LIMITATION (fix C). See build-22-p6-remediation.md.
         bindings.delete(forUID: uid)
     }
 }

@@ -27,6 +27,11 @@ protocol CloudDatabase: Sendable {
     /// removes every record it holds in one shot so no residual client PII is left
     /// in the user's private iCloud after they delete their account (5.1.1(v)).
     func deleteZone(_ zoneName: String) async throws
+    /// Append a versionId to the zone's `SyncMeta` deletion log (§8 tombstone), so a
+    /// stale offline device can't resurrect a deleted draft. Idempotent (dedup'd).
+    func recordTombstone(versionId: String, inZone zoneName: String) async throws
+    /// The set of tombstoned (deleted) versionIds for the zone (empty if no SyncMeta).
+    func tombstonedIds(inZone zoneName: String) async throws -> Set<String>
 }
 
 /// Resolves the current iCloud user as an opaque token (nil ⇒ no iCloud account).
@@ -126,17 +131,18 @@ struct DiskVersionReader: LocalVersionReader {
         // but the cause is logged distinctly.
         //   READ failure = data protection (`current.json` is .completeUnlessOpen, so
         //   it is transiently unreadable while the device is locked) or transient I/O.
-        //   NOTE: in build 22 the only pull triggers are bind + foreground (device
-        //   unlocked), so this branch is not reached in practice; when the deferred
-        //   APNs background pull (D-0184) lands, that slice must additionally avoid
-        //   ADVANCING the change token on a transient read miss (retry next pull)
-        //   rather than treating it as a settled keepLocal. Tracked in the design doc.
+        //   We surface it as `readFailed` so the pull HOLDS the change token (does not
+        //   settle this record) and retries on the next pull instead of permanently
+        //   skipping a legitimate remote update (fix D). In build 22 the only pull
+        //   triggers are bind + foreground (device unlocked) so this is not hit in
+        //   practice; it is the safety pre-req for the deferred APNs background pull
+        //   (D-0184), which can pull while the device is locked.
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
-            Diagnostics.logError(context: "DiskVersionReader.localState: current.json TRANSIENTLY unreadable for \(id) (data-protection/I/O); failing CLOSED (keepLocal)", error: error)
-            return LocalVersionState(exists: true, isFinalized: true, updatedAt: fileMtime)
+            Diagnostics.logError(context: "DiskVersionReader.localState: current.json TRANSIENTLY unreadable for \(id) (data-protection/I/O); holding token (readFailed)", error: error)
+            return LocalVersionState(exists: true, isFinalized: true, updatedAt: fileMtime, readFailed: true)
         }
         guard let version = try? JSONDecoder().decode(InspectionVersion.self, from: data) else {
             // Read OK but bytes won't decode = genuine corruption (the fix-D case):

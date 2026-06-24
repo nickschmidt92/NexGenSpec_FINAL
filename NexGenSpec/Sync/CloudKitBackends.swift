@@ -53,52 +53,60 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         let recordID = CKRecord.ID(recordName: record.recordName, zoneID: zoneID)
 
-        // Immutability at the source of truth (fix A): fetch the existing server
-        // record first. If it is ALREADY finalized/locked, leave it untouched — a
-        // second device's divergent finalization of the same versionId (different
-        // finalizedAt / snapshot) must never clobber the first finalized record (the
-        // immutable legal/tamper-evidence record). A `serverRecordChanged` that the
-        // OLD `.ifServerRecordUnchanged` path swallowed could not distinguish "draft
-        // present (overwrite)" from "finalized present (protect)"; this fetch can.
-        // Reusing the fetched record also carries its change tag, so the save cleanly
-        // overwrites THAT version (promoting a draft to finalized — the core fix-A
-        // case) rather than failing on a tag-less record.
-        let existing: CKRecord?
-        do {
-            existing = try await database.record(for: recordID)
-        } catch let ckError as CKError where ckError.code == .unknownItem {
-            existing = nil  // not present yet → create
-        }
-        if let existing, (existing[CloudKitSchema.Field.locked] as? Int) == 1 {
-            Diagnostics.logInfo("CKCloudDatabase: server record \(record.recordName) is already finalized; left immutable.")
-            return
-        }
-
-        let ck = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.inspectionVersion, recordID: recordID)
-        ck[CloudKitSchema.Field.inspectionId] = record.inspectionId as CKRecordValue
-        ck[CloudKitSchema.Field.versionNumber] = record.versionNumber as CKRecordValue
-        ck[CloudKitSchema.Field.status] = record.status as CKRecordValue
-        ck[CloudKitSchema.Field.locked] = (record.locked ? 1 : 0) as CKRecordValue
-        if let finalizedAt = record.finalizedAt {
-            ck[CloudKitSchema.Field.finalizedAt] = finalizedAt as CKRecordValue
-        }
-        ck[CloudKitSchema.Field.schemaVersion] = record.schemaVersion as CKRecordValue
-        // The last-writer-wins clock: push the version's actual EDIT time, not the
-        // upload time, so a pull on another device arbitrates draft conflicts by
-        // when each side was edited (build 22 slice 4c). Falls back to now only for
-        // a legacy version that predates `updatedAt`.
-        ck[CloudKitSchema.Field.modifiedAt] = (record.updatedAt ?? Date()) as CKRecordValue
-
+        // Stage the payload bytes once; reused across retries (the CKAsset wrapper is
+        // rebuilt per attempt inside `apply`). The temp file is removed after the save
+        // settles.
         let assetURL = try Self.writeTempPayload(record.payload, recordName: record.recordName)
         defer { try? FileManager.default.removeItem(at: assetURL) }
-        ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
 
-        // We either reused the fetched (non-locked) server record — so it carries a
-        // change tag and `.changedKeys` cleanly overwrites THAT version (promoting a
-        // draft to finalized) — or built a fresh record that `.changedKeys` creates.
-        // The immutability of an already-finalized record was enforced by the fetch
-        // guard above, so no never-clobber save policy is needed here.
-        _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .changedKeys, atomically: true)
+        // Optimistic-concurrency save with a bounded re-fetch/retry loop (NEW-2).
+        //
+        // Immutability at the source of truth (fix A): fetch the existing server
+        // record first; if it is ALREADY finalized/locked, leave it untouched — a
+        // second device's divergent finalization of the same versionId must never
+        // clobber the first finalized record (the immutable legal/tamper-evidence
+        // record). Reusing the fetched (non-locked) record carries its CURRENT change
+        // tag, so the save cleanly overwrites THAT version (promoting a draft to
+        // finalized) — or, for a fresh record, creates it.
+        //
+        // The fetch→save window is NOT atomic: another device can finalize the same
+        // record in between. `.ifServerRecordUnchanged` makes CloudKit DETECT that
+        // (serverRecordChanged) instead of silently overwriting the finalized record
+        // back to a draft. On that conflict we loop: re-fetch, re-apply the
+        // immutability guard (if it is NOW finalized, the other device won — stop and
+        // succeed), else rebuild against the fresh tag and retry. Bounded so a
+        // pathological ping-pong can't spin; on exhaustion we throw so the port keeps
+        // the change queued (§11, no swallowed failures).
+        let maxAttempts = 3
+        var lastConflict: Error?
+        for attempt in 1...maxAttempts {
+            let existing: CKRecord?
+            do {
+                existing = try await database.record(for: recordID)
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                existing = nil  // not present yet → create
+            }
+            if let existing, (existing[CloudKitSchema.Field.locked] as? Int) == 1 {
+                Diagnostics.logInfo("CKCloudDatabase: server record \(record.recordName) is already finalized; left immutable.")
+                return
+            }
+
+            let ck = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.inspectionVersion, recordID: recordID)
+            Self.apply(record, to: ck, assetURL: assetURL)
+
+            do {
+                _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                return
+            } catch let error where Self.isServerRecordChanged(error) {
+                // Concurrent cross-device write landed in the fetch→save window.
+                // Re-fetch + re-guard + retry with the fresh change tag next iteration.
+                lastConflict = error
+                Diagnostics.logInfo("CKCloudDatabase: \(record.recordName) changed on the server mid-save (attempt \(attempt)/\(maxAttempts)); re-fetching and retrying.")
+                continue
+            }
+        }
+        // Retries exhausted without converging — surface so the caller re-queues it.
+        throw lastConflict ?? CKError(.serverRecordChanged)
     }
 
     func delete(recordName: String, inZone zoneName: String) async throws {
@@ -113,6 +121,88 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         // server op, so no residual client PII remains in the user's private iCloud.
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         _ = try await database.modifyRecordZones(saving: [], deleting: [zoneID])
+    }
+
+    func recordTombstone(versionId: String, inZone zoneName: String) async throws {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: CloudKitSchema.syncMetaRecordName, zoneID: zoneID)
+
+        // Optimistic read-modify-write of the per-zone SyncMeta deletion log, with the
+        // same bounded serverRecordChanged retry as save() so two devices tombstoning
+        // concurrently can't clobber each other's entries (§8).
+        let maxAttempts = 3
+        var lastConflict: Error?
+        for attempt in 1...maxAttempts {
+            let existing: CKRecord?
+            do {
+                existing = try await database.record(for: recordID)
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                existing = nil
+            }
+            let meta = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.syncMeta, recordID: recordID)
+            var ids = (meta[CloudKitSchema.Field.deletedIds] as? [String]) ?? []
+            if ids.contains(versionId) { return }   // already tombstoned — idempotent
+            // NOTE (sync-GA follow-up): the deletion log is append-only and currently
+            // UN-pruned. For a first release the count stays small, but before it can
+            // approach the CKRecord field-size limit a GC pass is needed (drop
+            // tombstones older than the max plausible offline window, or cap + evict
+            // oldest). Tracked as a sync-GA item.
+            ids.append(versionId)
+            meta[CloudKitSchema.Field.deletedIds] = ids as CKRecordValue
+            do {
+                _ = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                return
+            } catch let error where Self.isServerRecordChanged(error) {
+                lastConflict = error
+                Diagnostics.logInfo("CKCloudDatabase: SyncMeta changed mid-tombstone (attempt \(attempt)/\(maxAttempts)); re-fetching and retrying.")
+                continue
+            }
+        }
+        throw lastConflict ?? CKError(.serverRecordChanged)
+    }
+
+    func tombstonedIds(inZone zoneName: String) async throws -> Set<String> {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: CloudKitSchema.syncMetaRecordName, zoneID: zoneID)
+        do {
+            let meta = try await database.record(for: recordID)
+            return Set((meta[CloudKitSchema.Field.deletedIds] as? [String]) ?? [])
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            return []   // no SyncMeta yet → nothing tombstoned
+        }
+    }
+
+    /// Sets every InspectionVersion field (plus a freshly-wrapped payload CKAsset) on
+    /// `ck` from `record`. Factored out so the save-retry loop can rebuild the record
+    /// against a re-fetched change tag without duplicating the field mapping.
+    private static func apply(_ record: InspectionVersionRecord, to ck: CKRecord, assetURL: URL) {
+        ck[CloudKitSchema.Field.inspectionId] = record.inspectionId as CKRecordValue
+        ck[CloudKitSchema.Field.versionNumber] = record.versionNumber as CKRecordValue
+        ck[CloudKitSchema.Field.status] = record.status as CKRecordValue
+        ck[CloudKitSchema.Field.locked] = (record.locked ? 1 : 0) as CKRecordValue
+        if let finalizedAt = record.finalizedAt {
+            ck[CloudKitSchema.Field.finalizedAt] = finalizedAt as CKRecordValue
+        }
+        ck[CloudKitSchema.Field.schemaVersion] = record.schemaVersion as CKRecordValue
+        // The last-writer-wins clock: push the version's actual EDIT time, not the
+        // upload time, so a pull on another device arbitrates draft conflicts by when
+        // each side was edited (build 22 slice 4c). Falls back to now only for a legacy
+        // version that predates `updatedAt`.
+        ck[CloudKitSchema.Field.modifiedAt] = (record.updatedAt ?? Date()) as CKRecordValue
+        ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
+    }
+
+    /// True if `error` is (or, inside an atomic batch, wraps via `.partialFailure`) a
+    /// CloudKit `serverRecordChanged` conflict — the optimistic-concurrency signal
+    /// that the server record changed since we fetched it.
+    private static func isServerRecordChanged(_ error: Error) -> Bool {
+        guard let ckError = error as? CKError else { return false }
+        if ckError.code == .serverRecordChanged { return true }
+        if ckError.code == .partialFailure,
+           let partials = ckError.partialErrorsByItemID?.values {
+            return partials.contains { ($0 as? CKError)?.code == .serverRecordChanged }
+        }
+        return false
     }
 
     /// CKAsset must point at a file on disk. Stage the payload in a temp dir;

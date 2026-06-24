@@ -2,12 +2,13 @@
 //  SyncFeature.swift
 //  NexGenSpec
 //
-//  Master gate for CloudKit sync (build 22). OFF by default.
+//  Master gate for CloudKit sync. DEFAULT ON in Release (cross-device iCloud
+//  sync across the user's own devices); users opt OUT via Local-Only mode.
 //
-//  While `isEnabled` is false the app constructs a `NoopSyncPort` everywhere and
-//  behaves EXACTLY like build 21 — no CloudKit code runs, no identity binding is
-//  read or written. Flipping sync on is a deliberate, reversible act: it is the
-//  single switch the implementation slices build behind (see
+//  When `effectiveSyncAllowed` is false (Local-Only mode on, signed out, or a
+//  DEBUG build with the dev toggle off) the app constructs a `NoopSyncPort`
+//  everywhere — no CloudKit code runs and no identity binding is read or written.
+//  This is the single switch the implementation slices build behind (see
 //  docs/design/build-22-cloudkit-sync.md §6).
 //
 
@@ -15,15 +16,16 @@ import Foundation
 
 enum SyncFeature {
 
-    /// Master switch. Hard OFF in Release — sync ships dark. In DEBUG builds ONLY,
-    /// an in-app dev toggle (`devEnabledKey`, surfaced in Settings) can flip it on
-    /// to exercise sync against the Development CloudKit environment on real
-    /// devices without shipping it. Release/TestFlight is compiled hard-OFF.
+    /// Master switch. DEFAULT ON in Release — cross-device iCloud sync ships live;
+    /// users opt out via Local-Only mode (see `effectiveSyncAllowed`). In DEBUG
+    /// builds the in-app dev toggle (`devEnabledKey`, surfaced in Settings) gates
+    /// it so sync can be exercised against the Development CloudKit environment
+    /// deliberately.
     static var isEnabled: Bool {
         #if DEBUG
         return UserDefaults.standard.bool(forKey: devEnabledKey)
         #else
-        return false
+        return true
         #endif
     }
 
@@ -87,5 +89,14 @@ enum SyncFeature {
         isEnabled
         ? "Your inspections, photos, signatures, and reports stay under your control. With iCloud Sync on, they sync across your own devices through your private iCloud account; NexGenSpec never keeps server-side copies. Sync is not a backup — keep your own backups, as deletions sync between your devices."
         : "All inspections, photos, signatures, and reports are stored on this device only. NexGenSpec does NOT keep server-side copies and cannot recover lost data."
+    }
+
+    /// One-sentence "where your data lives" for the in-app Settings/Terms, flag-aware so
+    /// it never contradicts the sync state. (Authoritative legal wording is the B-0118
+    /// attorney track; this is the in-app mirror.)
+    static var dataLocationClause: String {
+        isEnabled
+        ? "NexGenSpec syncs your inspections across your own Apple devices through your private iCloud account; NexGenSpec keeps no server-side copy. Turn on Local-Only mode to keep inspections on the device that created them."
+        : "NexGenSpec is a local-first application. Inspection data lives ONLY on the device that created it. NexGenSpec does not maintain server-side copies of any inspection content."
     }
 }

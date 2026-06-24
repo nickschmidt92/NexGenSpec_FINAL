@@ -53,6 +53,18 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     }
     /// The record currently stored under a name (nil if never saved / clobbered).
     func record(named recordName: String) -> InspectionVersionRecord? { lock.withLock { stored[recordName] } }
+
+    // SyncMeta deletion log (§8).
+    private var tombstones: Set<String> = []
+    func recordTombstone(versionId: String, inZone zoneName: String) async throws {
+        lock.withLock { _ = tombstones.insert(versionId) }
+    }
+    func tombstonedIds(inZone zoneName: String) async throws -> Set<String> {
+        lock.withLock { tombstones }
+    }
+    /// Test helper: pre-seed tombstones as if another device deleted these ids.
+    func seedTombstones(_ ids: [String]) { lock.withLock { tombstones.formUnion(ids) } }
+    var tombstoneSnapshot: Set<String> { lock.withLock { tombstones } }
 }
 
 private struct FakeAccount: CloudAccountProviding {
@@ -100,6 +112,16 @@ private final class FakeBindings: BindingStoring, @unchecked Sendable {
         lock.withLock { store[uid] = nil }; return true
     }
     func current(_ uid: String) -> SyncBinding? { load(forUID: uid) }
+}
+
+private final class FakeTeardownOwed: TeardownOwedStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var store: [String: SyncTeardownOwed] = [:]
+    func record(_ owed: SyncTeardownOwed) { lock.withLock { store[owed.firebaseUID] = owed } }
+    func loadAll() -> [SyncTeardownOwed] { lock.withLock { Array(store.values) } }
+    func remove(forUID uid: String) { lock.withLock { store[uid] = nil } }
+    var all: [SyncTeardownOwed] { loadAll() }
+    var count: Int { lock.withLock { store.count } }
 }
 
 // MARK: - Tests
@@ -304,7 +326,14 @@ final class CloudKitSyncPortTests: XCTestCase {
             finalizedAt: Date(), locked: true, clientName: "", propertyAddress: "", inspectionDate: Date()
         )
         port.recordLocalChange(.versionUpserted(finalized))
-        await port.flushPending()
+        // `await flushPending()` is not a strict barrier: a re-run spawned by the prior
+        // flush's `_flushAgain` can hold the flush lock, so the explicit call may return
+        // before the finalize push lands. Pump until it does — the re-run mechanism
+        // guarantees the queue drains (eventual, not immediate, consistency).
+        for _ in 0..<200 where db.record(named: vid.uuidString)?.locked != true {
+            await port.flushPending()
+            await Task.yield()
+        }
 
         let cloud = db.record(named: vid.uuidString)
         XCTAssertEqual(cloud?.locked, true, "finalize must OVERWRITE the draft cloud record (locked=1) — fix A")
@@ -375,13 +404,14 @@ final class CloudKitSyncPortTests: XCTestCase {
     func testAccountTeardownDeletesZoneAndBindingWhenBound() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
         // Current iCloud user still matches the bound account → safe to delete the zone.
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertEqual(db.deletedZones, [zone], "teardown deletes the deleted account's CloudKit zone")
         XCTAssertNil(binds.current("uidA"), "teardown removes the local binding")
+        XCTAssertEqual(owed.count, 0, "a clean delete leaves nothing owed")
     }
 
     /// Finding #4: after an iCloud-account switch the bound zone lives in the OLD,
@@ -391,30 +421,33 @@ final class CloudKitSyncPortTests: XCTestCase {
     func testAccountTeardownSkipsZoneDeleteAfterICloudSwitchButDropsBinding() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
         // Current iCloud user is DIFFERENT from the bound account (tok2 != tok1).
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok2"), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok2"), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertTrue(db.deletedZones.isEmpty, "must not deleteZone against the wrong iCloud account")
         XCTAssertNil(binds.current("uidA"), "the local binding is still dropped")
+        XCTAssertEqual(owed.all.first?.zoneName, zone, "an unreachable zone is recorded owed for the cold-launch sweep")
     }
 
     func testAccountTeardownIsNoopWhenFlagOff() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: false)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: false)
 
         XCTAssertTrue(db.deletedZones.isEmpty, "flag OFF ⇒ no CloudKit zone delete")
         XCTAssertNotNil(binds.current("uidA"), "flag OFF ⇒ binding left intact")
+        XCTAssertEqual(owed.count, 0, "flag OFF ⇒ nothing recorded owed")
     }
 
     func testAccountTeardownIsNoopWhenNoBinding() async {
-        let db = FakeDatabase(); let binds = FakeBindings()
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        let db = FakeDatabase(); let binds = FakeBindings(); let owed = FakeTeardownOwed()
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: true)
         XCTAssertTrue(db.deletedZones.isEmpty, "no binding ⇒ nothing to tear down")
+        XCTAssertEqual(owed.count, 0, "no binding ⇒ nothing recorded owed")
     }
 
     /// iCloud unavailable at deletion time (token nil): we can't verify ownership, so
@@ -424,12 +457,13 @@ final class CloudKitSyncPortTests: XCTestCase {
     func testAccountTeardownSkipsZoneButDropsBindingWhenICloudUnavailable() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: nil), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: nil), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertTrue(db.deletedZones.isEmpty, "iCloud unavailable ⇒ no zone delete attempted (could hit wrong DB)")
         XCTAssertNil(binds.current("uidA"), "best-effort teardown is one-shot: the binding is dropped")
+        XCTAssertEqual(owed.all.first?.zoneName, zone, "iCloud unavailable ⇒ zone recorded owed for the sweep")
     }
 
     /// A transient deleteZone failure does not block teardown: the attempt is made and
@@ -439,11 +473,163 @@ final class CloudKitSyncPortTests: XCTestCase {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
         let db = FakeDatabase(); db.failDeleteZone = true
-        let binds = FakeBindings(["uidA": binding])
+        let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertNil(binds.current("uidA"), "best-effort: binding dropped even when deleteZone fails")
+        XCTAssertEqual(owed.all.first?.zoneName, zone, "a transient deleteZone failure records the zone owed for the sweep (fix C)")
+    }
+
+    // MARK: - Cold-launch teardown sweep (fix C)
+
+    func testTeardownSweepRetriesOwedZoneWhenOwnerReturns() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let db = FakeDatabase()
+        let owed = FakeTeardownOwed()
+        owed.record(SyncTeardownOwed(firebaseUID: "uidA", zoneName: zone, cloudUserToken: "tok1"))
+
+        // The owning iCloud user is back (token matches) → the retry deletes the zone
+        // and clears the owed marker.
+        await SyncTeardownSweep.run(database: db, account: FakeAccount(token: "tok1"), owed: owed, isEnabled: true)
+
+        XCTAssertEqual(db.deletedZones, [zone], "the sweep retries the owed zone delete under the owning account")
+        XCTAssertEqual(owed.count, 0, "a successful retry clears the owed marker")
+    }
+
+    func testTeardownSweepKeepsOwedWhenTokenMismatches() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let db = FakeDatabase()
+        let owed = FakeTeardownOwed()
+        owed.record(SyncTeardownOwed(firebaseUID: "uidA", zoneName: zone, cloudUserToken: "tok1"))
+
+        // A DIFFERENT iCloud user is signed in (tok2 != tok1) → never deleteZone the
+        // wrong DB; leave it owed for a later launch under the owner.
+        await SyncTeardownSweep.run(database: db, account: FakeAccount(token: "tok2"), owed: owed, isEnabled: true)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "the sweep must not deleteZone against the wrong iCloud account")
+        XCTAssertEqual(owed.count, 1, "the owed marker is kept for a later launch under the owner")
+    }
+
+    func testTeardownSweepIsNoopWhenFlagOff() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let db = FakeDatabase()
+        let owed = FakeTeardownOwed()
+        owed.record(SyncTeardownOwed(firebaseUID: "uidA", zoneName: zone, cloudUserToken: "tok1"))
+
+        await SyncTeardownSweep.run(database: db, account: FakeAccount(token: "tok1"), owed: owed, isEnabled: false)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "flag OFF ⇒ the sweep is a strict no-op")
+        XCTAssertEqual(owed.count, 1, "flag OFF ⇒ owed markers are untouched")
+    }
+
+    // MARK: - Deletion tombstone / no-resurrection (§8)
+
+    func testDeletePushRecordsTombstone() async {
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db)
+        await port.bind(firebaseUID: "uidA")
+
+        let id = UUID()
+        port.recordLocalChange(.versionDeleted(versionId: id))
+        await port.flushPending()
+
+        XCTAssertTrue(db.tombstoneSnapshot.contains(id.uuidString), "a delete records a tombstone in the SyncMeta deletion log")
+        XCTAssertTrue(db.deleted.contains(where: { $0.name == id.uuidString }), "the record is also deleted from the zone")
+    }
+
+    func testPushSuppressesTombstonedUpsert() async {
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: false, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, writer: writer)
+        await port.bind(firebaseUID: "uidA")
+
+        // Another device already deleted this id → it's tombstoned.
+        let m = meta()
+        db.seedTombstones([m.id.uuidString])
+
+        port.recordLocalChange(.versionUpserted(m))
+        await port.flushPending()
+
+        XCTAssertTrue(db.saved.isEmpty, "a tombstoned id is never re-pushed (no resurrection, §8)")
+        XCTAssertEqual(writer.deletedCount, 1, "the local copy of a remotely-deleted draft is dropped (delete-wins)")
+    }
+
+    func testPullSuppressesResurrectedTombstonedRecord() async {
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let db = FakeDatabase(); db.seedTombstones([id.uuidString])
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: false, updatedAt: Date())
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+
+        XCTAssertEqual(writer.appliedCount, 0, "a tombstoned (resurrected) record is never applied on pull")
+        XCTAssertEqual(writer.deletedCount, 1, "the resurrected record is deleted locally instead (no-resurrection, §8)")
+    }
+
+    func testFinalizedLocalIsNotDeletedByTombstone() async {
+        // Defensive: even if a finalized id were tombstoned, resolveDelete protects the
+        // immutable legal record — it is neither applied nor deleted locally.
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: nil
+        )
+        let db = FakeDatabase(); db.seedTombstones([id.uuidString])
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: FakeBindings(), db: db, reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+
+        XCTAssertEqual(writer.appliedCount, 0, "a tombstoned record is never applied")
+        XCTAssertEqual(writer.deletedCount, 0, "a FINALIZED local is never deleted by sync (immutability wins over the tombstone)")
+    }
+
+    func testPushDoesNotSuppressFinalizedLocal() async {
+        // A FINALIZED local whose id is tombstoned (an older draft of the same id was
+        // deleted elsewhere) must still be PUSHED — a finalize WINS over a draft-tombstone
+        // (immutable legal record); it must never be stranded off-cloud (A-F5).
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, writer: writer)
+        await port.bind(firebaseUID: "uidA")
+
+        let m = meta()
+        db.seedTombstones([m.id.uuidString])
+        port.recordLocalChange(.versionUpserted(m))
+        await port.flushPending()
+
+        XCTAssertEqual(db.saved.count, 1, "a finalized local is pushed despite a draft-tombstone (finalize wins)")
+        XCTAssertEqual(writer.deletedCount, 0, "a finalized local is never deleted by a tombstone")
+    }
+
+    func testPullAppliesFinalizedRecordDespiteTombstone() async {
+        // A tombstoned but FINALIZED remote must be APPLIED, not suppressed — finalize
+        // wins over an older draft-tombstone (the pull dual of A-F5).
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id, locked: true), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let db = FakeDatabase(); db.seedTombstones([id.uuidString])
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = .absent   // not present locally → apply
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+
+        XCTAssertEqual(writer.appliedCount, 1, "a tombstoned FINALIZED remote is applied (finalize wins over a draft-tombstone)")
+        XCTAssertEqual(writer.deletedCount, 0, "and it is not deleted as a resurrection")
     }
 
     // MARK: - Reader pinned to the bound UID (fix B / landmine 1)
@@ -530,6 +716,44 @@ final class CloudKitSyncPortTests: XCTestCase {
         await port.bind(firebaseUID: "uidA")
         XCTAssertEqual(writer.appliedCount, 1, "The apply was attempted.")
         XCTAssertNil(binds.current("uidA")?.changeToken, "A failed apply must not advance the change token.")
+    }
+
+    func testPullHoldsTokenOnTransientLocalReadFailure() async {
+        // A TRANSIENT local read failure (data-protection/I/O) must NOT settle the
+        // record: the pull holds the change token so the next pull retries, instead of
+        // permanently skipping a legitimate remote update (fix D).
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: UUID()), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let writer = FakeWriter()
+        var reader = FakeReader()
+        reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date(), readFailed: true)
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 0, "A transiently-unreadable local record is not overwritten.")
+        XCTAssertNil(binds.current("uidA")?.changeToken, "A transient read failure must HOLD (not advance) the change token.")
+    }
+
+    func testPullAdvancesTokenOnSettledKeepLocal() async {
+        // Contrast with the transient-read case: a SETTLED keepLocal (finalized local,
+        // readFailed=false) never overwrites the local record but DOES advance the
+        // token — it must not retry forever (fix D distinguishes the two).
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: UUID()), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let writer = FakeWriter()
+        var reader = FakeReader()
+        reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date(), readFailed: false)
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 0, "A settled keepLocal does not overwrite the local record.")
+        XCTAssertNotNil(binds.current("uidA")?.changeToken, "A settled keepLocal advances the token (does not retry forever).")
     }
 
     func testPullDeletesLocalDraftButKeepsFinalizedOnTombstone() async {

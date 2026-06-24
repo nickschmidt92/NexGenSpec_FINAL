@@ -30,6 +30,31 @@ struct AppSettingsView: View {
     // the account-deletion teardown below (tearDownDeletedAccount) uses it
     // outside any DEBUG guard. Only the dev-only sync toggle UI is #if DEBUG.
     @EnvironmentObject private var syncCoordinator: SyncCoordinator
+    @AppStorage(SyncFeature.localOnlyModeKey) private var localOnlyMode = false
+
+    /// The user-facing iCloud Sync section (Local-Only opt-out). Extracted from the
+    /// main settings body to keep that body within the SwiftUI type-checker budget.
+    @ViewBuilder
+    private var iCloudSyncSection: some View {
+        SettingsSectionCard(
+            title: "iCloud Sync",
+            subtitle: "Your inspections (the inspection record, report PDF, and thumbnails) sync across your Apple devices through your private iCloud. They go only to your iCloud — NexGenSpec never receives or stores them. Turn on Local-Only mode to keep inspections on this device. Sync is not a backup: deletions sync across your devices."
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Toggle("Local-Only mode", isOn: $localOnlyMode)
+                    .onChange(of: localOnlyMode) { _, _ in
+                        // Re-evaluate the active port immediately so toggling takes
+                        // effect without a relaunch.
+                        syncCoordinator.userDidChange(uid: authManager.currentUID)
+                    }
+                Text(localOnlyMode
+                     ? "Inspections stay on this device only. Use the Files-app export to move them between your devices."
+                     : "Inspections sync across your own devices through your private iCloud.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
 #if DEBUG
     @AppStorage(SyncFeature.devEnabledKey) private var syncDevEnabled = false
     private var syncStatusLabel: String {
@@ -166,10 +191,12 @@ struct AppSettingsView: View {
 
                     SettingsSectionCard(
                         title: "Backup & Data",
-                        subtitle: "Your inspections live on this device. NexGenSpec does not host server-side copies. Back up your data so it survives device loss, factory reset, or accidental uninstall."
+                        subtitle: "NexGenSpec keeps no server-side copies of your inspections. Back up your data so it survives device loss, factory reset, or accidental uninstall."
                     ) {
                         BackupStatusView(metadataCount: store.metadataList.count)
                     }
+
+                    iCloudSyncSection
 #if DEBUG
                     SettingsSectionCard(
                         title: "CloudKit Sync (DEBUG)",

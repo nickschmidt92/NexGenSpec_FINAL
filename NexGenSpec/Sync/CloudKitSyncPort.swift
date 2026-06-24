@@ -197,11 +197,41 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         // re-fetches and retries this window instead of skipping the record
         // permanently (review F5). Applies are idempotent (upsert-by-id), so a
         // retry that re-applies an already-applied record is harmless.
+        // Deletion log (§8): a stale device may have re-pushed a deleted draft, so a
+        // pulled "changed" record can be a resurrection. Fetch the tombstones once and
+        // treat a tombstoned draft as a delete. If the fetch FAILS transiently, DON'T
+        // settle this batch without resurrection protection (fail-CLOSED): bail so the
+        // next pull retries (the token isn't advanced). `tombstonedIds` already returns
+        // [] for "no SyncMeta yet", so a throw here is a real transient error.
+        let tombstoned: Set<String>
+        do {
+            tombstoned = try await database.tombstonedIds(inZone: binding.zoneName)
+        } catch {
+            Diagnostics.logError(context: "CloudKitSyncPort.pull tombstone fetch failed; deferring (token held)", error: error)
+            return
+        }
+
         var allApplied = true
 
         for remote in changes.changed {
             guard let versionId = UUID(uuidString: remote.record.recordName) else { continue }
             let local = reader.localState(forVersionId: versionId)
+            // A TRANSIENT local read failure (data-protection/I/O) must NOT settle this
+            // record: hold the token so the next pull retries instead of permanently
+            // skipping a legitimate remote update (fix D). A genuine decode failure is
+            // NOT readFailed and stays a settled keepLocal.
+            if local.readFailed { allApplied = false; continue }
+            // Tombstone suppression (§8): a stale device may have re-pushed a deleted
+            // DRAFT — honor the deletion (delete-wins) rather than applying it. A
+            // FINALIZED remote (remote.record.locked) is EXEMPT: a finalize WINS over an
+            // older draft-tombstone (immutable legal record), so it falls through to the
+            // normal resolver. A finalized LOCAL is protected by resolveDelete regardless.
+            if tombstoned.contains(remote.record.recordName), !remote.record.locked {
+                if SyncConflictResolver.resolveDelete(local: local) == .deleteLocal {
+                    if await writer.deleteLocalVersion(recordName: remote.record.recordName) == false { allApplied = false }
+                }
+                continue
+            }
             let decision = SyncConflictResolver.resolveUpsert(
                 local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
             )
@@ -219,7 +249,11 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
 
         for recordName in changes.deletedRecordNames {
             guard let versionId = UUID(uuidString: recordName) else { continue }
-            if SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: versionId)) == .deleteLocal {
+            let local = reader.localState(forVersionId: versionId)
+            // Same fix-D token-hold as the upsert loop: don't settle a delete against a
+            // transiently-unreadable local copy — retry on the next pull.
+            if local.readFailed { allApplied = false; continue }
+            if SyncConflictResolver.resolveDelete(local: local) == .deleteLocal {
                 if Task.isCancelled { return }
                 let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
                 guard stillBound else { return }
@@ -271,6 +305,24 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             (activeBinding, pending)
         }
         guard let binding, !snapshot.isEmpty else { return }
+
+        // Fetch the deletion log first (only when there's an upsert to check). If it
+        // fails transiently we must NOT push — pushing without it could resurrect a
+        // tombstoned draft (fail-CLOSED): keep the queue (snapshot not dequeued) and
+        // retry on the next flush. Fetched before the .syncing status so a clean bail
+        // doesn't leave a stale syncing state.
+        let tombstoned: Set<String>
+        if snapshot.contains(where: { if case .versionUpserted = $0 { return true } else { return false } }) {
+            do {
+                tombstoned = try await database.tombstonedIds(inZone: binding.zoneName)
+            } catch {
+                Diagnostics.logError(context: "CloudKitSyncPort.flush tombstone fetch failed; deferring push (queue preserved)", error: error)
+                return
+            }
+        } else {
+            tombstoned = []
+        }
+
         lock.withLock { _status = .syncing }
 
         var failed: [SyncChange] = []
@@ -284,7 +336,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 break
             }
             do {
-                try await apply(change, binding: binding)
+                try await apply(change, binding: binding, tombstoned: tombstoned)
             } catch {
                 failed.append(change)   // keep it queued; do NOT drop on failure
                 Diagnostics.logError(context: "CloudKitSyncPort push failed", error: error)
@@ -307,22 +359,36 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         }
     }
 
-    private func apply(_ change: SyncChange, binding: SyncBinding) async throws {
+    private func apply(_ change: SyncChange, binding: SyncBinding, tombstoned: Set<String>) async throws {
         switch change {
         case .versionUpserted(let meta):
+            // Tombstone suppression (§8): a tombstoned DRAFT must not be resurrected
+            // (delete-wins) — drop the local copy and don't push. But a FINALIZED local
+            // (resolveDelete keeps it) is an immutable legal record that a later finalize
+            // WINS with over an older draft-tombstone: fall through and push it (save's
+            // server-side guard arbitrates). So only suppress when resolveDelete says
+            // delete; never strand a finalized record off-cloud.
+            if tombstoned.contains(meta.id.uuidString),
+               SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: meta.id)) == .deleteLocal {
+                _ = await writer.deleteLocalVersion(recordName: meta.id.uuidString)
+                return
+            }
             guard let data = reader.versionData(forVersionId: meta.id) else { return }
             let record = InspectionRecordMapper.make(meta: meta, payload: data)
             // Push the version (fix A). `database.save` overwrites a draft (LWW is
-            // arbitrated on the receiver) and PROMOTES a draft to finalized — the core
-            // fix-A case the old never-clobber broke: finalize keeps the same
-            // versionId, so the draft record already existed and a tag-less
-            // `.ifServerRecordUnchanged` save failed `serverRecordChanged` (swallowed
-            // as "left immutable"), so the finalized payload never uploaded. The save
-            // still refuses to overwrite an ALREADY-finalized server record (immutable
-            // legal record — enforced inside `save` by a fetch-and-check), so a second
-            // device's divergent finalization of the same id can't clobber the first.
+            // arbitrated on the receiver) and PROMOTES a draft to finalized (finalize
+            // keeps the same versionId, so the draft record already exists). The save
+            // refuses to overwrite an ALREADY-finalized server record (immutable legal
+            // record — enforced inside `save` by a fetch-and-guard), and uses
+            // `.ifServerRecordUnchanged` + a bounded re-fetch/retry (NEW-2) so a second
+            // device's concurrent finalization of the same id in the fetch→save window
+            // can't clobber the first.
             try await database.save(record, inZone: binding.zoneName)
         case .versionDeleted(let versionId):
+            // Record the tombstone BEFORE deleting (§8) so a retry after a transient
+            // failure re-runs both idempotently; the deletion log is what stops a stale
+            // device from resurrecting this id.
+            try await database.recordTombstone(versionId: versionId.uuidString, inZone: binding.zoneName)
             try await database.delete(recordName: versionId.uuidString, inZone: binding.zoneName)
         case .mediaUpserted, .mediaDeleted:
             break // JSON-only push in this slice; raw media is a later slice
