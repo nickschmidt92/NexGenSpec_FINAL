@@ -102,6 +102,16 @@ private final class FakeBindings: BindingStoring, @unchecked Sendable {
     func current(_ uid: String) -> SyncBinding? { load(forUID: uid) }
 }
 
+private final class FakeTeardownOwed: TeardownOwedStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var store: [String: SyncTeardownOwed] = [:]
+    func record(_ owed: SyncTeardownOwed) { lock.withLock { store[owed.firebaseUID] = owed } }
+    func loadAll() -> [SyncTeardownOwed] { lock.withLock { Array(store.values) } }
+    func remove(forUID uid: String) { lock.withLock { store[uid] = nil } }
+    var all: [SyncTeardownOwed] { loadAll() }
+    var count: Int { lock.withLock { store.count } }
+}
+
 // MARK: - Tests
 
 final class CloudKitSyncPortTests: XCTestCase {
@@ -375,13 +385,14 @@ final class CloudKitSyncPortTests: XCTestCase {
     func testAccountTeardownDeletesZoneAndBindingWhenBound() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
         // Current iCloud user still matches the bound account → safe to delete the zone.
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertEqual(db.deletedZones, [zone], "teardown deletes the deleted account's CloudKit zone")
         XCTAssertNil(binds.current("uidA"), "teardown removes the local binding")
+        XCTAssertEqual(owed.count, 0, "a clean delete leaves nothing owed")
     }
 
     /// Finding #4: after an iCloud-account switch the bound zone lives in the OLD,
@@ -391,30 +402,33 @@ final class CloudKitSyncPortTests: XCTestCase {
     func testAccountTeardownSkipsZoneDeleteAfterICloudSwitchButDropsBinding() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
         // Current iCloud user is DIFFERENT from the bound account (tok2 != tok1).
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok2"), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok2"), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertTrue(db.deletedZones.isEmpty, "must not deleteZone against the wrong iCloud account")
         XCTAssertNil(binds.current("uidA"), "the local binding is still dropped")
+        XCTAssertEqual(owed.all.first?.zoneName, zone, "an unreachable zone is recorded owed for the cold-launch sweep")
     }
 
     func testAccountTeardownIsNoopWhenFlagOff() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: false)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: false)
 
         XCTAssertTrue(db.deletedZones.isEmpty, "flag OFF ⇒ no CloudKit zone delete")
         XCTAssertNotNil(binds.current("uidA"), "flag OFF ⇒ binding left intact")
+        XCTAssertEqual(owed.count, 0, "flag OFF ⇒ nothing recorded owed")
     }
 
     func testAccountTeardownIsNoopWhenNoBinding() async {
-        let db = FakeDatabase(); let binds = FakeBindings()
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        let db = FakeDatabase(); let binds = FakeBindings(); let owed = FakeTeardownOwed()
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: true)
         XCTAssertTrue(db.deletedZones.isEmpty, "no binding ⇒ nothing to tear down")
+        XCTAssertEqual(owed.count, 0, "no binding ⇒ nothing recorded owed")
     }
 
     /// iCloud unavailable at deletion time (token nil): we can't verify ownership, so
@@ -424,12 +438,13 @@ final class CloudKitSyncPortTests: XCTestCase {
     func testAccountTeardownSkipsZoneButDropsBindingWhenICloudUnavailable() async {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
-        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding])
+        let db = FakeDatabase(); let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: nil), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: nil), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertTrue(db.deletedZones.isEmpty, "iCloud unavailable ⇒ no zone delete attempted (could hit wrong DB)")
         XCTAssertNil(binds.current("uidA"), "best-effort teardown is one-shot: the binding is dropped")
+        XCTAssertEqual(owed.all.first?.zoneName, zone, "iCloud unavailable ⇒ zone recorded owed for the sweep")
     }
 
     /// A transient deleteZone failure does not block teardown: the attempt is made and
@@ -439,11 +454,54 @@ final class CloudKitSyncPortTests: XCTestCase {
         let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
         let binding = SyncBinding(firebaseUID: "uidA", cloudUserToken: "tok1", zoneName: zone, boundAt: Date())
         let db = FakeDatabase(); db.failDeleteZone = true
-        let binds = FakeBindings(["uidA": binding])
+        let binds = FakeBindings(["uidA": binding]); let owed = FakeTeardownOwed()
 
-        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, isEnabled: true)
+        await SyncAccountTeardown.tearDown(uid: "uidA", database: db, account: FakeAccount(token: "tok1"), bindings: binds, owed: owed, isEnabled: true)
 
         XCTAssertNil(binds.current("uidA"), "best-effort: binding dropped even when deleteZone fails")
+        XCTAssertEqual(owed.all.first?.zoneName, zone, "a transient deleteZone failure records the zone owed for the sweep (fix C)")
+    }
+
+    // MARK: - Cold-launch teardown sweep (fix C)
+
+    func testTeardownSweepRetriesOwedZoneWhenOwnerReturns() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let db = FakeDatabase()
+        let owed = FakeTeardownOwed()
+        owed.record(SyncTeardownOwed(firebaseUID: "uidA", zoneName: zone, cloudUserToken: "tok1"))
+
+        // The owning iCloud user is back (token matches) → the retry deletes the zone
+        // and clears the owed marker.
+        await SyncTeardownSweep.run(database: db, account: FakeAccount(token: "tok1"), owed: owed, isEnabled: true)
+
+        XCTAssertEqual(db.deletedZones, [zone], "the sweep retries the owed zone delete under the owning account")
+        XCTAssertEqual(owed.count, 0, "a successful retry clears the owed marker")
+    }
+
+    func testTeardownSweepKeepsOwedWhenTokenMismatches() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let db = FakeDatabase()
+        let owed = FakeTeardownOwed()
+        owed.record(SyncTeardownOwed(firebaseUID: "uidA", zoneName: zone, cloudUserToken: "tok1"))
+
+        // A DIFFERENT iCloud user is signed in (tok2 != tok1) → never deleteZone the
+        // wrong DB; leave it owed for a later launch under the owner.
+        await SyncTeardownSweep.run(database: db, account: FakeAccount(token: "tok2"), owed: owed, isEnabled: true)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "the sweep must not deleteZone against the wrong iCloud account")
+        XCTAssertEqual(owed.count, 1, "the owed marker is kept for a later launch under the owner")
+    }
+
+    func testTeardownSweepIsNoopWhenFlagOff() async {
+        let zone = CloudKitSchema.zoneName(forFirebaseUID: "uidA")
+        let db = FakeDatabase()
+        let owed = FakeTeardownOwed()
+        owed.record(SyncTeardownOwed(firebaseUID: "uidA", zoneName: zone, cloudUserToken: "tok1"))
+
+        await SyncTeardownSweep.run(database: db, account: FakeAccount(token: "tok1"), owed: owed, isEnabled: false)
+
+        XCTAssertTrue(db.deletedZones.isEmpty, "flag OFF ⇒ the sweep is a strict no-op")
+        XCTAssertEqual(owed.count, 1, "flag OFF ⇒ owed markers are untouched")
     }
 
     // MARK: - Reader pinned to the bound UID (fix B / landmine 1)

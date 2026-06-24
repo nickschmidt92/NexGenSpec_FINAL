@@ -84,6 +84,22 @@ final class SyncCoordinator: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in await self?.handleAccountChange() }
         }
+        // Cold-launch sweep (fix C): retry any account-deletion zone teardowns a prior
+        // run couldn't finish. Independent of the deletion pin; a no-op when sync is off
+        // or nothing is owed (a fast Keychain check before any CloudKit call).
+        Task { await Self.runTeardownSweep() }
+    }
+
+    /// Retries owed account-deletion zone teardowns at launch (fix C). Static + builds
+    /// its own CloudKit backends so it never touches the live port's state.
+    private static func runTeardownSweep() async {
+        guard SyncFeature.isEnabled else { return }
+        await SyncTeardownSweep.run(
+            database: CKCloudDatabase(),
+            account: CKAccountProvider(),
+            owed: KeychainTeardownOwedStore(),
+            isEnabled: true
+        )
     }
 
     /// Entry point for a `.CKAccountChanged` notification. Apple posts this on benign
@@ -161,7 +177,8 @@ final class SyncCoordinator: ObservableObject {
         let account = CKAccountProvider()
         Task {
             await SyncAccountTeardown.tearDown(
-                uid: uid, database: database, account: account, bindings: KeychainBindingStore(), isEnabled: true
+                uid: uid, database: database, account: account, bindings: KeychainBindingStore(),
+                owed: KeychainTeardownOwedStore(), isEnabled: true
             )
         }
     }
@@ -217,6 +234,7 @@ enum SyncAccountTeardown {
         database: CloudDatabase,
         account: CloudAccountProviding,
         bindings: BindingStoring,
+        owed: TeardownOwedStoring,
         isEnabled: Bool
     ) async {
         // Strict no-op unless sync is on AND a binding actually exists for this UID.
@@ -226,35 +244,34 @@ enum SyncAccountTeardown {
         // OWNS the zone (finding #4): the zone lives in the iCloud account bound at
         // `binding.cloudUserToken`. After an Apple-ID switch — or while iCloud is
         // unavailable (`currentToken == nil`) — deleteZone would target the wrong /
-        // another private DB, so we skip it and log the residual instead of pretending
-        // to delete it.
+        // another private DB, so we DON'T attempt it; instead we record a teardown-owed
+        // marker so the cold-launch sweep retries it later, under the owning account.
         let currentToken = await account.currentUserToken()
         if currentToken == binding.cloudUserToken {
             do {
                 try await database.deleteZone(binding.zoneName)
+                // Zone is gone — clear any prior owed marker for this UID.
+                owed.remove(forUID: uid)
             } catch {
-                // Best-effort — NEVER block the wipe (spec uses catch + log). A
-                // transient CloudKit failure leaves the zone as a residual (see the
-                // KNOWN LIMITATION below).
-                Diagnostics.logError(context: "SyncAccountTeardown.deleteZone failed for \(uid); zone left as a residual (best-effort)", error: error)
+                // Durable retry (fix C): never block the wipe, but record what's owed so
+                // a later launch retries the residual zone (no longer logged-and-lost).
+                owed.record(SyncTeardownOwed(firebaseUID: uid, zoneName: binding.zoneName, cloudUserToken: binding.cloudUserToken))
+                Diagnostics.logError(context: "SyncAccountTeardown.deleteZone failed for \(uid); recorded teardown-owed for the cold-launch sweep", error: error)
             }
         } else {
+            // Not reachable from the current iCloud user — record it owed so the sweep
+            // retries when the owning account returns (never deleteZone the wrong DB).
+            owed.record(SyncTeardownOwed(firebaseUID: uid, zoneName: binding.zoneName, cloudUserToken: binding.cloudUserToken))
             Diagnostics.logError(
-                context: "SyncAccountTeardown: zone for \(uid) not reachable from the current iCloud user (account changed or unavailable); left as a residual",
+                context: "SyncAccountTeardown: zone for \(uid) not reachable from the current iCloud user (account changed or unavailable); recorded teardown-owed for retry",
                 persistToDisk: false
             )
         }
-        // Drop the local binding. This teardown is one-shot BEST-EFFORT, exactly as
-        // the spec scopes it (deleteZone + SyncBindingStore.delete, never blocking the
-        // wipe). KNOWN LIMITATION (round-3 finding): a transient deleteZone failure /
-        // iCloud-unavailable at the deletion moment leaves the zone as a residual in
-        // the user's OWN private iCloud (Apple-isolated per Apple ID — NOT a
-        // cross-account leak) with no durable retry — an earlier attempt to "keep the
-        // binding for retry" was a false premise (a normal completed deletion clears
-        // the deletion-pending-wipe flag + pin, so the recovery path never re-fires).
-        // A robust retry (a persisted teardown-owed record + a cold-launch sweep,
-        // independent of the deletion pin) is a sync-GA item, NOT a build-22 blocker
-        // (build 22 ships sync dark). Documented in build-22-p6-remediation.md.
+        // Drop the local binding (never blocks the wipe). Any residual zone is now
+        // tracked by the teardown-owed marker above and retried by SyncTeardownSweep at
+        // the next launch — INDEPENDENT of the deletion pin (which a normal completed
+        // deletion clears, so the old recovery path couldn't re-fire). This closes the
+        // round-3 KNOWN LIMITATION (fix C). See build-22-p6-remediation.md.
         bindings.delete(forUID: uid)
     }
 }
