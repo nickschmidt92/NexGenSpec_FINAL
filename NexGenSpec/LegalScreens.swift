@@ -289,7 +289,7 @@ struct TermsOfServiceView: View {
                             We may suspend or terminate accounts that violate these Terms.
 
                             8. Data Retention & Backup Responsibility
-                            IMPORTANT — please read carefully. NexGenSpec is a local-first application. Inspection data lives ONLY on the device that created it. NexGenSpec does not maintain server-side copies of any inspection content (photos, videos, signatures, PDFs, defect findings, or client information).
+                            IMPORTANT — please read carefully. \(SyncFeature.dataLocationClause)
 
                             Your data will be permanently and irrecoverably lost in any of the following events:
                             • You uninstall the app from the home screen.

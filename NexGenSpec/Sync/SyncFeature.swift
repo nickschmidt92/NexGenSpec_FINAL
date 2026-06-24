@@ -90,4 +90,13 @@ enum SyncFeature {
         ? "Your inspections, photos, signatures, and reports stay under your control. With iCloud Sync on, they sync across your own devices through your private iCloud account; NexGenSpec never keeps server-side copies. Sync is not a backup — keep your own backups, as deletions sync between your devices."
         : "All inspections, photos, signatures, and reports are stored on this device only. NexGenSpec does NOT keep server-side copies and cannot recover lost data."
     }
+
+    /// One-sentence "where your data lives" for the in-app Settings/Terms, flag-aware so
+    /// it never contradicts the sync state. (Authoritative legal wording is the B-0118
+    /// attorney track; this is the in-app mirror.)
+    static var dataLocationClause: String {
+        isEnabled
+        ? "NexGenSpec syncs your inspections across your own Apple devices through your private iCloud account; NexGenSpec keeps no server-side copy. Turn on Local-Only mode to keep inspections on the device that created them."
+        : "NexGenSpec is a local-first application. Inspection data lives ONLY on the device that created it. NexGenSpec does not maintain server-side copies of any inspection content."
+    }
 }

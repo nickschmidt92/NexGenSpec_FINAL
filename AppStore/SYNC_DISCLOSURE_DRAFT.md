@@ -90,9 +90,24 @@ Remove any "all data stays on-device" / "100% on-device" / "no cloud" claims fro
 listing (`AppStore/LISTING.md`) and replace with accurate "syncs across your own devices
 through your private iCloud; NexGenSpec never stores your data" language.
 
+## 6) In-app Terms / Legal copy — remaining sites needing the flag-aware pass
+
+Most in-app sync copy is already flag-aware (`SyncFeature.multiDeviceLegalClause` /
+`multiDeviceTermsClause` / `multiDeviceBackupSubtitle` / `localFirstBannerText` /
+`dataLocationClause`, all gated on `SyncFeature.isEnabled`). Code review found these
+HARD-CODED "device-only" statements that contradict default-ON sync and were NOT yet
+gated — attorney should confirm the corrected wording, then they should be gated like
+the clauses above:
+- `NexGenSpec/TermsAndConditionsView.swift:178` — "stores inspection records on the Inspector's device **only** … cannot recover them if the device is lost…"
+- `NexGenSpec/TermsAndConditionsView.swift:349, :482` — "stores inspection records on the Inspector's device."
+- `NexGenSpec/TermsAndConditionsView.swift:355` — "NexGenSpec is local-first. … stored privately on your iPhone or iPad…"
+- `NexGenSpec/LegalScreens.swift` §8 retention list — the "data will be permanently lost if…" enumeration still reads device-only; reconcile with sync-on (the lead sentence is now `SyncFeature.dataLocationClause`, fixed in code).
+
+Lines that remain TRUE under sync (NO change needed): any "NexGenSpec does not receive
+copies / has no server-side database" — CloudKit is the user's *own* private iCloud, not
+NexGenSpec's servers.
+
 ---
 
-*In-app copy is already flag-aware and shows the sync-on wording automatically
-(`SyncFeature.multiDeviceLegalClause` / `multiDeviceTermsClause` /
-`multiDeviceBackupSubtitle` / `localFirstBannerText`). This doc is the OUT-of-repo
-website + ASC counterpart that must be made consistent before submission.*
+*This doc covers the OUT-of-repo website + ASC label PLUS the in-app Terms punch-list
+above. The functional Local-Only opt-out toggle now exists in Settings → iCloud Sync.*
