@@ -2,12 +2,13 @@
 //  SyncFeature.swift
 //  NexGenSpec
 //
-//  Master gate for CloudKit sync (build 22). OFF by default.
+//  Master gate for CloudKit sync. DEFAULT ON in Release (cross-device iCloud
+//  sync across the user's own devices); users opt OUT via Local-Only mode.
 //
-//  While `isEnabled` is false the app constructs a `NoopSyncPort` everywhere and
-//  behaves EXACTLY like build 21 — no CloudKit code runs, no identity binding is
-//  read or written. Flipping sync on is a deliberate, reversible act: it is the
-//  single switch the implementation slices build behind (see
+//  When `effectiveSyncAllowed` is false (Local-Only mode on, signed out, or a
+//  DEBUG build with the dev toggle off) the app constructs a `NoopSyncPort`
+//  everywhere — no CloudKit code runs and no identity binding is read or written.
+//  This is the single switch the implementation slices build behind (see
 //  docs/design/build-22-cloudkit-sync.md §6).
 //
 
@@ -15,15 +16,16 @@ import Foundation
 
 enum SyncFeature {
 
-    /// Master switch. Hard OFF in Release — sync ships dark. In DEBUG builds ONLY,
-    /// an in-app dev toggle (`devEnabledKey`, surfaced in Settings) can flip it on
-    /// to exercise sync against the Development CloudKit environment on real
-    /// devices without shipping it. Release/TestFlight is compiled hard-OFF.
+    /// Master switch. DEFAULT ON in Release — cross-device iCloud sync ships live;
+    /// users opt out via Local-Only mode (see `effectiveSyncAllowed`). In DEBUG
+    /// builds the in-app dev toggle (`devEnabledKey`, surfaced in Settings) gates
+    /// it so sync can be exercised against the Development CloudKit environment
+    /// deliberately.
     static var isEnabled: Bool {
         #if DEBUG
         return UserDefaults.standard.bool(forKey: devEnabledKey)
         #else
-        return false
+        return true
         #endif
     }
 
