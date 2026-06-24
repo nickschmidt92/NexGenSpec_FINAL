@@ -93,6 +93,55 @@ final class InspectionStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: FilePaths.inspectionFolder(jobId: jobId).path))
     }
 
+    // MARK: - I-E legacy integrity-hash self-heal (FinalizationService.legacyHealedVersion)
+
+    private func ieFinalizedVersion(updatedAt: Date?) -> InspectionVersion {
+        let id = UUID()
+        let inspection = Inspection(
+            id: id, clientName: "Legacy Client", clientEmail: "", clientPhone: "",
+            propertyAddress: "1 Heal St", inspectionDate: Date(timeIntervalSince1970: 500),
+            inspectorName: "Inspector", sections: []
+        )
+        var v = InspectionVersion(
+            id: id, versionNumber: 1, status: .final,
+            finalizedAt: Date(timeIntervalSince1970: 500), locked: true, inspection: inspection
+        )
+        v.updatedAt = updatedAt
+        return v
+    }
+
+    func testLegacyHealRestoresUpdatedAtWhenOnlyDrift() throws {
+        let sealedAt = Date(timeIntervalSince1970: 1_000)
+        let sealedModel = ieFinalizedVersion(updatedAt: sealedAt)
+        let sealedHash = try FinalizationService.canonicalHash(sealedModel)
+        let sealed = FinalizedVersionSnapshot(version: sealedModel, reportHash: sealedHash, finalizedAt: sealedAt)
+
+        // Legacy drift: identical content, only updatedAt re-stamped to finalize-time.
+        var drifted = sealedModel
+        drifted.updatedAt = Date(timeIntervalSince1970: 2_000)
+
+        let healed = try XCTUnwrap(FinalizationService.legacyHealedVersion(drifted, against: sealed))
+        XCTAssertEqual(healed.updatedAt, sealedAt, "updatedAt is restored to the sealed value")
+        XCTAssertEqual(try FinalizationService.canonicalHash(healed), sealedHash,
+                       "the healed model matches the ORIGINAL seal, so verify() will pass")
+    }
+
+    func testLegacyHealRefusesWhenContentDiffersBeyondUpdatedAt() throws {
+        let sealedAt = Date(timeIntervalSince1970: 1_000)
+        let sealedModel = ieFinalizedVersion(updatedAt: sealedAt)
+        let sealed = FinalizedVersionSnapshot(
+            version: sealedModel, reportHash: try FinalizationService.canonicalHash(sealedModel), finalizedAt: sealedAt
+        )
+
+        // Genuine divergence: a hash-covered content field differs (not just updatedAt).
+        var tampered = sealedModel
+        tampered.updatedAt = Date(timeIntervalSince1970: 2_000)
+        tampered.finalizedAt = Date(timeIntervalSince1970: 9_999)
+
+        XCTAssertNil(FinalizationService.legacyHealedVersion(tampered, against: sealed),
+                     "content tampering is NEVER masked — heal refuses unless ONLY updatedAt drifted")
+    }
+
     /// Perf-pass regression guard: the off-main autosave write
     /// (`writeVersionFileOnlyForAutoSave` → `ioQueue.async`) must still persist
     /// an edit durably across a process restart. A brand-new `InspectionStore`

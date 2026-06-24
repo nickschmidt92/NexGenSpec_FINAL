@@ -230,7 +230,36 @@ public final class InspectionStore: ObservableObject {
             isApplyingRemote = false
             try? saveMetadataIndex()
         }
+        // I-E: one-shot self-heal of legacy finalized reports whose `updatedAt` drifted
+        // from their sealed snapshot (runs once; safe — never masks content tampering).
+        healLegacyFinalizedHashesIfNeeded()
         return true
+    }
+
+    /// One-shot self-healing for legacy (pre-fix-I) finalized reports whose
+    /// `current.json.updatedAt` was re-stamped to finalize-time AFTER the integrity
+    /// snapshot was sealed over the draft-time value — making `FinalizationService.verify()`
+    /// falsely report `.mismatch` (I-E). For each locked report that mismatches, restore
+    /// `updatedAt` to the sealed value ONLY IF that makes the model byte-identical to the
+    /// originally-sealed one (so genuine content tampering is NEVER masked); the original
+    /// seal is preserved. Runs at most once per device — a no-op on a clean install or
+    /// after it has run. (For a first public release this only ever touches pre-build-22
+    /// dev/TestFlight data; public users never finalized on a pre-fix-I build.)
+    private func healLegacyFinalizedHashesIfNeeded() {
+        let key = "ngs.migration.ieReseal.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        defer { UserDefaults.standard.set(true, forKey: key) }
+        for meta in metadataList where !InspectionStateMachine.allowsEdit(meta.state) {
+            guard let full = loadFullVersion(id: meta.id) else { continue }
+            let jobId = UUID(uuidString: full.inspection.inspectionId) ?? full.id
+            guard FinalizationService.verify(full) == .mismatch,
+                  let sealed = FinalizationService.loadSnapshot(jobId: jobId, versionId: full.id),
+                  let healed = FinalizationService.legacyHealedVersion(full, against: sealed) else { continue }
+            isApplyingRemote = true
+            _ = try? writeVersionToFile(healed)
+            isApplyingRemote = false
+            Diagnostics.logInfo("InspectionStore: healed legacy updatedAt drift for finalized \(meta.id) (I-E)")
+        }
     }
 
     /// Rebuilds the metadata list from `appRoot/Inspections/<id>/current.json`.

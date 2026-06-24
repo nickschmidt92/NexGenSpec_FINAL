@@ -71,4 +71,30 @@ enum FinalizationService {
         guard let live = try? canonicalHash(version) else { return .unavailable }
         return live == sealed ? .verified : .mismatch
     }
+
+    /// Loads the full sealed snapshot (model + hash) for a finalized version, or nil.
+    static func loadSnapshot(jobId: UUID, versionId: UUID) -> FinalizedVersionSnapshot? {
+        let url = FilePaths.versionSnapshotFile(jobId: jobId, versionId: versionId)
+        guard let data = try? Data(contentsOf: url),
+              let snapshot = try? JSONDecoder().decode(FinalizedVersionSnapshot.self, from: data) else { return nil }
+        return snapshot
+    }
+
+    /// Self-healing core for legacy (pre-fix-I) finalized reports (I-E). Such a report
+    /// had its `current.json.updatedAt` re-stamped to finalize-time AFTER the integrity
+    /// snapshot was sealed over the draft-time value, so `verify()` falsely reports
+    /// `.mismatch`. Returns `version` with `updatedAt` restored to the sealed value IFF
+    /// that makes it byte-identical to the originally-sealed model — i.e. the ONLY drift
+    /// was that re-stamp. Returns nil when any OTHER field differs (a genuine divergence
+    /// — content tampering must NEVER be masked) or the hash can't be computed. The
+    /// original seal is preserved (never re-hashed): the live model is brought back into
+    /// agreement with it, not the other way round.
+    static func legacyHealedVersion(_ version: InspectionVersion, against sealed: FinalizedVersionSnapshot) -> InspectionVersion? {
+        var candidate = version
+        candidate.updatedAt = sealed.version.updatedAt
+        guard let candidateHash = try? canonicalHash(candidate), candidateHash == sealed.reportHash else {
+            return nil
+        }
+        return candidate
+    }
 }
