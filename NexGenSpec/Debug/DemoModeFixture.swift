@@ -23,7 +23,7 @@ enum DemoModeFixture {
     /// Absolute path to the AI-generated photos on the dev's machine.
     /// This file is `#if DEBUG`, never ships, and only runs in the
     /// Simulator (which has filesystem access to the host).
-    private static let assetsPath = "/Users/nicholasschmidt/Documents/NexGenSpec_FINAL/marketing/screenshot-assets"
+    private static let assetsPath = "/Users/nicholasschmidt/Developer/NexGenSpec_FINAL/marketing/screenshot-assets"
 
     @MainActor
     static func populate(store: InspectionStore) {
@@ -36,11 +36,11 @@ enum DemoModeFixture {
     @MainActor
     private static func createDraftInspection(store: InspectionStore) {
         store.createNewInspection(
-            clientName: "Robert & Linda Martinez",
-            clientEmail: "rmartinez@example.com",
-            clientPhone: "(303) 555-0142",
-            propertyAddress: "456 Elm Street, Denver, CO 80205",
-            inspectorName: "Demo Inspector",
+            clientName: "Marcus & Elena Reyes",
+            clientEmail: "mreyes@example.com",
+            clientPhone: "(720) 555-0142",
+            propertyAddress: "9884 Telluride Street, Commerce City, CO 80603",
+            inspectorName: "Jordan Reed",
             inspectorConfirmed: true,
             inspectionDate: Date().addingTimeInterval(-3600 * 2)
         )
@@ -64,11 +64,11 @@ enum DemoModeFixture {
     @MainActor
     private static func createReadyToFinalizeInspection(store: InspectionStore) {
         store.createNewInspection(
-            clientName: "Sarah & Daniel Chen",
-            clientEmail: "schen@example.com",
-            clientPhone: "(303) 555-0119",
-            propertyAddress: "123 Maple Drive, Boulder, CO 80301",
-            inspectorName: "Demo Inspector",
+            clientName: "Daniel & Megan Whitaker",
+            clientEmail: "dwhitaker@example.com",
+            clientPhone: "(303) 555-0188",
+            propertyAddress: "10925 Wheeling Street, Commerce City, CO 80603",
+            inspectorName: "Jordan Reed",
             inspectorConfirmed: true,
             inspectionDate: Date().addingTimeInterval(-3600 * 26)
         )
@@ -84,7 +84,12 @@ enum DemoModeFixture {
         version.inspection.weather = sampleWeather()
 
         populateSections(&version, jobId: jobId, mode: .full)
+        version.inspection.signatures = [
+            InspectionSignature(name: "Jordan Reed", imageData: Data(), date: Date()),
+            InspectionSignature(name: "D. Whitaker", imageData: Data(), date: Date())
+        ]
         store.update(version: version)
+        store.finalize(version: version)   // screenshot demo: 2 sigs -> real finalize -> client-ready report (no DRAFT)
         // Finalize is intentionally left to the user — they draw the two
         // signatures live so the screenshot of the locked Finalize view
         // shows realistic PKDrawing strokes, not stub data.

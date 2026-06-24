@@ -98,12 +98,21 @@ public enum AccountDeletionReceiptService {
         try FileSecurity.ensureProtectedDirectory(receiptFolder)
     }
 
+    /// Human-readable, locale + timezone-aware timestamp for the receipt — a bare
+    /// "…Z" UTC string was confusing on a legal record (audit M3).
+    private static func humanTimestamp(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateStyle = .long
+        f.timeStyle = .long   // .long includes the timezone abbreviation
+        return f.string(from: date)
+    }
+
     /// Body text to accompany the receipt PDF when it is shared via the
     /// iOS share sheet. Includes a "please CC contact@nexgenspec.com"
     /// instruction since the share sheet — unlike MFMailComposeViewController
     /// — cannot pre-fill recipients.
     public static func shareBody(for inputs: Inputs, attachmentFileName: String) -> String {
-        let displayDate = ISO8601DateFormatter().string(from: inputs.timestamp)
+        let displayDate = humanTimestamp(inputs.timestamp)
         return """
         NexGenSpec — Account Deletion Receipt
 
@@ -157,7 +166,7 @@ public enum AccountDeletionReceiptService {
         y += 16
 
         let rows: [(String, String)] = [
-            ("Deleted at",          ISO8601DateFormatter().string(from: inputs.timestamp)),
+            ("Deleted at",          humanTimestamp(inputs.timestamp)),
             ("Account email",       inputs.accountEmail),
             ("Fallback email",      inputs.fallbackEmail ?? "—"),
             ("Sign-in method",      inputs.providerLabel),
@@ -203,7 +212,7 @@ public enum AccountDeletionReceiptService {
         (body as NSString).draw(in: bodyRect, withAttributes: bodyAttrs)
 
         // Footer
-        let footer = "NexGenSpec LLC — contact@nexgenspec.com"
+        let footer = "NexGenSpec — contact@nexgenspec.com"
         footer.draw(in: CGRect(x: margin, y: rect.height - 40, width: columnWidth, height: 16),
                     withAttributes: [
                         .font: UIFont.systemFont(ofSize: 9),

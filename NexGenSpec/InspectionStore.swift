@@ -733,7 +733,16 @@ public extension InspectionStore {
             }
         }
 
-        let written = (try? writeVersionToFile(newVersion)) ?? newVersion
+        let written: InspectionVersion
+        do {
+            written = try writeVersionToFile(newVersion)
+        } catch {
+            // A swallowed write here returned true and burned a free-trial slot
+            // while leaving a phantom index row that couldn't be opened (audit H2).
+            Diagnostics.logError(context: "createNewInspection: version write failed", error: error)
+            saveError = "Couldn't save the new inspection — your device may be locked or low on storage. Try again after unlocking."
+            return false
+        }
         metadataList.insert(VersionMetadata(from: written), at: 0)
         save()
         return true

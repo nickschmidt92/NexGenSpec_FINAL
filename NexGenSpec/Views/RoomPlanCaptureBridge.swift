@@ -438,7 +438,9 @@ enum LiDARScanPersistence {
                 measurements: [],
                 capturedAt: Date()
             )
-            LiDARScanStore.save(scan, jobId: jobId)
+            // If the scan record didn't reach disk, report capture as failed rather
+            // than returning a scan loadScans will never find (audit H4).
+            guard LiDARScanStore.save(scan, jobId: jobId) else { return nil }
             return scan
         } catch {
             return nil

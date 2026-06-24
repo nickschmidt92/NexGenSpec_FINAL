@@ -15,11 +15,21 @@ enum AnnotationStore {
         return try? JSONDecoder().decode(AnnotationOverlay.self, from: data)
     }
 
-    static func save(_ overlay: AnnotationOverlay, jobId: UUID, photoId: UUID) {
+    /// Writes the annotation overlay to protected storage. Returns true only if
+    /// the bytes reached disk — a swallowed write silently lost the inspector's
+    /// markup while the sheet dismissed as if saved (mirrors SignatureStore).
+    @discardableResult
+    static func save(_ overlay: AnnotationOverlay, jobId: UUID, photoId: UUID) -> Bool {
         let url = FilePaths.annotationFile(jobId: jobId, photoId: photoId)
-        try? FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
-        guard let data = try? JSONEncoder().encode(overlay) else { return }
-        try? FileSecurity.writeProtected(data, to: url)
+        do {
+            try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+            let data = try JSONEncoder().encode(overlay)
+            try FileSecurity.writeProtected(data, to: url)
+            return true
+        } catch {
+            Diagnostics.logError(context: "Annotation overlay save failed", error: error)
+            return false
+        }
     }
 }
 

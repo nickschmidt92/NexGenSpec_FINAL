@@ -56,6 +56,13 @@ struct ScreenshotHost: View {
     /// sections, photos, and defects) — the richest one for screenshots.
     private var primaryVersionID: UUID? { store.metadataList.first?.id }
 
+    /// First EDITABLE (non-finalized) inspection. The primary demo is now
+    /// finalized (locked) for a clean client-ready screenshot, which disables
+    /// its comment editor — so the autosave UI test routes here instead.
+    private var firstEditableVersionID: UUID? {
+        store.metadataList.first(where: { $0.isEditable })?.id
+    }
+
     @ViewBuilder private var routed: some View {
         switch ScreenshotMode.route {
         case "paywall":
@@ -71,6 +78,14 @@ struct ScreenshotHost: View {
             } else {
                 Text("No demo inspection seeded")
             }
+        case "draftInspection":
+            // Autosave UI-test target: the first EDITABLE inspection (the primary
+            // demo is finalized/locked, so its comment editor is disabled).
+            if let id = firstEditableVersionID {
+                NavigationStack { InspectionRootView(versionID: id) }
+            } else {
+                Text("No editable demo inspection seeded")
+            }
         case "pdf":
             if let id = primaryVersionID, let version = store.loadFullVersion(id: id) {
                 NavigationStack { ReportPreviewView(version: version) }
@@ -78,7 +93,7 @@ struct ScreenshotHost: View {
                 Text("No demo inspection seeded")
             }
         case "annotation":
-            if let image = firstDefectPhoto() {
+            if let image = UIImage(contentsOfFile: "/Users/nicholasschmidt/Developer/NexGenSpec_FINAL/marketing/screenshot-assets/annotation-demo.jpg") ?? firstDefectPhoto() {
                 NavigationStack {
                     PencilKitPhotoAnnotationView(
                         baseImage: image,
@@ -89,6 +104,8 @@ struct ScreenshotHost: View {
             } else {
                 Text("No demo photo available")
             }
+        case "calendar":
+            NavigationStack { CalendarView() }
         default: // "dashboard"
             MainTabView()
         }
@@ -112,6 +129,21 @@ struct ScreenshotHost: View {
             }
         }
         return nil
+    }
+
+    /// Screenshot-only: a red circle + red arrow already drawn over the defect,
+    /// so the annotation capture shows a COMPLETE annotated photo with no taps.
+    private static var seededAnnotationOverlay: AnnotationOverlay {
+        AnnotationOverlay(
+            arrows: [
+                ArrowAnnotation(startX: 60, startY: 110, endX: 190, endY: 250, colorName: "red")
+            ],
+            circles: [
+                CircleAnnotation(centerX: 215, centerY: 285, radius: 70, colorName: "red")
+            ],
+            canvasWidth: 390,
+            canvasHeight: 720
+        )
     }
 }
 #endif

@@ -62,7 +62,7 @@ struct PrivacyPolicyView: View {
                         Group {
                             Text("""
                             1. Zero-Storage Commitment
-                            NexGenSpec is designed as a local-first application. NexGenSpec LLC ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. All data you collect remains on your device or within your chosen third-party storage providers (e.g., iCloud, email).
+                            NexGenSpec is designed as a local-first application. NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. All data you collect remains on your device or within your chosen third-party storage providers (e.g., iCloud, email).
 
                             2. Information We Receive (Limited)
                             Because we do not store your data on our servers, we only interact with:
@@ -99,13 +99,13 @@ struct PrivacyPolicyView: View {
                             Data is protected by your device's security (passcode, Face ID / Touch ID, iOS encryption). Keep iOS updated and enable iCloud Backup so inspections survive device loss.
 
                             8. Privacy Rights (GDPR / CCPA / Other)
-                            NexGenSpec LLC holds only your account login and (if provided) your optional fallback email. We do not have your inspection content, client information, photos, signatures, or reports. Right to access, deletion, or portability — email contact@nexgenspec.com or use Settings → Delete Account. Requests from your clients are referred back to you (the data controller).
+                            NexGenSpec holds only your account login and (if provided) your optional fallback email. We do not have your inspection content, client information, photos, signatures, or reports. Right to access, deletion, or portability — email contact@nexgenspec.com or use Settings → Delete Account. Requests from your clients are referred back to you (the data controller).
 
                             9. Children
                             NexGenSpec is intended for adult professional inspectors. Not directed at children under 13.
 
                             10. Contact
-                            NexGenSpec LLC — contact@nexgenspec.com
+                            NexGenSpec — contact@nexgenspec.com
                             """)
                             .font(.body)
                             .multilineTextAlignment(.leading)
@@ -174,7 +174,7 @@ struct PrivacyPolicyContent: View {
                     Group {
                         Text("""
                         1. Zero-Storage Commitment
-                        NexGenSpec is designed as a local-first application. NexGenSpec LLC ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. All data you collect remains on your device or within your chosen third-party storage providers (e.g., iCloud, Email).
+                        NexGenSpec is designed as a local-first application. NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. All data you collect remains on your device or within your chosen third-party storage providers (e.g., iCloud, Email).
 
                         2. Information Handling
                         Because we do not store your data on our servers, we only interact with the following:
@@ -188,13 +188,13 @@ struct PrivacyPolicyContent: View {
                         • Ensuring the privacy of your clients and stakeholders in accordance with local laws.
 
                         4. Third-Party Services
-                        When you export a report via email or save it to a cloud provider (like Google Drive or iCloud), that data is subject to the privacy policy of that specific provider. NexGenSpec LLC does not control or see this data during the transfer.
+                        When you export a report via email or save it to a cloud provider (like Google Drive or iCloud), that data is subject to the privacy policy of that specific provider. NexGenSpec does not control or see this data during the transfer.
 
                         5. Security
                         Since your data is stored locally, it is protected by your device's security (Passcode, FaceID/TouchID, and iOS Encryption). We recommend keeping your device updated and utilizing Apple's native security features to protect professional records.
 
                         6. Contact
-                        NexGenSpec LLC — contact@nexgenspec.com
+                        NexGenSpec — contact@nexgenspec.com
                         """)
                         .font(.body)
                         .multilineTextAlignment(.leading)
@@ -251,7 +251,7 @@ struct TermsOfServiceView: View {
                         Group {
                             Text("""
                             1. About NexGenSpec
-                            NexGenSpec is a professional home inspection app for licensed property inspectors, available on the Apple App Store for iPhone and iPad. The app is provided by NexGenSpec LLC ("we", "us", "the developer") to inspectors ("you", "the user") who have downloaded the app and accepted these Terms.
+                            NexGenSpec is a professional home inspection app for licensed property inspectors, available on the Apple App Store for iPhone and iPad. The app is provided by NexGenSpec ("we", "us", "the developer") to inspectors ("you", "the user") who have downloaded the app and accepted these Terms.
 
                             2. Account & Subscription
                             • An account is required to protect inspection data (client personal information, property photos, defect findings).
@@ -263,7 +263,7 @@ struct TermsOfServiceView: View {
                             3. Inspector Responsibility
                             NexGenSpec is a tool for documenting inspections. The accuracy and completeness of every inspection report is the responsibility of the licensed inspector who creates it. The developer is not responsible for inspection findings, omissions, or any decisions made by the inspector or their clients based on app-generated reports.
 
-                            Professional licensing & insurance. The inspector is solely responsible for maintaining all professional licenses and certifications required by their state, province, or licensing board, and for the type and amount of insurance coverage required to perform inspections legally and responsibly — including, where applicable, Errors & Omissions (E&O) coverage and general liability insurance. As recommended by most home-inspector licensing bodies, NexGenSpec strongly encourages inspectors to maintain professional E&O and general liability coverage at all times. Coverage decisions are entirely at the inspector's discretion and responsibility; NexGenSpec LLC does not provide, recommend specific carriers for, or assume responsibility for any insurance arrangements.
+                            Professional licensing & insurance. The inspector is solely responsible for maintaining all professional licenses and certifications required by their state, province, or licensing board, and for the type and amount of insurance coverage required to perform inspections legally and responsibly — including, where applicable, Errors & Omissions (E&O) coverage and general liability insurance. As recommended by most home-inspector licensing bodies, NexGenSpec strongly encourages inspectors to maintain professional E&O and general liability coverage at all times. Coverage decisions are entirely at the inspector's discretion and responsibility; NexGenSpec does not provide, recommend specific carriers for, or assume responsibility for any insurance arrangements.
 
                             4. Invoice & Payment Collection
                             NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The "Mark Invoice as Paid" toggle is a record-keeping aid only.
@@ -289,7 +289,7 @@ struct TermsOfServiceView: View {
                             We may suspend or terminate accounts that violate these Terms.
 
                             8. Data Retention & Backup Responsibility
-                            IMPORTANT — please read carefully. NexGenSpec is a local-first application. Inspection data lives ONLY on the device that created it. NexGenSpec LLC does not maintain server-side copies of any inspection content (photos, videos, signatures, PDFs, defect findings, or client information).
+                            IMPORTANT — please read carefully. NexGenSpec is a local-first application. Inspection data lives ONLY on the device that created it. NexGenSpec does not maintain server-side copies of any inspection content (photos, videos, signatures, PDFs, defect findings, or client information).
 
                             Your data will be permanently and irrecoverably lost in any of the following events:
                             • You uninstall the app from the home screen.
@@ -298,7 +298,7 @@ struct TermsOfServiceView: View {
                             • The device experiences hardware failure, is lost, or is stolen, without an iCloud Backup.
                             • A bug in the app or in iOS results in data corruption.
 
-                            NexGenSpec LLC cannot recover lost inspection data under any circumstance, for any user, for any reason.
+                            NexGenSpec cannot recover lost inspection data under any circumstance, for any user, for any reason.
 
                             Inspector backup obligations. Inspectors are strongly advised to:
                             • Enable iCloud Backup (iOS Settings → [your name] → iCloud → iCloud Backup → On).
@@ -328,20 +328,20 @@ struct TermsOfServiceView: View {
                             • Retention of email-delivered reports once the email has left your device.
                             • Indirect, consequential, incidental, special, or punitive damages, including lost revenue, lost profits, lost business opportunities, loss of goodwill, professional reputation harm, or claims by clients of the inspector.
 
-                            Outage refund. If NexGenSpec experiences an extended outage caused by NexGenSpec LLC (and not by Apple, Firebase, your network, your device, or other services outside our control), our maximum responsibility is a pro-rated refund of subscription fees for the duration of the outage. Outages must be reported in writing within the calendar month they occur to qualify.
+                            Outage refund. If NexGenSpec experiences an extended outage caused by NexGenSpec (and not by Apple, Firebase, your network, your device, or other services outside our control), our maximum responsibility is a pro-rated refund of subscription fees for the duration of the outage. Outages must be reported in writing within the calendar month they occur to qualify.
 
                             11. Changes to These Terms
                             We may update these Terms from time to time. Material changes will be communicated through the app and require fresh acceptance before continued use.
 
                             12. Governing Law & Venue
-                            These Terms are governed by the laws of the State of Colorado, USA, without regard to its conflict-of-laws principles. You and NexGenSpec LLC agree that any dispute shall be brought exclusively in the state or federal courts located in Denver, Colorado, and you consent to personal jurisdiction in those courts.
+                            These Terms are governed by the laws of the State of Colorado, USA, without regard to its conflict-of-laws principles. You and NexGenSpec agree that any dispute shall be brought exclusively in the state or federal courts located in Denver, Colorado, and you consent to personal jurisdiction in those courts.
 
                             Canadian users: If you are a resident of Canada, the foregoing does not deprive you of any non-waivable consumer-protection rights granted by your province or territory. Where such rights apply, they remain in effect notwithstanding the choice of Colorado law.
 
-                            You and NexGenSpec LLC agree any dispute will be resolved on an individual basis only. Class actions, class arbitrations, and consolidated proceedings are not permitted.
+                            You and NexGenSpec agree any dispute will be resolved on an individual basis only. Class actions, class arbitrations, and consolidated proceedings are not permitted.
 
                             13. Contact
-                            NexGenSpec LLC — contact@nexgenspec.com
+                            NexGenSpec — contact@nexgenspec.com
                             """)
                             .font(.body)
                             .multilineTextAlignment(.leading)
@@ -410,7 +410,7 @@ struct TermsOfServiceContent: View {
                     Group {
                         Text("""
                         1. About NexGenSpec
-                        NexGenSpec is a professional home inspection app for licensed property inspectors, available on the Apple App Store for iPhone and iPad. The app is provided by NexGenSpec LLC ("we", "us", "the developer") to inspectors ("you", "the user") who have downloaded the app and accepted these Terms.
+                        NexGenSpec is a professional home inspection app for licensed property inspectors, available on the Apple App Store for iPhone and iPad. The app is provided by NexGenSpec ("we", "us", "the developer") to inspectors ("you", "the user") who have downloaded the app and accepted these Terms.
 
                         2. Account & Subscription
                         • An account is required to protect inspection data (client personal information, property photos, defect findings).
@@ -443,7 +443,7 @@ struct TermsOfServiceContent: View {
                         9. Limitation of Liability
                         NexGenSpec is software. Our liability is limited to the operation of that software — specifically: app availability, app bugs that cause data loss inside the app, and similar app-level issues.
 
-                        Maximum remedy. To the maximum extent permitted by law, our total liability to you for any claim arising out of or relating to your use of NexGenSpec is limited to a refund of the subscription fee you paid for the calendar month in which the issue occurred, contingent on (a) you reporting the issue to NexGenSpec LLC in writing within that same calendar month, and (b) you providing reasonable supporting documentation evidencing the issue. No other remedy is available.
+                        Maximum remedy. To the maximum extent permitted by law, our total liability to you for any claim arising out of or relating to your use of NexGenSpec is limited to a refund of the subscription fee you paid for the calendar month in which the issue occurred, contingent on (a) you reporting the issue to NexGenSpec in writing within that same calendar month, and (b) you providing reasonable supporting documentation evidencing the issue. No other remedy is available.
 
                         What NexGenSpec does not cover:
                         • The accuracy, completeness, or quality of any inspection report you create. Those are the licensed inspector's professional work product and professional liability.
@@ -454,20 +454,20 @@ struct TermsOfServiceContent: View {
                         • Loss of inspection data caused by device failure, accidental deletion, OS upgrades, lost or stolen devices, or anything outside our direct control. NexGenSpec does not maintain server-side copies of inspection content and cannot recover it.
                         • Indirect, consequential, incidental, special, or punitive damages, including lost revenue, lost profits, lost business opportunities, or loss of goodwill.
 
-                        Outage refund. If NexGenSpec experiences an extended outage caused by NexGenSpec LLC (and not by Apple, Firebase, your network, your device, or other services outside our control), our maximum responsibility is a pro-rated refund of subscription fees for the duration of the outage. Outages must be reported in writing within the calendar month they occur to qualify.
+                        Outage refund. If NexGenSpec experiences an extended outage caused by NexGenSpec (and not by Apple, Firebase, your network, your device, or other services outside our control), our maximum responsibility is a pro-rated refund of subscription fees for the duration of the outage. Outages must be reported in writing within the calendar month they occur to qualify.
 
                         10. Changes to These Terms
                         We may update these Terms from time to time. Material changes will be communicated through the app and require fresh acceptance before continued use.
 
                         11. Governing Law & Venue
-                        These Terms are governed by the laws of the State of Colorado, USA, without regard to its conflict-of-laws principles. You and NexGenSpec LLC agree that any dispute arising out of or relating to these Terms or the app shall be brought exclusively in the state or federal courts located in Denver, Colorado, and you consent to personal jurisdiction in those courts.
+                        These Terms are governed by the laws of the State of Colorado, USA, without regard to its conflict-of-laws principles. You and NexGenSpec agree that any dispute arising out of or relating to these Terms or the app shall be brought exclusively in the state or federal courts located in Denver, Colorado, and you consent to personal jurisdiction in those courts.
 
                         Canadian users: If you are a resident of Canada, the foregoing does not deprive you of any non-waivable consumer-protection rights granted by your province or territory of residence. Where such rights apply, they remain in effect notwithstanding the choice of Colorado law.
 
-                        You and NexGenSpec LLC agree that any dispute will be resolved on an individual basis only. Class actions, class arbitrations, and consolidated proceedings are not permitted.
+                        You and NexGenSpec agree that any dispute will be resolved on an individual basis only. Class actions, class arbitrations, and consolidated proceedings are not permitted.
 
                         12. Contact
-                        NexGenSpec LLC — contact@nexgenspec.com
+                        NexGenSpec — contact@nexgenspec.com
                         """)
                         .font(.body)
                         .multilineTextAlignment(.leading)

@@ -10,11 +10,21 @@ import Foundation
 /// Saves scan metadata to inspection lidar folder. Call after writing USDZ and optional floorplan PNG.
 enum LiDARScanStore {
 
-    static func save(_ scan: LiDARScan, jobId: UUID) {
+    /// Persists scan metadata. Returns true only if the bytes reached disk — a
+    /// swallowed write meant a just-captured (iPad-only) LiDAR scan never appeared
+    /// in loadScans, with no feedback (mirrors SignatureStore).
+    @discardableResult
+    static func save(_ scan: LiDARScan, jobId: UUID) -> Bool {
         let url = FilePaths.lidarFolder(jobId: jobId).appendingPathComponent("\(scan.id.uuidString).json")
-        try? FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
-        guard let data = try? JSONEncoder().encode(scan) else { return }
-        try? FileSecurity.writeProtected(data, to: url)
+        do {
+            try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
+            let data = try JSONEncoder().encode(scan)
+            try FileSecurity.writeProtected(data, to: url)
+            return true
+        } catch {
+            Diagnostics.logError(context: "LiDAR scan save failed", error: error)
+            return false
+        }
     }
 
     static func loadScans(jobId: UUID) -> [LiDARScan] {
