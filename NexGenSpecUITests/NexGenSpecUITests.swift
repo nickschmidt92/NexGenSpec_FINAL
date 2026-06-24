@@ -40,7 +40,7 @@ final class NexGenSpecAutosaveUITests: XCTestCase {
         // -screenshotRoute inspection: open the first seeded inspection directly.
         // Seeding is gated on an empty store inside ScreenshotHost, so the
         // RELAUNCH below does not re-seed and clobber the edit.
-        app.launchArguments = ["-screenshotMode", "-screenshotRoute", "inspection"]
+        app.launchArguments = ["-screenshotMode", "-screenshotRoute", "draftInspection"]
         return app
     }
 

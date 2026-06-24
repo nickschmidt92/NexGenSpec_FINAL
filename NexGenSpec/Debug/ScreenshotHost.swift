@@ -56,6 +56,13 @@ struct ScreenshotHost: View {
     /// sections, photos, and defects) — the richest one for screenshots.
     private var primaryVersionID: UUID? { store.metadataList.first?.id }
 
+    /// First EDITABLE (non-finalized) inspection. The primary demo is now
+    /// finalized (locked) for a clean client-ready screenshot, which disables
+    /// its comment editor — so the autosave UI test routes here instead.
+    private var firstEditableVersionID: UUID? {
+        store.metadataList.first(where: { $0.isEditable })?.id
+    }
+
     @ViewBuilder private var routed: some View {
         switch ScreenshotMode.route {
         case "paywall":
@@ -70,6 +77,14 @@ struct ScreenshotHost: View {
                 NavigationStack { InspectionRootView(versionID: id) }
             } else {
                 Text("No demo inspection seeded")
+            }
+        case "draftInspection":
+            // Autosave UI-test target: the first EDITABLE inspection (the primary
+            // demo is finalized/locked, so its comment editor is disabled).
+            if let id = firstEditableVersionID {
+                NavigationStack { InspectionRootView(versionID: id) }
+            } else {
+                Text("No editable demo inspection seeded")
             }
         case "pdf":
             if let id = primaryVersionID, let version = store.loadFullVersion(id: id) {
