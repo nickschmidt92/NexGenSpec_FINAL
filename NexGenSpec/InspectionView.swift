@@ -178,7 +178,7 @@ struct InspectionView: View {
                                 .disabled(true)
                             Button {
                                 weatherService.retry { data in
-                                    if let data { draft.inspection.weather = data }
+                                    if let data, draft.isEditable { draft.inspection.weather = data }
                                 }
                             } label: {
                                 Label("Retry weather", systemImage: "arrow.clockwise")
@@ -299,7 +299,11 @@ struct InspectionView: View {
             // Fetch weather if not already captured. The fetch path is
             // instrumented (see WeatherService) so the on-device failure can
             // be diagnosed from Console.app / the diagnostics log.
-            if AppCapabilities.weatherLoggingEnabled, draft.inspection.weather == nil {
+            // Only fetch/seed weather on an EDITABLE draft. A finalized version is
+            // immutable; its in-memory copy must stay byte-identical to its sealed
+            // snapshot or the per-render integrity check (H1) false-positives a valid
+            // report. Mirrors the startTimer() draft.isEditable guard.
+            if AppCapabilities.weatherLoggingEnabled, draft.isEditable, draft.inspection.weather == nil {
                 weatherService.fetchCurrentWeather { data in
                     if let data {
                         draft.inspection.weather = data
