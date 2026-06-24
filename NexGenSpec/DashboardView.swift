@@ -328,31 +328,36 @@ struct DashboardView: View {
                 }
                 Section("Property & Inspector") {
                     TextField("Property Address",   text: $newPropertyAddress)
-                    Button {
-                        locationService.fetchCurrentAddress { address in
-                            if let address {
-                                newPropertyAddress = address
+                    // Location auto-fill needs GPS — hidden on Mac (Designed-for-iPad
+                    // has no GPS and would return a wrong coarse Wi-Fi/IP fix). Mac
+                    // users type the property address directly.
+                    if !Platform.isMac {
+                        Button {
+                            locationService.fetchCurrentAddress { address in
+                                if let address {
+                                    newPropertyAddress = address
+                                }
                             }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            if locationService.isLocating {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Locating…")
-                            } else {
-                                Image(systemName: "location.fill")
-                                Text("Use Current Location")
+                        } label: {
+                            HStack(spacing: 6) {
+                                if locationService.isLocating {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("Locating…")
+                                } else {
+                                    Image(systemName: "location.fill")
+                                    Text("Use Current Location")
+                                }
                             }
+                            .font(.subheadline)
                         }
-                        .font(.subheadline)
-                    }
-                    .disabled(locationService.isLocating)
-                    .accessibilityLabel("Use current location for property address")
-                    if let error = locationService.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                        .disabled(locationService.isLocating)
+                        .accessibilityLabel("Use current location for property address")
+                        if let error = locationService.errorMessage {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
                     }
                     TextField("Inspector Name",     text: $newInspectorName)
                 }

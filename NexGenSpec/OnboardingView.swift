@@ -142,7 +142,7 @@ private struct FeaturesScreen: View {
             }
             .listStyle(.plain)
 
-            Text("LiDAR scanning requires iPad Pro or iPhone Pro.")
+            Text("Camera capture and Apple Pencil require an iPhone or iPad; LiDAR scanning requires an iPad Pro or iPhone Pro.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
