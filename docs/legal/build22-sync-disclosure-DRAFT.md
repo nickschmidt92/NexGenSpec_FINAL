@@ -22,7 +22,7 @@
   never wiped by sync. CloudKit is a one-account **mirror/observer**.
 - **Destination:** the user's **own private iCloud database** (Apple CloudKit private
   DB), in a per-account custom zone, encrypted at rest in the user's iCloud.
-  **NexGenSpec LLC never receives, hosts, or can read inspection content.**
+  **NexGenSpec never receives, hosts, or can read inspection content.**
 - **Always synced:** inspection version JSON (current + finalized snapshots), report PDF,
   integrity hash, cover-photo thumbnail — the small legal record.
 - **On-demand only (off by default):** original photos, video, LiDAR/USDZ, full-res
@@ -42,7 +42,7 @@
 
 | Page | Current (true while sync is dark) | GA replacement (DRAFT) |
 |---|---|---|
-| `privacy.html` on-device clause | "All data remains on your device…" | "NexGenSpec LLC still never stores your inspection content. If you enable iCloud Sync, your inspections sync across **your own** devices through **your private iCloud account** (Apple CloudKit) — only to your iCloud, never to our servers." |
+| `privacy.html` on-device clause | "All data remains on your device…" | "NexGenSpec still never stores your inspection content. If you enable iCloud Sync, your inspections sync across **your own** devices through **your private iCloud account** (Apple CloudKit) — only to your iCloud, never to our servers." |
 | `terms.html` Multi-device note | "…do NOT sync between devices." | "With iCloud Sync on, inspections sync across your own devices via your private iCloud account; NexGenSpec never receives them. Sync is not a backup — keep your own backups; deletions sync between your devices." |
 | `support.html` FAQ | (add) | See §3. |
 
@@ -53,7 +53,7 @@ both flag states. Keep the website wording in lockstep with those.
 
 ## 3. support.html FAQ + FAQPage JSON-LD (DRAFT)
 
-- **Does NexGenSpec store my inspections on its servers?** No. NexGenSpec LLC never
+- **Does NexGenSpec store my inspections on its servers?** No. NexGenSpec never
   stores or can read your inspection content. Sync off → on device only; sync on → your
   own private iCloud, not our servers.
 - **How do my inspections sync?** If you enable iCloud Sync, across your own devices on
@@ -70,7 +70,7 @@ both flag states. Keep the website wording in lockstep with those.
   "@context": "https://schema.org",
   "@type": "FAQPage",
   "mainEntity": [
-    {"@type":"Question","name":"Does NexGenSpec store my inspections on its servers?","acceptedAnswer":{"@type":"Answer","text":"No. NexGenSpec LLC never stores or can read your inspection content. With iCloud Sync off, everything stays on your device; with it on, data syncs through your own private iCloud account, not our servers."}},
+    {"@type":"Question","name":"Does NexGenSpec store my inspections on its servers?","acceptedAnswer":{"@type":"Answer","text":"No. NexGenSpec never stores or can read your inspection content. With iCloud Sync off, everything stays on your device; with it on, data syncs through your own private iCloud account, not our servers."}},
     {"@type":"Question","name":"How do my inspections sync between my devices?","acceptedAnswer":{"@type":"Answer","text":"If you enable iCloud Sync, inspections sync across your own devices signed into the same iCloud account via Apple's CloudKit private database. It is opt-in and can be turned off or set to Local-Only at any time."}},
     {"@type":"Question","name":"Is iCloud Sync a backup?","acceptedAnswer":{"@type":"Answer","text":"No. Sync mirrors the same data across your devices, so a deletion syncs too. Keep an independent backup of finalized inspections."}},
     {"@type":"Question","name":"Do my clients' details go to NexGenSpec or third parties?","acceptedAnswer":{"@type":"Answer","text":"No. Client content lives on your device and, if sync is on, in your private iCloud. NexGenSpec never receives it. You remain the data controller for client information."}}

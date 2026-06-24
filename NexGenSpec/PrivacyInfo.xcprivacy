@@ -88,7 +88,7 @@
 			</array>
 		</dict>
 		<!-- Location, two on-demand uses, one-shot fixes only, never background:
-		     (1) property-address auto-fill — on-device reverse-geocode via Apple
+		     (1) property-address auto-fill — reverse-geocode via Apple (the coordinate is sent to Apple's servers)
 		     (LocationService.swift, kCLLocationAccuracyHundredMeters = Precise in
 		     Apple's taxonomy); (2) inspection-weather lookup whose approximate
 		     coordinates (~1 km) are sent to Open-Meteo (WeatherService.swift,

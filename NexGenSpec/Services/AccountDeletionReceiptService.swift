@@ -203,7 +203,7 @@ public enum AccountDeletionReceiptService {
         (body as NSString).draw(in: bodyRect, withAttributes: bodyAttrs)
 
         // Footer
-        let footer = "NexGenSpec LLC — contact@nexgenspec.com"
+        let footer = "NexGenSpec — contact@nexgenspec.com"
         footer.draw(in: CGRect(x: margin, y: rect.height - 40, width: columnWidth, height: 16),
                     withAttributes: [
                         .font: UIFont.systemFont(ofSize: 9),

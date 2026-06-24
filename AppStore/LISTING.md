@@ -1,0 +1,69 @@
+# NexGenSpec — App Store Listing Copy (build 1.0.0(23))
+
+Final, verified listing fields for the App Store submission. Source of truth for copy.
+Status + remaining ASC steps live in NickOS **T-01582**. Monetization model: `~/.claude/projects/-Users-nicholasschmidt/memory/nexgenspec-monetization-model.md`. Review notes: `AppStore/REVIEW_NOTES.md`.
+
+## Subtitle (App Information, ≤30)
+Home & Commercial Inspections
+
+## Promotional Text (≤170 — pick ONE; default #1)
+1. Inspect, scan, and deliver on site. Capture photos, mark up defects, generate a signed PDF report, and email it to your client before you leave.
+2. LiDAR room scans, Apple Pencil photo markup, defect tagging, custom templates, signatures, invoicing, and finalized PDF reports in one app.
+3. Start free: 3 full inspections, no card. LiDAR scanning and photo annotation are always free. Go Pro for unlimited watermark-free reports.
+
+## Keywords (≤100, no spaces)
+inspector,report,defect,checklist,punch,list,property,building,realty,LiDAR,floor,plan,scan,invoice
+
+## Support URL
+https://nexgenspec.com
+
+## Copyright
+2026 NexGenSpec
+
+## Description (3,986 chars — verified accurate; includes legal footer)
+Professional inspection reports for home AND commercial property, built on iPhone, iPad, and Apple Silicon Mac. NexGenSpec lets residential and building inspectors capture a job, document every defect with photos, and hand the client a signed, polished PDF before leaving the site. One workflow for single-family homes, multi-unit buildings, and commercial assets.
+
+Start from a built-in inspection template or build your own. Walk the property, snap photos, mark up findings, tag defects by severity, and finalize a tamper-evident report your clients and their agents can trust.
+
+KEY FEATURES
+- LiDAR room capture: scan a space in 3D and auto-generate a top-down floor plan plus a USDZ model. LiDAR scanning requires a compatible device.
+- Photo annotation: draw freehand, add arrows and circles, pick red/yellow/green, with full undo/redo. Works with Apple Pencil on iPad and with your finger too. Marks stay editable and never overwrite the original photo.
+- AI defect detection: on-device photo analysis suggests defect tags as you work; accepted tags carry through to the report.
+- Structured findings: rate each item's status (Inspected / Not Inspected / Not Present) and severity, write up Location, Observed, Implication, Recommendation, and comments, add a contractor referral tag, or omit any item from the client report.
+- Add custom items to any section on the fly, beyond your template.
+- Attach it all: in-app photos and walk-through video, plus drone and thermal imagery you import (e.g. AirDropped photos and video), organized right on the inspection.
+- Reminders and to-dos: set per-inspection reminders with optional due dates and checkable task lists so nothing gets missed on site.
+- Custom templates: duplicate the built-in template or create your own sections and items, reorder, and reuse across jobs.
+- Severity-rated reports: cover page, a dedicated severity-sorted defect summary table with safety/major/marginal/minor badges, and per-item photo cards with annotations baked in.
+- Your branding: import your company logo and add name, license number, and contact details to auto-fill every report and replace the NexGenSpec logo on PDFs.
+- Real estate agents: capture buyer's and listing agent details for the report and CC them when you send.
+- Tamper-evident: each finalized report carries a unique Report ID and SHA-256 integrity hash.
+- Locked signatures: capture inspector and client signatures on a signature pad, each stamped with a timestamp and device ID, for a defensible record.
+- Inspection timer: time on site is tracked automatically, pausing when you switch away and resuming when you return.
+- Auto-save with an on-screen saved indicator; manual save and full keyboard shortcuts for fast navigation on iPad and Mac.
+- Invoicing: build a price/services/total invoice, email the report and invoice to your client, CC agents, and track sent/paid status.
+- Export anywhere: paginated US-Letter PDF, a Pro plain-text quick summary, or a full ZIP backup (report, photos, actual video files, manifest, integrity file). Reports auto-file by property address and a built-in browser lets you re-share past PDFs and backups.
+- Scheduling: add inspections to your device calendar with reminders, view an in-app month calendar, and see conflicts with your other events.
+- Weather and total inspection time logged automatically; current-location address auto-fill.
+- Sign in with Apple or email, with a recovery email, secure account management, and account deletion with a receipt.
+
+START FREE
+Run 3 full inspections free, every feature included, with watermarked reports. Upgrade to Pro for unlimited inspections and clean, watermark-free reports. No credit card required to start.
+
+PLATFORM
+Universal app for iPhone and iPad, and runs on Apple Silicon Mac. Apple Pencil supported for annotation on iPad. LiDAR scanning requires a compatible device.
+
+Terms of Use: https://nexgenspec.com/terms.html
+Privacy Policy: https://nexgenspec.com/privacy.html
+
+## App Privacy (collect = YES; Tracking = NO)
+- Contact Info > Email Address — Linked, App Functionality
+- Location > Precise Location — NOT Linked, App Functionality  (CLGeocoder ~100m address auto-fill SHIPS; weather ~1km to Open-Meteo. Confirmed precise — do NOT downgrade to Coarse.)
+- User Content > Photos or Videos — Linked, App Functionality
+- User Content > Other User Content — Linked, App Functionality
+- Diagnostics > Crash Data — NOT Linked, App Functionality
+- NOTE: location is shared with Open-Meteo (THIRD PARTY) for weather — answer the third-party-sharing questions accordingly.
+- Privacy Policy URL (entered on the App Privacy page): https://nexgenspec.com/privacy.html
+
+## ⚠️ Marketing rewrite pending
+Nick is sourcing a marketing-expert rewrite of the Description (prompt issued 2026-06-23). If new copy comes back: length-check (≤4000) AND accuracy-check against the verified feature set above (no sync/cloud-backup claims; drone/thermal are IMPORT not capture; no prices) before pasting.
