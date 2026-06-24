@@ -202,6 +202,11 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         for remote in changes.changed {
             guard let versionId = UUID(uuidString: remote.record.recordName) else { continue }
             let local = reader.localState(forVersionId: versionId)
+            // A TRANSIENT local read failure (data-protection/I/O) must NOT settle this
+            // record: hold the token so the next pull retries instead of permanently
+            // skipping a legitimate remote update (fix D). A genuine decode failure is
+            // NOT readFailed and stays a settled keepLocal.
+            if local.readFailed { allApplied = false; continue }
             let decision = SyncConflictResolver.resolveUpsert(
                 local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
             )
@@ -219,7 +224,11 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
 
         for recordName in changes.deletedRecordNames {
             guard let versionId = UUID(uuidString: recordName) else { continue }
-            if SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: versionId)) == .deleteLocal {
+            let local = reader.localState(forVersionId: versionId)
+            // Same fix-D token-hold as the upsert loop: don't settle a delete against a
+            // transiently-unreadable local copy — retry on the next pull.
+            if local.readFailed { allApplied = false; continue }
+            if SyncConflictResolver.resolveDelete(local: local) == .deleteLocal {
                 if Task.isCancelled { return }
                 let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
                 guard stillBound else { return }

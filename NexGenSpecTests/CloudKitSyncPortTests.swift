@@ -532,6 +532,44 @@ final class CloudKitSyncPortTests: XCTestCase {
         XCTAssertNil(binds.current("uidA")?.changeToken, "A failed apply must not advance the change token.")
     }
 
+    func testPullHoldsTokenOnTransientLocalReadFailure() async {
+        // A TRANSIENT local read failure (data-protection/I/O) must NOT settle the
+        // record: the pull holds the change token so the next pull retries, instead of
+        // permanently skipping a legitimate remote update (fix D).
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: UUID()), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let writer = FakeWriter()
+        var reader = FakeReader()
+        reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date(), readFailed: true)
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 0, "A transiently-unreadable local record is not overwritten.")
+        XCTAssertNil(binds.current("uidA")?.changeToken, "A transient read failure must HOLD (not advance) the change token.")
+    }
+
+    func testPullAdvancesTokenOnSettledKeepLocal() async {
+        // Contrast with the transient-read case: a SETTLED keepLocal (finalized local,
+        // readFailed=false) never overwrites the local record but DOES advance the
+        // token — it must not retry forever (fix D distinguishes the two).
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: UUID()), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let writer = FakeWriter()
+        var reader = FakeReader()
+        reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date(), readFailed: false)
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedCount, 0, "A settled keepLocal does not overwrite the local record.")
+        XCTAssertNotNil(binds.current("uidA")?.changeToken, "A settled keepLocal advances the token (does not retry forever).")
+    }
+
     func testPullDeletesLocalDraftButKeepsFinalizedOnTombstone() async {
         let draftChanges = ZoneChanges(changed: [], deletedRecordNames: [UUID().uuidString], newToken: nil)
         let w1 = FakeWriter()

@@ -28,11 +28,18 @@ public struct LocalVersionState: Equatable {
     public let exists: Bool
     public let isFinalized: Bool
     public let updatedAt: Date?
+    /// True when the local `current.json` EXISTS but was TRANSIENTLY unreadable
+    /// (data-protection while the device is locked / I/O) — distinct from a genuine
+    /// decode failure. The pull HOLDS the change token instead of settling this
+    /// record, so the next pull retries rather than permanently skipping a legitimate
+    /// remote update (build 22 fix D). Defaults false; never set for a clean read.
+    public let readFailed: Bool
 
-    public init(exists: Bool, isFinalized: Bool, updatedAt: Date?) {
+    public init(exists: Bool, isFinalized: Bool, updatedAt: Date?, readFailed: Bool = false) {
         self.exists = exists
         self.isFinalized = isFinalized
         self.updatedAt = updatedAt
+        self.readFailed = readFailed
     }
 
     public static let absent = LocalVersionState(exists: false, isFinalized: false, updatedAt: nil)
