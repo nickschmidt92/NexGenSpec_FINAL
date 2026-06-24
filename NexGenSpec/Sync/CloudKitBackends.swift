@@ -123,6 +123,50 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         _ = try await database.modifyRecordZones(saving: [], deleting: [zoneID])
     }
 
+    func recordTombstone(versionId: String, inZone zoneName: String) async throws {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: CloudKitSchema.syncMetaRecordName, zoneID: zoneID)
+
+        // Optimistic read-modify-write of the per-zone SyncMeta deletion log, with the
+        // same bounded serverRecordChanged retry as save() so two devices tombstoning
+        // concurrently can't clobber each other's entries (§8).
+        let maxAttempts = 3
+        var lastConflict: Error?
+        for attempt in 1...maxAttempts {
+            let existing: CKRecord?
+            do {
+                existing = try await database.record(for: recordID)
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                existing = nil
+            }
+            let meta = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.syncMeta, recordID: recordID)
+            var ids = (meta[CloudKitSchema.Field.deletedIds] as? [String]) ?? []
+            if ids.contains(versionId) { return }   // already tombstoned — idempotent
+            ids.append(versionId)
+            meta[CloudKitSchema.Field.deletedIds] = ids as CKRecordValue
+            do {
+                _ = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                return
+            } catch let error where Self.isServerRecordChanged(error) {
+                lastConflict = error
+                Diagnostics.logInfo("CKCloudDatabase: SyncMeta changed mid-tombstone (attempt \(attempt)/\(maxAttempts)); re-fetching and retrying.")
+                continue
+            }
+        }
+        throw lastConflict ?? CKError(.serverRecordChanged)
+    }
+
+    func tombstonedIds(inZone zoneName: String) async throws -> Set<String> {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: CloudKitSchema.syncMetaRecordName, zoneID: zoneID)
+        do {
+            let meta = try await database.record(for: recordID)
+            return Set((meta[CloudKitSchema.Field.deletedIds] as? [String]) ?? [])
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            return []   // no SyncMeta yet → nothing tombstoned
+        }
+    }
+
     /// Sets every InspectionVersion field (plus a freshly-wrapped payload CKAsset) on
     /// `ck` from `record`. Factored out so the save-retry loop can rebuild the record
     /// against a re-fetched change tag without duplicating the field mapping.

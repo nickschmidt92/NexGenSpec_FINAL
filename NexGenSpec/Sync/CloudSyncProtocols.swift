@@ -27,6 +27,11 @@ protocol CloudDatabase: Sendable {
     /// removes every record it holds in one shot so no residual client PII is left
     /// in the user's private iCloud after they delete their account (5.1.1(v)).
     func deleteZone(_ zoneName: String) async throws
+    /// Append a versionId to the zone's `SyncMeta` deletion log (§8 tombstone), so a
+    /// stale offline device can't resurrect a deleted draft. Idempotent (dedup'd).
+    func recordTombstone(versionId: String, inZone zoneName: String) async throws
+    /// The set of tombstoned (deleted) versionIds for the zone (empty if no SyncMeta).
+    func tombstonedIds(inZone zoneName: String) async throws -> Set<String>
 }
 
 /// Resolves the current iCloud user as an opaque token (nil ⇒ no iCloud account).

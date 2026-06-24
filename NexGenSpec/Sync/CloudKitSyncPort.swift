@@ -197,6 +197,11 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         // re-fetches and retries this window instead of skipping the record
         // permanently (review F5). Applies are idempotent (upsert-by-id), so a
         // retry that re-applies an already-applied record is harmless.
+        // Deletion log (§8): a stale device may have re-pushed a deleted draft, so a
+        // pulled "changed" record can be a resurrection. Fetch the tombstones once and
+        // treat any tombstoned id as a delete (never apply it) so it can't come back.
+        let tombstoned: Set<String> = (try? await database.tombstonedIds(inZone: binding.zoneName)) ?? []
+
         var allApplied = true
 
         for remote in changes.changed {
@@ -207,6 +212,14 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // skipping a legitimate remote update (fix D). A genuine decode failure is
             // NOT readFailed and stays a settled keepLocal.
             if local.readFailed { allApplied = false; continue }
+            if tombstoned.contains(remote.record.recordName) {
+                // Resurrected/stale record — honor the deletion (delete-wins, §8) rather
+                // than applying it; a finalized local is protected by resolveDelete.
+                if SyncConflictResolver.resolveDelete(local: local) == .deleteLocal {
+                    if await writer.deleteLocalVersion(recordName: remote.record.recordName) == false { allApplied = false }
+                }
+                continue
+            }
             let decision = SyncConflictResolver.resolveUpsert(
                 local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
             )
@@ -282,6 +295,12 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         guard let binding, !snapshot.isEmpty else { return }
         lock.withLock { _status = .syncing }
 
+        // Fetch the deletion log once so a tombstoned draft is never resurrected on push
+        // (§8) — only when there's an upsert to check; a delete-only flush skips it.
+        let tombstoned: Set<String> = snapshot.contains(where: { if case .versionUpserted = $0 { return true } else { return false } })
+            ? ((try? await database.tombstonedIds(inZone: binding.zoneName)) ?? [])
+            : []
+
         var failed: [SyncChange] = []
         for (i, change) in snapshot.enumerated() {
             // Stop pushing if a racing rebind/unbind detached this binding (or
@@ -293,7 +312,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 break
             }
             do {
-                try await apply(change, binding: binding)
+                try await apply(change, binding: binding, tombstoned: tombstoned)
             } catch {
                 failed.append(change)   // keep it queued; do NOT drop on failure
                 Diagnostics.logError(context: "CloudKitSyncPort push failed", error: error)
@@ -316,9 +335,18 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         }
     }
 
-    private func apply(_ change: SyncChange, binding: SyncBinding) async throws {
+    private func apply(_ change: SyncChange, binding: SyncBinding, tombstoned: Set<String>) async throws {
         switch change {
         case .versionUpserted(let meta):
+            // Tombstone suppression (§8): this id was deleted on another device. Never
+            // resurrect it — drop the local copy (delete-wins for drafts; a finalized
+            // local is protected by resolveDelete) instead of pushing it back.
+            if tombstoned.contains(meta.id.uuidString) {
+                if SyncConflictResolver.resolveDelete(local: reader.localState(forVersionId: meta.id)) == .deleteLocal {
+                    _ = await writer.deleteLocalVersion(recordName: meta.id.uuidString)
+                }
+                return
+            }
             guard let data = reader.versionData(forVersionId: meta.id) else { return }
             let record = InspectionRecordMapper.make(meta: meta, payload: data)
             // Push the version (fix A). `database.save` overwrites a draft (LWW is
@@ -331,6 +359,10 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // can't clobber the first.
             try await database.save(record, inZone: binding.zoneName)
         case .versionDeleted(let versionId):
+            // Record the tombstone BEFORE deleting (§8) so a retry after a transient
+            // failure re-runs both idempotently; the deletion log is what stops a stale
+            // device from resurrecting this id.
+            try await database.recordTombstone(versionId: versionId.uuidString, inZone: binding.zoneName)
             try await database.delete(recordName: versionId.uuidString, inZone: binding.zoneName)
         case .mediaUpserted, .mediaDeleted:
             break // JSON-only push in this slice; raw media is a later slice

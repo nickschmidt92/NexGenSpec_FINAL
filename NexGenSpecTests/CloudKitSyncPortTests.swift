@@ -53,6 +53,18 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     }
     /// The record currently stored under a name (nil if never saved / clobbered).
     func record(named recordName: String) -> InspectionVersionRecord? { lock.withLock { stored[recordName] } }
+
+    // SyncMeta deletion log (§8).
+    private var tombstones: Set<String> = []
+    func recordTombstone(versionId: String, inZone zoneName: String) async throws {
+        lock.withLock { _ = tombstones.insert(versionId) }
+    }
+    func tombstonedIds(inZone zoneName: String) async throws -> Set<String> {
+        lock.withLock { tombstones }
+    }
+    /// Test helper: pre-seed tombstones as if another device deleted these ids.
+    func seedTombstones(_ ids: [String]) { lock.withLock { tombstones.formUnion(ids) } }
+    var tombstoneSnapshot: Set<String> { lock.withLock { tombstones } }
 }
 
 private struct FakeAccount: CloudAccountProviding {
@@ -502,6 +514,76 @@ final class CloudKitSyncPortTests: XCTestCase {
 
         XCTAssertTrue(db.deletedZones.isEmpty, "flag OFF ⇒ the sweep is a strict no-op")
         XCTAssertEqual(owed.count, 1, "flag OFF ⇒ owed markers are untouched")
+    }
+
+    // MARK: - Deletion tombstone / no-resurrection (§8)
+
+    func testDeletePushRecordsTombstone() async {
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db)
+        await port.bind(firebaseUID: "uidA")
+
+        let id = UUID()
+        port.recordLocalChange(.versionDeleted(versionId: id))
+        await port.flushPending()
+
+        XCTAssertTrue(db.tombstoneSnapshot.contains(id.uuidString), "a delete records a tombstone in the SyncMeta deletion log")
+        XCTAssertTrue(db.deleted.contains(where: { $0.name == id.uuidString }), "the record is also deleted from the zone")
+    }
+
+    func testPushSuppressesTombstonedUpsert() async {
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: false, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, writer: writer)
+        await port.bind(firebaseUID: "uidA")
+
+        // Another device already deleted this id → it's tombstoned.
+        let m = meta()
+        db.seedTombstones([m.id.uuidString])
+
+        port.recordLocalChange(.versionUpserted(m))
+        await port.flushPending()
+
+        XCTAssertTrue(db.saved.isEmpty, "a tombstoned id is never re-pushed (no resurrection, §8)")
+        XCTAssertEqual(writer.deletedCount, 1, "the local copy of a remotely-deleted draft is dropped (delete-wins)")
+    }
+
+    func testPullSuppressesResurrectedTombstonedRecord() async {
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: Data("tok".utf8)
+        )
+        let db = FakeDatabase(); db.seedTombstones([id.uuidString])
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: false, updatedAt: Date())
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db, reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+
+        XCTAssertEqual(writer.appliedCount, 0, "a tombstoned (resurrected) record is never applied on pull")
+        XCTAssertEqual(writer.deletedCount, 1, "the resurrected record is deleted locally instead (no-resurrection, §8)")
+    }
+
+    func testFinalizedLocalIsNotDeletedByTombstone() async {
+        // Defensive: even if a finalized id were tombstoned, resolveDelete protects the
+        // immutable legal record — it is neither applied nor deleted locally.
+        let id = UUID()
+        let changes = ZoneChanges(
+            changed: [RemoteVersion(record: remoteRecord(id: id), modifiedAt: Date())],
+            deletedRecordNames: [], newToken: nil
+        )
+        let db = FakeDatabase(); db.seedTombstones([id.uuidString])
+        let writer = FakeWriter()
+        var reader = FakeReader(); reader.state = LocalVersionState(exists: true, isFinalized: true, updatedAt: Date())
+        let port = makePort(token: "t1", bindings: FakeBindings(), db: db, reader: reader, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+
+        XCTAssertEqual(writer.appliedCount, 0, "a tombstoned record is never applied")
+        XCTAssertEqual(writer.deletedCount, 0, "a FINALIZED local is never deleted by sync (immutability wins over the tombstone)")
     }
 
     // MARK: - Reader pinned to the bound UID (fix B / landmine 1)
