@@ -313,14 +313,13 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             guard let data = reader.versionData(forVersionId: meta.id) else { return }
             let record = InspectionRecordMapper.make(meta: meta, payload: data)
             // Push the version (fix A). `database.save` overwrites a draft (LWW is
-            // arbitrated on the receiver) and PROMOTES a draft to finalized — the core
-            // fix-A case the old never-clobber broke: finalize keeps the same
-            // versionId, so the draft record already existed and a tag-less
-            // `.ifServerRecordUnchanged` save failed `serverRecordChanged` (swallowed
-            // as "left immutable"), so the finalized payload never uploaded. The save
-            // still refuses to overwrite an ALREADY-finalized server record (immutable
-            // legal record — enforced inside `save` by a fetch-and-check), so a second
-            // device's divergent finalization of the same id can't clobber the first.
+            // arbitrated on the receiver) and PROMOTES a draft to finalized (finalize
+            // keeps the same versionId, so the draft record already exists). The save
+            // refuses to overwrite an ALREADY-finalized server record (immutable legal
+            // record — enforced inside `save` by a fetch-and-guard), and uses
+            // `.ifServerRecordUnchanged` + a bounded re-fetch/retry (NEW-2) so a second
+            // device's concurrent finalization of the same id in the fetch→save window
+            // can't clobber the first.
             try await database.save(record, inZone: binding.zoneName)
         case .versionDeleted(let versionId):
             try await database.delete(recordName: versionId.uuidString, inZone: binding.zoneName)
