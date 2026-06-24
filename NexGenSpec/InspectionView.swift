@@ -28,7 +28,6 @@ struct InspectionView: View {
     var updated: (InspectionVersion) -> Void
     @State private var draft: InspectionVersion = .empty
     @State private var selectedPane: InspectionPane = .overview
-    @State private var showShortcutsHelp = false
     @State private var showReportPreview = false
     /// Drives the post-finalize Invoice & Send presentation. Shown as a
     /// fullScreenCover so the redirect lands reliably on BOTH iPhone (whose
@@ -135,7 +134,6 @@ struct InspectionView: View {
                 } label: {
                     Label("Preview", systemImage: "doc.text.magnifyingglass")
                 }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
                 .accessibilityLabel("Preview report")
                 .accessibilityHint("Opens a full-screen preview of the current inspection report")
             }
@@ -197,29 +195,17 @@ struct InspectionView: View {
                     }
                     Divider()
                     Button("Save") { store.saveNow() }
-                        .keyboardShortcut("s", modifiers: .command)
                     Button("Previous Section") { selectPreviousSection() }
-                        .keyboardShortcut(.leftArrow, modifiers: .command)
                     Button("Next Section") { selectNextSection() }
-                        .keyboardShortcut(.rightArrow, modifiers: .command)
                     Button("Finalize") { selectedPane = .finalize }
-                        .keyboardShortcut("f", modifiers: .command)
                     Button("Preview Report") { showReportPreview = true }
-                        .keyboardShortcut("p", modifiers: [.command, .shift])
                     if draft.locked {
                         Button("Invoice & Send") { selectedPane = .invoice }
-                            .keyboardShortcut("i", modifiers: .command)
                     }
-                    Divider()
-                    Button("Keyboard Shortcuts") { showShortcutsHelp = true }
-                        .keyboardShortcut("?", modifiers: .command)
                 } label: {
                     Label("Actions", systemImage: "ellipsis.circle")
                 }
             }
-        }
-        .sheet(isPresented: $showShortcutsHelp) {
-            ShortcutsHelpView()
         }
         .fullScreenCover(isPresented: $showReportPreview) {
             // Watermark the preview for free users so it mirrors the export
@@ -782,44 +768,6 @@ private struct SectionRowView: View {
             }
         }
         .padding(.vertical, 2)
-    }
-}
-
-// MARK: - Keyboard shortcuts help
-private struct ShortcutsHelpView: View {
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Inspection") {
-                    shortcutRow("⌘S", "Save")
-                    shortcutRow("⌘←", "Previous section")
-                    shortcutRow("⌘→", "Next section")
-                    shortcutRow("⌘F", "Finalize")
-                    shortcutRow("⇧⌘P", "Preview Report")
-                    shortcutRow("⌘I", "Invoice & Send (when finalized)")
-                    shortcutRow("⌘?", "This shortcuts list")
-                }
-                Section("Dashboard") {
-                    shortcutRow("⌘N", "New Inspection")
-                }
-            }
-            .navigationTitle("Keyboard Shortcuts")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-    }
-    private func shortcutRow(_ keys: String, _ action: String) -> some View {
-        HStack {
-            Text(action)
-            Spacer()
-            Text(keys)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
-        }
     }
 }
 

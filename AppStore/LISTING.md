@@ -40,7 +40,7 @@ KEY FEATURES
 - Tamper-evident: each finalized report carries a unique Report ID and SHA-256 integrity hash.
 - Locked signatures: capture inspector and client signatures on a signature pad, each stamped with a timestamp and device ID, for a defensible record.
 - Inspection timer: time on site is tracked automatically, pausing when you switch away and resuming when you return.
-- Auto-save with an on-screen saved indicator; manual save and full keyboard shortcuts for fast navigation on iPad and Mac.
+- Auto-save with an on-screen saved indicator; manual save.
 - Invoicing: build a price/services/total invoice, email the report and invoice to your client, CC agents, and track sent/paid status.
 - Export anywhere: paginated US-Letter PDF, a Pro plain-text quick summary, or a full ZIP backup (report, photos, actual video files, manifest, integrity file). Reports auto-file by property address and a built-in browser lets you re-share past PDFs and backups.
 - Scheduling: add inspections to your device calendar with reminders, view an in-app month calendar, and see conflicts with your other events.

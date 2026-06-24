@@ -193,7 +193,6 @@ struct DashboardView: View {
                         } label: {
                             Label("New Inspection", systemImage: "plus")
                         }
-                        .keyboardShortcut("n", modifiers: .command)
                         .accessibilityLabel("New Inspection")
                         .accessibilityHint("Opens a form to create a new inspection")
                     }
