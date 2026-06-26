@@ -702,6 +702,13 @@ public extension InspectionStore {
             return false
         }
 
+        // Snapshot the company branding onto the inspection at creation,
+        // alongside inspectorName, so it travels IN the synced payload and
+        // renders correctly on any device (the source InspectorProfile is
+        // device-local). Frozen here keeps the finalized integrity hash
+        // deterministic — branding is never re-read live during render of a
+        // finalized record.
+        let profile = InspectorProfile.shared
         let inspection = Inspection(
             id: jobId,
             clientName: clientName,
@@ -710,6 +717,11 @@ public extension InspectionStore {
             propertyAddress: propertyAddress,
             inspectionDate: inspectionDate,
             inspectorName: inspectorName,
+            companyName: profile.companyName,
+            licenseNumber: profile.licenseNumber,
+            companyPhone: profile.phone,
+            companyEmail: profile.email,
+            companyLogoBase64: profile.companyLogoBase64,
             sections: template.sections.map { src in
                 InspectionSection(
                     id: StableUUID.from(seed: "\(jobId.uuidString)-section-\(src.sectionId)"),

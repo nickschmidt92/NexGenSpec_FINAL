@@ -354,7 +354,13 @@ struct InvoiceAndSendView: View {
         let additionalRow = additionalServices.isEmpty ? "" : """
             <tr><td style="padding:8px 12px;color:#666;">Additional Services</td><td style="padding:8px 12px;text-align:right;">\(additionalServices.htmlEscaped)</td></tr>
             """
-        let companyName = InspectorProfile.shared.companyName
+        // Read branding from the inspection's frozen snapshot (set at creation),
+        // so an inspection synced from another device shows the correct company
+        // identity/contact rather than this device's (possibly blank) profile.
+        // Fall back to the live profile ONLY when the snapshot field is empty —
+        // i.e. for pre-build-26 inspections.
+        let profile = InspectorProfile.shared
+        let companyName = inspection.companyName.isEmpty ? profile.companyName : inspection.companyName
         let inspectorLine = companyName.isEmpty ? inspection.inspectorName : "\(inspection.inspectorName) — \(companyName)"
 
         // The client-facing email is the inspector's brand, not ours. Header
@@ -364,8 +370,10 @@ struct InvoiceAndSendView: View {
         let brandName = companyName.trimmingCharacters(in: .whitespaces).isEmpty
             ? inspection.inspectorName
             : companyName
-        let profileEmail = InspectorProfile.shared.email.trimmingCharacters(in: .whitespaces)
-        let profilePhone = InspectorProfile.shared.phone.trimmingCharacters(in: .whitespaces)
+        let snapshotEmail = inspection.companyEmail.isEmpty ? profile.email : inspection.companyEmail
+        let snapshotPhone = inspection.companyPhone.isEmpty ? profile.phone : inspection.companyPhone
+        let profileEmail = snapshotEmail.trimmingCharacters(in: .whitespaces)
+        let profilePhone = snapshotPhone.trimmingCharacters(in: .whitespaces)
         var footerBits: [String] = []
         if !brandName.trimmingCharacters(in: .whitespaces).isEmpty { footerBits.append(brandName) }
         if !profileEmail.isEmpty { footerBits.append(profileEmail) }

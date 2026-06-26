@@ -125,7 +125,7 @@ public enum AccountDeletionReceiptService {
         App: NexGenSpec \(inputs.appVersion) (\(inputs.buildNumber))
         Device: \(inputs.deviceModel) · iOS \(inputs.osVersion)
 
-        The PDF attached (\(attachmentFileName)) is your permanent record. NexGenSpec has no server-side copy of your inspections, photos, signatures, or reports — local-first by design — so this receipt is the only artifact confirming the deletion took place.
+        The PDF attached (\(attachmentFileName)) is your permanent record. NexGenSpec has no server-side copy of your inspections, photos, signatures, or reports — your data stays on your device and, with iCloud Sync on, in your own private iCloud account, never on a NexGenSpec server. Deleting your account wipes this device and tears down the synced copy in your private iCloud, so this receipt is the only artifact confirming the deletion took place.
 
         Per the NexGenSpec Terms of Use, the 5-year inspection-record retention obligation rests with you (the inspector). If you needed to keep any of the wiped inspection data for that obligation, contact contact@nexgenspec.com immediately; we cannot recover wiped data but we can document the timeline for your records.
 
@@ -197,7 +197,7 @@ public enum AccountDeletionReceiptService {
         y += 12
 
         let body = """
-        NexGenSpec is local-first. Your inspections, photos, signatures, and reports lived only on this device and have now been removed. NexGenSpec retains no server-side copy and cannot recover wiped data.
+        Your inspections, photos, signatures, and reports were stored on this device and, with iCloud Sync on, in your own private iCloud account. Deleting your account has removed them from this device and torn down the synced copy in your private iCloud. NexGenSpec retains no server-side copy and cannot recover wiped data.
 
         Per the NexGenSpec Terms of Use, the 5-year inspection-record retention obligation rests with you, the inspector. This receipt is your permanent confirmation that the deletion occurred and what was wiped. Save it with your business records.
 

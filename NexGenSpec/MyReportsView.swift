@@ -82,7 +82,7 @@ struct MyReportsView: View {
             Button("Delete", role: .destructive) { delete(item) }
             Button("Cancel", role: .cancel) {}
         } message: { item in
-            Text("This permanently removes “\(item.title)” from this device. If you haven’t shared it elsewhere, it can’t be recovered.")
+            Text("This permanently removes “\(item.title)”. With iCloud Sync on, deleting a synced report removes it from your other Apple devices too. If you haven’t shared or exported it elsewhere, it can’t be recovered.")
         }
     }
 
@@ -130,7 +130,7 @@ struct MyReportsView: View {
                 .foregroundStyle(.secondary)
             Text("No saved reports yet")
                 .font(AppFont.headline)
-            Text("Finalize an inspection and tap Export to save a report here. Reports stay on this device for your account and can be shared to Files, iCloud, or email anytime.")
+            Text("Finalize an inspection and tap Export to save a report here. Reports are saved to your account and, with iCloud Sync on, sync across your own Apple devices through your private iCloud. Share any report to Files, iCloud, or email anytime.")
                 .font(AppFont.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

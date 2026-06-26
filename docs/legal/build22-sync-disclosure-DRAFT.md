@@ -1,18 +1,36 @@
 # B-0118 — CloudKit Sync Disclosure (DRAFT for attorney review)
 
+> ## ⚠️ SUPERSEDED — DO NOT USE AS CURRENT TRUTH
+> **This is the OLD "sync dark" draft, written when build 22 shipped iCloud sync
+> OFF in Release. That is no longer the live model.** As of build 26 (1.0.0),
+> **iCloud Sync ships ON by default**: a user's inspections (inspection record,
+> report PDF, thumbnails) sync across THAT user's OWN Apple devices through their
+> PRIVATE iCloud account (Apple CloudKit). The data goes only to the user's own
+> iCloud — NexGenSpec never receives, stores, hosts, or can access it (no
+> NexGenSpec server/backend). Users can turn on **Local-Only mode** to keep
+> inspections on a single device. iCloud Sync is **not a backup**, and
+> **deletions sync** across the user's devices. The "CRITICAL TIMING" note below
+> (sync dark / "no inspection data leaves the device" / publish only at a future
+> GA) is therefore **FALSE for the shipping app and must NOT be relied on.**
+>
+> **Canonical, current source of truth:** `AppStore/SYNC_DISCLOSURE_DRAFT.md`.
+> Use that for all copy and the App Privacy label. The data-flow facts in §1
+> below remain broadly accurate, but read them as describing the **now-default-ON**
+> behavior, not a dormant capability.
+
 > **STATUS: DRAFT. Not legal advice. Not for publication as-is.** Authoritative legal
 > wording is the attorney track. This document gives (1) the *technical truth* of what
 > data moves where when sync is enabled, (2) machine-readable FAQ markup, and (3) a
 > suggested App Privacy mapping — so the attorney can write accurate copy and Nick can
 > answer App Store Connect correctly.
 >
-> **CRITICAL TIMING — read first.** Build 22 ships sync **dark**:
-> `SyncFeature.isEnabled` is hard-OFF in Release (it's a DEBUG-only dev toggle). A
-> build-22 App Store release behaves exactly like build 21 — **no inspection data
-> leaves the device.** So the live privacy/terms pages remain accurate for build 22 and
-> must **NOT** be changed to claim syncing until the release that flips sync ON in
-> Release (sync GA). Publish this rewrite *with that release*, not before. Doing it now
-> would misdescribe the shipped app.
+> **~~CRITICAL TIMING — read first.~~ (SUPERSEDED — see the box above.)** This
+> paragraph described build 22 shipping sync **dark** (`SyncFeature.isEnabled`
+> hard-OFF in Release, behaving like build 21 with no inspection data leaving the
+> device) and said the live privacy/terms pages must NOT claim syncing until a
+> future sync-GA release. **That timing no longer holds: sync is ON by default in
+> the shipping build**, so the privacy/terms/label copy MUST disclose iCloud sync
+> now. Retained only for history.
 
 ---
 
@@ -32,15 +50,21 @@
   stores only an opaque, irreversible hash of the iCloud user record — **never the Apple
   ID**. If the device's iCloud account changes, sync pauses ("refuse-and-isolate") and
   never mixes data between accounts.
-- **Opt-in + escape hatches:** OFF by default even when available; user turns it on. A
-  "Local-Only" mode forces it fully off. The app never *requires* iCloud.
+- **Default + escape hatches:** ON by default for a signed-in user with iCloud available
+  (this is the live model as of build 26 — the older "OFF by default" wording was the
+  sync-dark plan and no longer holds). A "Local-Only" mode forces it fully off. The app
+  never *requires* iCloud.
 - **Deletion:** account deletion tears down the binding and best-effort deletes the
   user's CloudKit zone (no residual PII in iCloud). Sync is **not a backup** — a deletion
   propagates across the user's own devices.
 
-## 2. Copy deltas (DRAFT — publish at GA, attorney to finalize)
+## 2. Copy deltas (DRAFT — sync is now LIVE/default-ON; attorney to finalize)
 
-| Page | Current (true while sync is dark) | GA replacement (DRAFT) |
+> The "Current (true while sync is dark)" column below is the OLD, now-FALSE copy —
+> it must NOT remain on the live pages. The right-hand column is the wording that is
+> accurate today; treat it as the required replacement, not a future GA option.
+
+| Page | OLD copy — now FALSE (was "true while sync is dark") | Required replacement (DRAFT) |
 |---|---|---|
 | `privacy.html` on-device clause | "All data remains on your device…" | "NexGenSpec still never stores your inspection content. If you enable iCloud Sync, your inspections sync across **your own** devices through **your private iCloud account** (Apple CloudKit) — only to your iCloud, never to our servers." |
 | `terms.html` Multi-device note | "…do NOT sync between devices." | "With iCloud Sync on, inspections sync across your own devices via your private iCloud account; NexGenSpec never receives them. Sync is not a backup — keep your own backups; deletions sync between your devices." |
@@ -56,9 +80,9 @@ both flag states. Keep the website wording in lockstep with those.
 - **Does NexGenSpec store my inspections on its servers?** No. NexGenSpec never
   stores or can read your inspection content. Sync off → on device only; sync on → your
   own private iCloud, not our servers.
-- **How do my inspections sync?** If you enable iCloud Sync, across your own devices on
-  the same iCloud account, via Apple's CloudKit private database. Opt-in; can be turned
-  off or set to Local-Only anytime.
+- **How do my inspections sync?** With iCloud Sync on (the default), across your own
+  devices on the same iCloud account, via Apple's CloudKit private database. You can turn
+  it off or set Local-Only anytime.
 - **Is iCloud Sync a backup?** No — sync mirrors data across devices, so a deletion syncs
   too. Keep an independent backup of finalized inspections.
 - **Do my clients' details go to NexGenSpec or third parties?** No. Client content stays
@@ -71,7 +95,7 @@ both flag states. Keep the website wording in lockstep with those.
   "@type": "FAQPage",
   "mainEntity": [
     {"@type":"Question","name":"Does NexGenSpec store my inspections on its servers?","acceptedAnswer":{"@type":"Answer","text":"No. NexGenSpec never stores or can read your inspection content. With iCloud Sync off, everything stays on your device; with it on, data syncs through your own private iCloud account, not our servers."}},
-    {"@type":"Question","name":"How do my inspections sync between my devices?","acceptedAnswer":{"@type":"Answer","text":"If you enable iCloud Sync, inspections sync across your own devices signed into the same iCloud account via Apple's CloudKit private database. It is opt-in and can be turned off or set to Local-Only at any time."}},
+    {"@type":"Question","name":"How do my inspections sync between my devices?","acceptedAnswer":{"@type":"Answer","text":"With iCloud Sync on (the default), inspections sync across your own devices signed into the same iCloud account via Apple's CloudKit private database. You can turn it off or set Local-Only at any time."}},
     {"@type":"Question","name":"Is iCloud Sync a backup?","acceptedAnswer":{"@type":"Answer","text":"No. Sync mirrors the same data across your devices, so a deletion syncs too. Keep an independent backup of finalized inspections."}},
     {"@type":"Question","name":"Do my clients' details go to NexGenSpec or third parties?","acceptedAnswer":{"@type":"Answer","text":"No. Client content lives on your device and, if sync is on, in your private iCloud. NexGenSpec never receives it. You remain the data controller for client information."}}
   ]
@@ -81,12 +105,13 @@ both flag states. Keep the website wording in lockstep with those.
 
 ## 4. App Store Connect — App Privacy questionnaire (suggested mapping)
 
-> Decide WITH the attorney whether build 22 (sync dark) needs any change at all. Two
-> views: (a) Release behavior = no-data-leaves, so answers are unchanged from build 21;
-> (b) the binary contains the dormant capability + CloudKit entitlement, so some disclose
-> proactively. Compliance judgment, not a code fact.
+> SUPERSEDED framing: the old "build 22 sync dark / no-data-leaves / answers unchanged
+> from build 21" debate no longer applies — sync is ON by default in the shipping build,
+> so the label MUST disclose iCloud sync. The mapping below is the disclosing answer.
+> Final wording is a compliance judgment to confirm with the attorney; see the canonical
+> `AppStore/SYNC_DISCLOSURE_DRAFT.md` §4.
 
-At sync GA (or if disclosing now):
+With sync ON by default (the live model):
 - CloudKit private DB = the **user's own iCloud**, not a third-party SDK and generally
   **not "data collected by the developer"** under Apple's guidance.
 - Collected for auth: email + (Sign in with Apple) user id → *App Functionality / Account
@@ -99,6 +124,10 @@ At sync GA (or if disclosing now):
   device or in the user's private iCloud).
 
 ## 5. Ownership
-- This draft (facts + JSON-LD + ASC mapping): in-repo starting point. **Attorney
-  finalizes prose. Nick answers App Store Connect.**
-- Publish website changes **with the sync-GA release**, not for build 22.
+- This draft (facts + JSON-LD + ASC mapping): SUPERSEDED in-repo starting point.
+  Canonical copy is `AppStore/SYNC_DISCLOSURE_DRAFT.md`. **Attorney finalizes prose.
+  Nick answers App Store Connect.**
+- The old "publish website changes only at sync-GA, not for build 22" instruction is
+  VOID: sync is live/default-ON as of build 26, so the privacy/terms/support pages and
+  the App Privacy label MUST disclose iCloud sync now — they must not keep the old
+  local-only/no-sync wording.

@@ -262,6 +262,21 @@ public struct Inspection: Identifiable, Codable, Equatable {
     public var propertyAddress: String
     public var inspectionDate: Date
     public var inspectorName: String
+    /// Company/branding snapshot, frozen onto the inspection at creation from
+    /// `InspectorProfile.shared` (alongside `inspectorName`). Carried IN the
+    /// synced inspection payload — NOT in device-local UserDefaults — so a
+    /// record finalized on device A renders the report/invoice/ZIP with the
+    /// correct company identity on device B (the profile is device-local and
+    /// would otherwise be blank on B). Frozen at creation keeps the finalized
+    /// integrity hash deterministic and byte-reproducible across devices.
+    public var companyName: String
+    public var licenseNumber: String
+    public var companyPhone: String
+    public var companyEmail: String
+    /// Company logo, stored as a base64-encoded PNG so it rides along in the
+    /// JSON payload (kept reasonably small — the source PNG is capped at 512px
+    /// longest side by `InspectorProfile`). Nil when no logo was set.
+    public var companyLogoBase64: String?
     public var sections: [InspectionSection]
     public var signatures: [InspectionSignature]
     public var inspectorConfirmed: Bool
@@ -314,6 +329,11 @@ public struct Inspection: Identifiable, Codable, Equatable {
         propertyAddress: String,
         inspectionDate: Date,
         inspectorName: String,
+        companyName: String = "",
+        licenseNumber: String = "",
+        companyPhone: String = "",
+        companyEmail: String = "",
+        companyLogoBase64: String? = nil,
         sections: [InspectionSection],
         signatures: [InspectionSignature] = [],
         inspectorConfirmed: Bool = false,
@@ -341,6 +361,11 @@ public struct Inspection: Identifiable, Codable, Equatable {
         self.propertyAddress = propertyAddress
         self.inspectionDate = inspectionDate
         self.inspectorName = inspectorName
+        self.companyName = companyName
+        self.licenseNumber = licenseNumber
+        self.companyPhone = companyPhone
+        self.companyEmail = companyEmail
+        self.companyLogoBase64 = companyLogoBase64
         self.sections = sections
         self.signatures = signatures
         self.inspectorConfirmed = inspectorConfirmed
@@ -364,7 +389,9 @@ extension Inspection {
     enum CodingKeys: String, CodingKey {
         case inspectionId, inspectionNumber, title, description, creationDate
         case clientName, clientEmail, clientPhone, propertyAddress, inspectionDate
-        case inspectorName, sections, signatures, inspectorConfirmed, videos
+        case inspectorName
+        case companyName, licenseNumber, companyPhone, companyEmail, companyLogoBase64
+        case sections, signatures, inspectorConfirmed, videos
         case weather, timerStartDate, timerElapsedSeconds
         case coverPhotoFileName, buyersAgent, listingAgent
         case scheduledDurationMinutes, calendarEventIdentifier, calendarIdentifier
@@ -384,6 +411,15 @@ extension Inspection {
         propertyAddress = try c.decode(String.self, forKey: .propertyAddress)
         inspectionDate = try c.decode(Date.self, forKey: .inspectionDate)
         inspectorName = try c.decode(String.self, forKey: .inspectorName)
+        // Branding snapshot added in build 26. Decode OPTIONALLY with safe
+        // defaults so inspections stored/synced by older builds (no branding
+        // keys) still decode without throwing — they fall back to the live
+        // profile at render time (see HTMLReportRenderer / InvoiceAndSendView).
+        companyName = try c.decodeIfPresent(String.self, forKey: .companyName) ?? ""
+        licenseNumber = try c.decodeIfPresent(String.self, forKey: .licenseNumber) ?? ""
+        companyPhone = try c.decodeIfPresent(String.self, forKey: .companyPhone) ?? ""
+        companyEmail = try c.decodeIfPresent(String.self, forKey: .companyEmail) ?? ""
+        companyLogoBase64 = try c.decodeIfPresent(String.self, forKey: .companyLogoBase64)
         sections = try c.decode([InspectionSection].self, forKey: .sections)
         signatures = try c.decode([InspectionSignature].self, forKey: .signatures)
         inspectorConfirmed = try c.decode(Bool.self, forKey: .inspectorConfirmed)
@@ -414,6 +450,15 @@ extension Inspection {
         try c.encode(propertyAddress, forKey: .propertyAddress)
         try c.encode(inspectionDate, forKey: .inspectionDate)
         try c.encode(inspectorName, forKey: .inspectorName)
+        // Branding snapshot (build 26). Always encode the string fields (they
+        // default to "") so the canonical, sorted-key JSON the finalize
+        // integrity hash is computed over is deterministic; the logo is
+        // optional and only encoded when present.
+        try c.encode(companyName, forKey: .companyName)
+        try c.encode(licenseNumber, forKey: .licenseNumber)
+        try c.encode(companyPhone, forKey: .companyPhone)
+        try c.encode(companyEmail, forKey: .companyEmail)
+        try c.encodeIfPresent(companyLogoBase64, forKey: .companyLogoBase64)
         try c.encode(sections, forKey: .sections)
         try c.encode(signatures, forKey: .signatures)
         try c.encode(inspectorConfirmed, forKey: .inspectorConfirmed)

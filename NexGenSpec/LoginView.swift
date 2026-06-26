@@ -306,6 +306,7 @@ private struct CreateAccountView: View {
     @ObservedObject var authManager: AuthManager
     var onDismiss: () -> Void
 
+    @State private var fullName = ""
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
@@ -331,6 +332,13 @@ private struct CreateAccountView: View {
                     // color scheme correctly. Both password fields tagged
                     // .newPassword so iOS treats them as a confirm-password
                     // pair and auto-fills BOTH on "Use Strong Password".
+                    //
+                    // Full name is required so the client report prints a human
+                    // name instead of the login email. .name content type lets
+                    // iOS offer the contact-name autofill.
+                    TextField("Full name", text: $fullName)
+                        .textContentType(.name)
+                        .autocorrectionDisabled()
                     TextField("Email", text: $email)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
@@ -415,7 +423,12 @@ private struct CreateAccountView: View {
 
     private func createAccount() {
         errorMessage = nil
+        let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorMessage = "Please enter your full name."
+            return
+        }
         guard !trimmed.isEmpty else {
             errorMessage = "Please enter an email address."
             return
@@ -425,7 +438,7 @@ private struct CreateAccountView: View {
             return
         }
         Task { @MainActor in
-            let ok = await authManager.createAccount(email: trimmed, password: password)
+            let ok = await authManager.createAccount(email: trimmed, password: password, fullName: trimmedName)
             if ok {
                 dismiss()
                 onDismiss()

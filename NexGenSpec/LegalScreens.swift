@@ -62,14 +62,15 @@ struct PrivacyPolicyView: View {
                         Group {
                             Text("""
                             1. Zero-Storage Commitment
-                            NexGenSpec is designed as a local-first application. NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. All data you collect remains on your device or within your chosen third-party storage providers (e.g., iCloud, email).
+                            NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. We operate no server-side database of inspection content. Your data stays on your device and, when iCloud Sync is on (the default), syncs across your own Apple devices through your private iCloud account (Apple CloudKit) — it goes only to your iCloud, never to NexGenSpec. Turn on Local-Only mode to keep inspections on a single device. iCloud Sync is not a backup, and deletions sync across your devices.
 
                             2. Information We Receive (Limited)
-                            Because we do not store your data on our servers, we only interact with:
+                            We do not store your inspection content on our servers. The only data that leaves your device is:
                             • Account login: Your email and an encrypted password — or, if you use Sign in with Apple, an Apple-issued user identifier and the email Apple chooses to share. Stored in Firebase Authentication.
                             • Optional fallback contact email: If you provide one at signup, used only if your primary email becomes unreachable.
                             • Anonymized crash reports: Sent to Firebase Crashlytics if the app crashes. No inspection content, no client info.
                             • Inspection weather (automatic): When you create or open an inspection that has no saved weather, the approximate coordinates (~1 km) of your current location are sent to Open-Meteo (open-meteo.com), a free no-account weather service, to fetch current conditions. No account, no identifier, no tracking, and we keep no copy. Deny Location in iOS Settings to turn it off.
+                            • iCloud Sync (on by default): When iCloud Sync is on, your inspections — the inspection record, report PDF, and thumbnails — sync across your own Apple devices through your private iCloud account (Apple CloudKit). This data goes only to your iCloud; NexGenSpec never receives, stores, or can access it. Turn on Local-Only mode to keep inspections on a single device.
 
                             We do not collect analytics, advertising identifiers, contact lists, or any inspection content. We do not collect or store your location on our servers (see Device Permissions → Location below for the only, on-demand uses of location).
 
@@ -174,10 +175,11 @@ struct PrivacyPolicyContent: View {
                     Group {
                         Text("""
                         1. Zero-Storage Commitment
-                        NexGenSpec is designed as a local-first application. NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. All data you collect remains on your device or within your chosen third-party storage providers (e.g., iCloud, Email).
+                        NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. We operate no server-side database of inspection content. Your data stays on your device and, when iCloud Sync is on (the default), syncs across your own Apple devices through your private iCloud account (Apple CloudKit) — it goes only to your iCloud, never to NexGenSpec. Turn on Local-Only mode to keep inspections on a single device. iCloud Sync is not a backup, and deletions sync across your devices.
 
                         2. Information Handling
-                        Because we do not store your data on our servers, we only interact with the following:
+                        We do not store your inspection content on our servers. We interact with the following:
+                        • iCloud Sync (on by default): When iCloud Sync is on, your inspections — the inspection record, report PDF, and thumbnails — sync across your own Apple devices through your private iCloud account (Apple CloudKit). This data goes only to your iCloud; NexGenSpec never receives, stores, or can access it. Turn on Local-Only mode to keep inspections on a single device.
                         • Device Permissions: The App can request access to your Camera, Microphone, Photo Library, Calendar, and Location. The Microphone is used only to record audio alongside video when you capture a walkthrough video; that audio stays on your device and is never sent to our servers. The Calendar permission, when granted, lets NexGenSpec add inspection appointments to a calendar you choose and read your other events to flag scheduling conflicts; calendar data never leaves your device. Location is optional: when you create or open an inspection, the app automatically fetches current weather by sending the approximate coordinates (~1 km) of your location to Open-Meteo (open-meteo.com); and when you tap "Use Current Location," a one-time fix is resolved into a street address using Apple's location services. Location is never stored on our servers, never linked to your identity, and never used for tracking. All other features work without it.
                         • Usage & Diagnostics: We may receive anonymous technical logs (crash reports) via standard developer tools to fix bugs. This data does not contain your inspection content or client personal information.
 
@@ -191,7 +193,7 @@ struct PrivacyPolicyContent: View {
                         When you export a report via email or save it to a cloud provider (like Google Drive or iCloud), that data is subject to the privacy policy of that specific provider. NexGenSpec does not control or see this data during the transfer.
 
                         5. Security
-                        Since your data is stored locally, it is protected by your device's security (Passcode, FaceID/TouchID, and iOS Encryption). We recommend keeping your device updated and utilizing Apple's native security features to protect professional records.
+                        On your device, your data is protected by your device's security (Passcode, FaceID/TouchID, and iOS Encryption). When iCloud Sync is on, your inspections sync through your private iCloud account, where Apple encrypts them in transit and at rest; NexGenSpec never receives or stores them. We recommend keeping your device updated and utilizing Apple's native security features to protect professional records.
 
                         6. Contact
                         NexGenSpec — contact@nexgenspec.com
@@ -269,7 +271,7 @@ struct TermsOfServiceView: View {
                             NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The "Mark Invoice as Paid" toggle is a record-keeping aid only.
 
                             5. Data & Privacy
-                            Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions. Inspection content never leaves the device unless you choose to email a PDF report.
+                            Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions, and (d) when iCloud Sync is on (the default), your inspections — the inspection record, report PDF, and thumbnails — which sync across your own Apple devices through your private iCloud account (Apple CloudKit). iCloud-synced data goes only to your iCloud; NexGenSpec never receives, stores, or can access it. Turn on Local-Only mode to keep inspections on a single device. iCloud Sync is not a backup, and deletions sync across your devices. NexGenSpec maintains no server-side copy of any inspection content.
 
                             6. Acceptable Use
                             • Use the app for lawful, professional inspection purposes only.
@@ -289,13 +291,13 @@ struct TermsOfServiceView: View {
                             We may suspend or terminate accounts that violate these Terms.
 
                             8. Data Retention & Backup Responsibility
-                            IMPORTANT — please read carefully. \(SyncFeature.dataLocationClause)
+                            IMPORTANT — please read carefully. \(SyncFeature.dataLocationClause) iCloud Sync is not a backup: it keeps your own devices in step (including propagating deletions), but it does not protect against the loss events below.
 
-                            Your data will be permanently and irrecoverably lost in any of the following events:
-                            • You uninstall the app from the home screen.
-                            • You tap "Delete Account" inside the app.
-                            • The device is factory-reset, restored, or sold without an iCloud Backup.
-                            • The device experiences hardware failure, is lost, or is stolen, without an iCloud Backup.
+                            Your inspection data will be permanently and irrecoverably lost in any of the following events:
+                            • You tap "Delete Account" inside the app — this wipes the device and tears down your synced iCloud copy.
+                            • You delete an inspection while iCloud Sync is on — the deletion syncs to your other devices.
+                            • You uninstall the app, factory-reset, restore, sell, or lose the device — and have no iCloud Sync copy on another device, no iCloud Backup, and no export.
+                            • The device experiences hardware failure, is lost, or is stolen, with no iCloud Sync copy on another device, no iCloud Backup, and no export.
                             • A bug in the app or in iOS results in data corruption.
 
                             NexGenSpec cannot recover lost inspection data under any circumstance, for any user, for any reason.
@@ -426,7 +428,7 @@ struct TermsOfServiceContent: View {
                         NexGenSpec includes invoice formatting and email-delivery features as a convenience. NexGenSpec does not process payments. Any payment between the inspector and their client is collected directly by the inspector outside the app. The "Mark Invoice as Paid" toggle inside the app is a record-keeping aid only.
 
                         5. Data & Privacy
-                        Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions. Inspection content never leaves the device unless you choose to email a PDF report.
+                        Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. The data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, (c) when an inspection captures weather, the approximate coordinates of your location, sent to Open-Meteo (open-meteo.com) to fetch current conditions, and (d) when iCloud Sync is on (the default), your inspections — the inspection record, report PDF, and thumbnails — which sync across your own Apple devices through your private iCloud account (Apple CloudKit). iCloud-synced data goes only to your iCloud; NexGenSpec never receives, stores, or can access it. Turn on Local-Only mode to keep inspections on a single device. iCloud Sync is not a backup, and deletions sync across your devices. NexGenSpec maintains no server-side copy of any inspection content.
 
                         6. Acceptable Use
                         • You agree to use the app for lawful, professional inspection purposes only.
@@ -438,7 +440,7 @@ struct TermsOfServiceContent: View {
                         You may delete your account at any time from inside the app (Settings → Delete Account), which permanently removes your authentication record and all locally stored inspections. We may suspend or terminate accounts that violate these Terms.
 
                         8. Disclaimer of Warranties
-                        The app is provided "as is" without warranties of any kind. We don't guarantee NexGenSpec will be uninterrupted, error-free, or compatible with every iOS version or device. Inspection content is stored on your device, not on a NexGenSpec server. Inspectors are responsible for maintaining their own backups.
+                        The app is provided "as is" without warranties of any kind. We don't guarantee NexGenSpec will be uninterrupted, error-free, or compatible with every iOS version or device. Inspection content is stored on your device and, when iCloud Sync is on, in your own private iCloud account — never on a NexGenSpec server. iCloud Sync is not a backup; inspectors are responsible for maintaining their own backups.
 
                         9. Limitation of Liability
                         NexGenSpec is software. Our liability is limited to the operation of that software — specifically: app availability, app bugs that cause data loss inside the app, and similar app-level issues.

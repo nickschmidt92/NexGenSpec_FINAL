@@ -72,6 +72,24 @@ final class InspectorProfile: ObservableObject {
         companyLogo = nil
     }
 
+    /// Re-reads the profile for the CURRENT namespace. Called from the
+    /// account-switch seam (NexGenSpecApp's `onChange(of: currentUID)`) alongside
+    /// `store.reloadFromDisk()` / `CustomTemplateStore.reload()`, so the profile
+    /// re-scopes on login / logout / account switch like its siblings. The flat
+    /// text keys live in `UserDefaults.standard` (re-read here for completeness),
+    /// while the company logo is namespaced under `FilePaths.appRoot` — so the
+    /// logo specifically must be reloaded from the now-current namespace, or
+    /// account B could keep showing account A's logo on a shared device.
+    @MainActor
+    func reload() {
+        inspectorName = UserDefaults.standard.string(forKey: Key.name) ?? ""
+        companyName = UserDefaults.standard.string(forKey: Key.company) ?? ""
+        licenseNumber = UserDefaults.standard.string(forKey: Key.license) ?? ""
+        phone = UserDefaults.standard.string(forKey: Key.phone) ?? ""
+        email = UserDefaults.standard.string(forKey: Key.email) ?? ""
+        companyLogo = loadLogoFromDisk()
+    }
+
     /// Base64-encoded PNG of the company logo (for embedding in HTML reports).
     ///
     /// Reads the bytes straight from the on-disk PNG that `saveLogoToDisk`
@@ -82,7 +100,13 @@ final class InspectorProfile: ObservableObject {
     /// back to the app icon even though a logo was set (B-0066). The disk copy
     /// is always a valid bitmap PNG, so this can't fail that way.
     var companyLogoBase64: String? {
-        guard let data = try? Data(contentsOf: Self.logoURL) else { return nil }
+        guard let data = try? Data(contentsOf: Self.logoURL), !data.isEmpty else { return nil }
+        // Validate the bytes actually decode to an image before handing them to
+        // the renderer. A corrupt or truncated on-disk PNG would otherwise be
+        // base64-encoded as-is and produce a broken <img> in the report with no
+        // fallback; returning nil here lets the renderer's NexGenSpec-logo
+        // fallback engage instead.
+        guard UIImage(data: data) != nil else { return nil }
         return data.base64EncodedString()
     }
 

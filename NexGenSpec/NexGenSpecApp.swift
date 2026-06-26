@@ -145,6 +145,11 @@ struct NexGenSpecApp: App {
                     // singleton — re-scope them on the same boundary so account B
                     // never sees account A's custom templates (same bug class).
                     CustomTemplateStore.shared.reload()
+                    // The inspector profile's company logo is namespaced under
+                    // appRoot (per-UID) and held in a launch-time singleton —
+                    // re-scope it on the same boundary so account B never renders
+                    // account A's logo/branding on a shared device (same bug class).
+                    InspectorProfile.shared.reload()
                     // Build 22: rebind the CloudKit mirror to the new user (no-op
                     // while the flag is OFF). Refuses-and-isolates if the iCloud
                     // account changed under this Firebase UID.

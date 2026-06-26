@@ -76,6 +76,10 @@ struct RootView: View {
                     AuditLog.log(event: "FallbackEmailPromptSheet onAppear")
                 }
         }
+        .sheet(isPresented: $authManager.pendingInspectorNamePrompt) {
+            InspectorNamePromptSheet(authManager: authManager)
+                .interactiveDismissDisabled()
+        }
         .onChange(of: authManager.pendingFallbackEmailPrompt) { _, newValue in
             AuditLog.log(event: "RootView observed pendingFallbackEmailPrompt → \(newValue)")
         }
@@ -143,6 +147,66 @@ private struct FallbackEmailPromptSheet: View {
             dismiss()
         } else {
             inlineError = "Please enter a valid email address."
+        }
+    }
+}
+
+/// One-time, REQUIRED capture of the inspector's human name. Presented when the
+/// signed-in account has no name (existing users created before name capture,
+/// Apple sign-ins where the name was hidden, or Apple re-logins where Apple no
+/// longer returns the name). The name is printed on the client report; without
+/// it the report would fall back to the login email. There is intentionally no
+/// Skip button and the sheet is non-dismissible — a name is mandatory.
+private struct InspectorNamePromptSheet: View {
+    @ObservedObject var authManager: AuthManager
+    @State private var name = ""
+    @State private var inlineError: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Enter your full name as it should appear on inspection reports. This is required.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    TextField("Full name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.name)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Inspector name")
+                } footer: {
+                    if let inlineError {
+                        Text(inlineError).foregroundStyle(.red).font(.caption)
+                    } else {
+                        Text("You can change this later in your inspector profile.")
+                            .font(.caption)
+                    }
+                }
+            }
+            .navigationTitle("Your Name")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        inlineError = nil
+        Task { @MainActor in
+            let ok = await authManager.setInspectorName(name)
+            if ok {
+                dismiss()
+            } else {
+                inlineError = "Please enter your full name."
+            }
         }
     }
 }
