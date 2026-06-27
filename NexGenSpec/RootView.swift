@@ -69,7 +69,17 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: onboardingCompleted)
         .animation(.easeInOut(duration: 0.35), value: authManager.isAuthenticated)
-        .sheet(isPresented: $authManager.pendingFallbackEmailPrompt) {
+        .sheet(isPresented: Binding(
+            // Sequence the two REQUIRED prompts so they never contend for the same
+            // presentation slot: the inspector-name sheet has priority, and the
+            // fallback-email sheet presents only once the name prompt is resolved.
+            // Two simultaneous `.sheet(isPresented:)` on one view race (SwiftUI
+            // presents one and drops the other) — this hit a brand-new Apple user
+            // who hid BOTH their name and email. The setter still writes the
+            // underlying flag, so Skip/Save dismiss correctly.
+            get: { authManager.pendingFallbackEmailPrompt && !authManager.pendingInspectorNamePrompt },
+            set: { authManager.pendingFallbackEmailPrompt = $0 }
+        )) {
             FallbackEmailPromptSheet(authManager: authManager)
                 .interactiveDismissDisabled()
                 .onAppear {

@@ -142,6 +142,59 @@ final class InspectionStoreTests: XCTestCase {
                      "content tampering is NEVER masked — heal refuses unless ONLY updatedAt drifted")
     }
 
+    // MARK: - Build-26 branding snapshot must not break pre-26 finalized hashes (audit F1)
+
+    private func brandingFinalizedVersion(companyName: String = "", licenseNumber: String = "",
+                                          companyPhone: String = "", companyEmail: String = "") -> InspectionVersion {
+        let id = UUID()
+        var inspection = Inspection(
+            id: id, clientName: "Brand Client", clientEmail: "", clientPhone: "",
+            propertyAddress: "1 Brand St", inspectionDate: Date(timeIntervalSince1970: 500),
+            inspectorName: "Inspector", sections: []
+        )
+        inspection.companyName = companyName
+        inspection.licenseNumber = licenseNumber
+        inspection.companyPhone = companyPhone
+        inspection.companyEmail = companyEmail
+        return InspectionVersion(
+            id: id, versionNumber: 1, status: .final,
+            finalizedAt: Date(timeIntervalSince1970: 500), locked: true, inspection: inspection
+        )
+    }
+
+    /// A report finalized under build <= 25 sealed its integrity hash over canonical
+    /// JSON that contained NO branding keys. Build 26 added four branding strings; if
+    /// they were encoded even when empty, the sorted-key canonical JSON would differ
+    /// and verify() would FALSE-positive an INTEGRITY CHECK FAILED on a legitimate,
+    /// untouched report. Guard: empty branding must be OMITTED from the encoding so it
+    /// stays byte-identical to pre-26 and the old sealed hash keeps verifying.
+    func testEmptyBrandingIsOmittedFromCanonicalEncoding() throws {
+        let version = brandingFinalizedVersion()  // all branding empty
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let json = String(data: try encoder.encode(version), encoding: .utf8) ?? ""
+        XCTAssertFalse(json.contains("\"companyName\""), "empty branding must be omitted (byte-identity with pre-26 seal)")
+        XCTAssertFalse(json.contains("\"licenseNumber\""))
+        XCTAssertFalse(json.contains("\"companyPhone\""))
+        XCTAssertFalse(json.contains("\"companyEmail\""))
+        XCTAssertFalse(json.contains("\"companyLogoBase64\""), "nil logo must be omitted")
+    }
+
+    /// Populated branding IS sealed into the canonical form and hashes deterministically
+    /// (sorted keys; every device encodes the same frozen model bytes).
+    func testPopulatedBrandingIsSealedAndDeterministic() throws {
+        let version = brandingFinalizedVersion(companyName: "Acme Inspections", licenseNumber: "LIC-123",
+                                               companyPhone: "555-0100", companyEmail: "ops@acme.test")
+        XCTAssertEqual(try FinalizationService.canonicalHash(version),
+                       try FinalizationService.canonicalHash(version),
+                       "populated branding hashes deterministically")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let json = String(data: try encoder.encode(version), encoding: .utf8) ?? ""
+        XCTAssertTrue(json.contains("Acme Inspections"), "populated branding is sealed into the canonical form")
+        XCTAssertTrue(json.contains("LIC-123"))
+    }
+
     /// Perf-pass regression guard: the off-main autosave write
     /// (`writeVersionFileOnlyForAutoSave` → `ioQueue.async`) must still persist
     /// an edit durably across a process restart. A brand-new `InspectionStore`

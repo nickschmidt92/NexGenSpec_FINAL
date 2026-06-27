@@ -450,14 +450,19 @@ extension Inspection {
         try c.encode(propertyAddress, forKey: .propertyAddress)
         try c.encode(inspectionDate, forKey: .inspectionDate)
         try c.encode(inspectorName, forKey: .inspectorName)
-        // Branding snapshot (build 26). Always encode the string fields (they
-        // default to "") so the canonical, sorted-key JSON the finalize
-        // integrity hash is computed over is deterministic; the logo is
-        // optional and only encoded when present.
-        try c.encode(companyName, forKey: .companyName)
-        try c.encode(licenseNumber, forKey: .licenseNumber)
-        try c.encode(companyPhone, forKey: .companyPhone)
-        try c.encode(companyEmail, forKey: .companyEmail)
+        // Branding snapshot (build 26). Encode each string field ONLY when
+        // non-empty (mirroring reminders/todos below). An inspection with no
+        // branding then serializes byte-identically to a pre-build-26 record,
+        // so the finalize integrity hash of any report sealed by an older build
+        // keeps verifying after upgrade — emitting an empty-string key would
+        // change the canonical sorted-key JSON and trip a FALSE "INTEGRITY
+        // CHECK FAILED" banner on a legitimate, untouched report. Populated
+        // branding still seals deterministically: sorted keys, and every device
+        // encodes the same frozen model bytes. The logo is optional.
+        if !companyName.isEmpty { try c.encode(companyName, forKey: .companyName) }
+        if !licenseNumber.isEmpty { try c.encode(licenseNumber, forKey: .licenseNumber) }
+        if !companyPhone.isEmpty { try c.encode(companyPhone, forKey: .companyPhone) }
+        if !companyEmail.isEmpty { try c.encode(companyEmail, forKey: .companyEmail) }
         try c.encodeIfPresent(companyLogoBase64, forKey: .companyLogoBase64)
         try c.encode(sections, forKey: .sections)
         try c.encode(signatures, forKey: .signatures)

@@ -300,7 +300,12 @@ struct InvoiceAndSendView: View {
     /// Subject line prefers the company name over the bare NexGenSpec
     /// wording so clients see the inspector's brand, not ours.
     private var invoiceSubject: String {
-        let company = profile.companyName.trimmingCharacters(in: .whitespaces)
+        // Prefer the inspection's frozen branding snapshot (set at creation) so
+        // an inspection synced from another device shows the correct company —
+        // matching the email body (invoiceEmailHTML) — and fall back to the
+        // live profile only when the snapshot is empty (pre-build-26 records).
+        let snapshotCompany = version.inspection.companyName.isEmpty ? profile.companyName : version.inspection.companyName
+        let company = snapshotCompany.trimmingCharacters(in: .whitespaces)
         let prefix = company.isEmpty ? "Inspection Report & Invoice" : "\(company) — Inspection Report & Invoice"
         return "\(prefix) – \(version.inspection.clientName)"
     }
