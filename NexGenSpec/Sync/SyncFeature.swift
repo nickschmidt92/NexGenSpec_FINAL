@@ -54,11 +54,12 @@ enum SyncFeature {
     // MARK: - In-app "multi-device" copy (flag-aware)
     //
     // The binary itself tells the user whether inspections sync between devices.
-    // Those strings become FALSE the moment sync is on, so they are gated on the
-    // master switch here to stay truthful in every flag state (build 22 slice 5;
-    // design §18). While sync ships dark (Release hard-OFF) the original "no sync"
-    // copy shows verbatim. AUTHORITATIVE legal wording is the B-0118 website +
-    // attorney track; these strings are the in-app mirror only.
+    // The "no sync" copy becomes FALSE the moment sync is on, so each string is
+    // gated on the master switch here to stay truthful in every flag state (build
+    // 22 slice 5; design §18). In Release sync is DEFAULT ON, so the iCloud-sync
+    // copy is what users normally see; the "no sync" branch only shows in a DEBUG
+    // build with the dev toggle off. AUTHORITATIVE legal wording is the B-0118
+    // website + attorney track; these strings are the in-app mirror only.
 
     /// Privacy-policy "Multi-Device" clause.
     static var multiDeviceLegalClause: String {

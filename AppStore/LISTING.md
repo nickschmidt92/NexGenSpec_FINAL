@@ -1,4 +1,4 @@
-# NexGenSpec — App Store Listing Copy (build 1.0.0(23))
+# NexGenSpec — App Store Listing Copy (build 1.0.0(26))
 
 Final, verified listing fields for the App Store submission. Source of truth for copy.
 Status + remaining ASC steps live in NickOS **T-01582**. Monetization model: `~/.claude/projects/-Users-nicholasschmidt/memory/nexgenspec-monetization-model.md`. Review notes: `AppStore/REVIEW_NOTES.md`.
@@ -63,7 +63,8 @@ Privacy Policy: https://nexgenspec.com/privacy.html
 - User Content > Other User Content — Linked, App Functionality
 - Diagnostics > Crash Data — NOT Linked, App Functionality
 - NOTE: location is shared with Open-Meteo (THIRD PARTY) for weather — answer the third-party-sharing questions accordingly.
+- iCLOUD SYNC (default ON): inspections — the inspection record, report PDF, and thumbnails — sync across the user's OWN Apple devices through their PRIVATE iCloud account (Apple CloudKit private DB). This is the user's own iCloud, NOT a NexGenSpec server and NOT a data-broker third party — NexGenSpec never receives, stores, or can access the data. User Content here (Photos/Videos + Other User Content) is therefore Linked to the user, but is the user's own data routed through their own iCloud. Users can turn on Local-Only mode to keep inspections on one device. Sync is one user across their own devices only — there is NO multi-user/company-team sharing. See `AppStore/SYNC_DISCLOSURE_DRAFT.md` for the App Privacy mapping and the open attorney/Apple-policy question on whether the user's own private iCloud counts as third-party sharing for the label.
 - Privacy Policy URL (entered on the App Privacy page): https://nexgenspec.com/privacy.html
 
 ## ⚠️ Marketing rewrite pending
-Nick is sourcing a marketing-expert rewrite of the Description (prompt issued 2026-06-23). If new copy comes back: length-check (≤4000) AND accuracy-check against the verified feature set above (no sync/cloud-backup claims; drone/thermal are IMPORT not capture; no prices) before pasting.
+Nick is sourcing a marketing-expert rewrite of the Description (prompt issued 2026-06-23). If new copy comes back: length-check (≤4000) AND accuracy-check against the verified feature set above before pasting. Accuracy guardrails: do NOT claim data is local-only / on-device-only / "never leaves your device" (FALSE under default-ON iCloud sync); if sync is mentioned, frame it correctly (inspections sync across the user's OWN devices via their PRIVATE iCloud / CloudKit, NexGenSpec never stores them, sync is NOT a backup, deletions propagate, no multi-user/team sharing); drone/thermal are IMPORT not capture; no prices.

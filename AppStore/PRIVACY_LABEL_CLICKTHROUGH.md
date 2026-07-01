@@ -48,10 +48,22 @@ For each type, ASC asks: linked to user / used for tracking / purposes.
 > defect commentary, signatures.
 >
 > Note (applies to Photos/Videos + Other User Content above): this content is
-> stored on-device only and is never transmitted to NexGenSpec servers. Under
-> Apple's definition ("collect" = transmitted off device), these two arguably
-> belong in "Not Collected"; they are disclosed here conservatively. Revisit if
-> cloud sync or server-side report storage ever ships.
+> stored on-device and, with iCloud Sync ON (the default), syncs across the
+> user's OWN Apple devices through their PRIVATE iCloud account (Apple CloudKit
+> private database). It is NEVER transmitted to or stored by NexGenSpec — there
+> is no NexGenSpec server/backend in the path; the data lives only on the
+> user's devices and in the user's own iCloud. Users can turn on Local-Only mode
+> to keep inspections on a single device. Because the inspection record (incl.
+> client name, address, defect commentary, signatures) and report PDF/thumbnails
+> sync within the user's iCloud, this content is declared Collected and Linked to
+> the user (it is the user's own data, routed through the user's own iCloud — not
+> a NexGenSpec data collection in the broker sense). Sync is one user across
+> their own devices only — no multi-user/company-team sharing. OPEN QUESTION
+> (decide with attorney, per `AppStore/SYNC_DISCLOSURE_DRAFT.md` §4): whether
+> routing the user's content through the user's OWN private iCloud counts as
+> "shared with third parties = Apple iCloud" on the label, or is treated as the
+> user's own storage. Default to the more-disclosing answer unless advised
+> otherwise.
 
 ### Location → Precise Location
 

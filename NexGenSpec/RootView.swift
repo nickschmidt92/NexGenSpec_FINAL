@@ -69,12 +69,26 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: onboardingCompleted)
         .animation(.easeInOut(duration: 0.35), value: authManager.isAuthenticated)
-        .sheet(isPresented: $authManager.pendingFallbackEmailPrompt) {
+        .sheet(isPresented: Binding(
+            // Sequence the two REQUIRED prompts so they never contend for the same
+            // presentation slot: the inspector-name sheet has priority, and the
+            // fallback-email sheet presents only once the name prompt is resolved.
+            // Two simultaneous `.sheet(isPresented:)` on one view race (SwiftUI
+            // presents one and drops the other) — this hit a brand-new Apple user
+            // who hid BOTH their name and email. The setter still writes the
+            // underlying flag, so Skip/Save dismiss correctly.
+            get: { authManager.pendingFallbackEmailPrompt && !authManager.pendingInspectorNamePrompt },
+            set: { authManager.pendingFallbackEmailPrompt = $0 }
+        )) {
             FallbackEmailPromptSheet(authManager: authManager)
                 .interactiveDismissDisabled()
                 .onAppear {
                     AuditLog.log(event: "FallbackEmailPromptSheet onAppear")
                 }
+        }
+        .sheet(isPresented: $authManager.pendingInspectorNamePrompt) {
+            InspectorNamePromptSheet(authManager: authManager)
+                .interactiveDismissDisabled()
         }
         .onChange(of: authManager.pendingFallbackEmailPrompt) { _, newValue in
             AuditLog.log(event: "RootView observed pendingFallbackEmailPrompt → \(newValue)")
@@ -143,6 +157,66 @@ private struct FallbackEmailPromptSheet: View {
             dismiss()
         } else {
             inlineError = "Please enter a valid email address."
+        }
+    }
+}
+
+/// One-time, REQUIRED capture of the inspector's human name. Presented when the
+/// signed-in account has no name (existing users created before name capture,
+/// Apple sign-ins where the name was hidden, or Apple re-logins where Apple no
+/// longer returns the name). The name is printed on the client report; without
+/// it the report would fall back to the login email. There is intentionally no
+/// Skip button and the sheet is non-dismissible — a name is mandatory.
+private struct InspectorNamePromptSheet: View {
+    @ObservedObject var authManager: AuthManager
+    @State private var name = ""
+    @State private var inlineError: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Enter your full name as it should appear on inspection reports. This is required.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    TextField("Full name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.name)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Inspector name")
+                } footer: {
+                    if let inlineError {
+                        Text(inlineError).foregroundStyle(.red).font(.caption)
+                    } else {
+                        Text("You can change this later in your inspector profile.")
+                            .font(.caption)
+                    }
+                }
+            }
+            .navigationTitle("Your Name")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        inlineError = nil
+        Task { @MainActor in
+            let ok = await authManager.setInspectorName(name)
+            if ok {
+                dismiss()
+            } else {
+                inlineError = "Please enter your full name."
+            }
         }
     }
 }

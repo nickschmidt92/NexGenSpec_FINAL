@@ -29,6 +29,11 @@ Password: **‹not stored in repo — paste directly into App Store Connect ›*
 > the password manager. The previous password was committed and has been
 > rotated; never paste a real password back into this file.
 
+> **First-run setup:** On first launch the app requires entering an
+> Inspector / Full name. Enter something generic such as `App Reviewer` —
+> this name (not the sign-in email) is what prints on generated reports, so
+> using it keeps the demo email off the PDFs.
+
 This account is pre-flagged with full Pro entitlement so the reviewer can
 test every paywalled feature without going through StoreKit. To test the
 free-trial gate: any signed-in account starts with 3 free full
@@ -76,8 +81,19 @@ collected, transmitted, or stored.
 ## Privacy & Data
 
 NexGenSpec stores inspection data on-device with iOS Data Protection
-enabled (NSFileProtectionCompleteUnlessOpen). The only network usage is:
+enabled (NSFileProtectionCompleteUnlessOpen). With iCloud Sync ON (the
+default), a user's inspections — the inspection record, report PDF, and
+thumbnails — sync across THAT user's own Apple devices through their
+PRIVATE iCloud account (Apple CloudKit private database). The data goes
+only to the user's own iCloud; NexGenSpec never receives, stores, hosts,
+or has access to it (there is no NexGenSpec server/backend). Users can turn
+on Local-Only mode to keep inspections on a single device. iCloud Sync is
+not a backup, and deletions sync across the user's devices. The network
+usage is:
 
+- **Apple iCloud / CloudKit (private DB)** — cross-device sync of the
+  user's own inspections within their own iCloud account; never to a
+  NexGenSpec server (Local-Only mode disables this)
 - **Firebase Auth** — for sign-in (email/password or Sign in with Apple)
 - **Firebase Crashlytics** — anonymized crash reports
 - **Open-Meteo** (open-meteo.com) — inspection weather stamp; the device

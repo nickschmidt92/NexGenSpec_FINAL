@@ -41,9 +41,16 @@ final class InspectorProfile: ObservableObject {
         didSet { UserDefaults.standard.set(email, forKey: Key.email) }
     }
 
+    /// When true, the `companyLogo` didSet skips the disk write/delete. Used by
+    /// `clear(removeLogoFile: false)` to drop the in-memory logo on logout
+    /// WITHOUT deleting the per-UID file — the file belongs to the logging-out
+    /// user, is per-UID isolated (never bleeds into another account), and is
+    /// restored on their own re-login. Account deletion still wipes it.
+    private var suppressLogoDiskSync = false
+
     /// Company logo image for PDF report branding.
     @Published var companyLogo: UIImage? {
-        didSet { saveLogoToDisk(companyLogo) }
+        didSet { if !suppressLogoDiskSync { saveLogoToDisk(companyLogo) } }
     }
 
     private init() {
@@ -55,21 +62,50 @@ final class InspectorProfile: ObservableObject {
         self.companyLogo = loadLogoFromDisk()
     }
 
-    /// Wipes all stored profile data. Called from `AuthManager.logout()` so a
-    /// shared device never carries one inspector's identity into the next
-    /// user's session. This matters beyond convenience: the profile email is
-    /// auto-CC'd on invoices, and the name / company / license are printed on
-    /// the client-facing report — none of which should belong to a previous
-    /// user. The `didSet` observers persist the cleared values to UserDefaults,
-    /// and setting `companyLogo = nil` removes the logo file from disk.
+    /// Wipes the stored profile so a shared device never carries one inspector's
+    /// identity into the next user's session: the profile email is auto-CC'd on
+    /// invoices, and the name / company / license are printed on the client
+    /// report — none of which should belong to a previous user. The `didSet`
+    /// observers persist the cleared text values to UserDefaults.
+    ///
+    /// `removeLogoFile` controls the per-UID company logo on disk:
+    /// - `true` (default, used by account DELETION): delete the logo file too.
+    /// - `false` (used by LOGOUT): drop the logo from memory but KEEP the file.
+    ///   The logo is namespaced per-UID under `FilePaths.appRoot`, so it can
+    ///   never bleed into another account, and keeping it restores the user's
+    ///   own branding on their next login instead of silently losing it.
     @MainActor
-    func clear() {
+    func clear(removeLogoFile: Bool = true) {
         inspectorName = ""
         companyName = ""
         licenseNumber = ""
         phone = ""
         email = ""
-        companyLogo = nil
+        if removeLogoFile {
+            companyLogo = nil            // didSet removes the per-UID logo file
+        } else {
+            suppressLogoDiskSync = true  // drop from memory, keep the file
+            companyLogo = nil
+            suppressLogoDiskSync = false
+        }
+    }
+
+    /// Re-reads the profile for the CURRENT namespace. Called from the
+    /// account-switch seam (NexGenSpecApp's `onChange(of: currentUID)`) alongside
+    /// `store.reloadFromDisk()` / `CustomTemplateStore.reload()`, so the profile
+    /// re-scopes on login / logout / account switch like its siblings. The flat
+    /// text keys live in `UserDefaults.standard` (re-read here for completeness),
+    /// while the company logo is namespaced under `FilePaths.appRoot` — so the
+    /// logo specifically must be reloaded from the now-current namespace, or
+    /// account B could keep showing account A's logo on a shared device.
+    @MainActor
+    func reload() {
+        inspectorName = UserDefaults.standard.string(forKey: Key.name) ?? ""
+        companyName = UserDefaults.standard.string(forKey: Key.company) ?? ""
+        licenseNumber = UserDefaults.standard.string(forKey: Key.license) ?? ""
+        phone = UserDefaults.standard.string(forKey: Key.phone) ?? ""
+        email = UserDefaults.standard.string(forKey: Key.email) ?? ""
+        companyLogo = loadLogoFromDisk()
     }
 
     /// Base64-encoded PNG of the company logo (for embedding in HTML reports).
@@ -82,7 +118,13 @@ final class InspectorProfile: ObservableObject {
     /// back to the app icon even though a logo was set (B-0066). The disk copy
     /// is always a valid bitmap PNG, so this can't fail that way.
     var companyLogoBase64: String? {
-        guard let data = try? Data(contentsOf: Self.logoURL) else { return nil }
+        guard let data = try? Data(contentsOf: Self.logoURL), !data.isEmpty else { return nil }
+        // Validate the bytes actually decode to an image before handing them to
+        // the renderer. A corrupt or truncated on-disk PNG would otherwise be
+        // base64-encoded as-is and produce a broken <img> in the report with no
+        // fallback; returning nil here lets the renderer's NexGenSpec-logo
+        // fallback engage instead.
+        guard UIImage(data: data) != nil else { return nil }
         return data.base64EncodedString()
     }
 

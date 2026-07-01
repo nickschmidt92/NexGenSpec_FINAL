@@ -59,8 +59,19 @@ enum HTMLReportRenderer {
 
         let agentsBlock = Self.renderAgentsBlock(inspection: inspection)
 
-        // Embed company logo (or fallback to app icon) as base64 for report header
-        let customLogo = InspectorProfile.shared.companyLogoBase64
+        // Resolve company branding from the INSPECTION's frozen snapshot (set at
+        // creation). For inspections created before build 26 these fields are
+        // empty/nil, so fall back to the live device-local profile ONLY then —
+        // never for a populated snapshot, so a finalized record renders the same
+        // company identity on any device and its integrity hash stays valid.
+        let profile = InspectorProfile.shared
+        let brandCompanyName = inspection.companyName.isEmpty ? profile.companyName : inspection.companyName
+        let brandLicenseNumber = inspection.licenseNumber.isEmpty ? profile.licenseNumber : inspection.licenseNumber
+
+        // Embed company logo (or fallback to app icon) as base64 for report header.
+        // Prefer the snapshotted logo; fall back to the live profile logo only for
+        // pre-build-26 inspections (snapshot nil).
+        let customLogo = inspection.companyLogoBase64 ?? profile.companyLogoBase64
         let logoBase64: String = customLogo ?? {
             if let asset = UIImage(named: "AppIcon"),
                let data = asset.pngData() {
@@ -72,8 +83,8 @@ enum HTMLReportRenderer {
             }
             return ""
         }()
-        let logoAlt = customLogo != nil ? (InspectorProfile.shared.companyName.isEmpty ? "Company Logo" : InspectorProfile.shared.companyName).htmlEscaped : "NexGenSpec"
-        let logoLabel = customLogo != nil ? (InspectorProfile.shared.companyName).htmlEscaped : "NexGenSpec"
+        let logoAlt = customLogo != nil ? (brandCompanyName.isEmpty ? "Company Logo" : brandCompanyName).htmlEscaped : "NexGenSpec"
+        let logoLabel = customLogo != nil ? brandCompanyName.htmlEscaped : "NexGenSpec"
 
         // NexGenSpecLogo for cover page (prefer bundle asset, fall back to company logo / app icon)
         // Prefer the inspector's own company logo on the cover so the report is
@@ -215,7 +226,7 @@ enum HTMLReportRenderer {
         <p class="cover-address">\((inspection.propertyAddress).htmlEscaped)</p>
         <ul class="cover-details">
         <li><strong>Client:</strong> \((inspection.clientName).htmlEscaped)</li>
-        <li><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!InspectorProfile.shared.companyName.isEmpty ? " — \((InspectorProfile.shared.companyName).htmlEscaped)" : "")</li>
+        <li><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!brandCompanyName.isEmpty ? " — \(brandCompanyName.htmlEscaped)" : "")</li>
         <li><strong>Date:</strong> \(htmlDateFormatter.string(from: inspection.inspectionDate))</li>
         </ul>
         \(coverReportId != nil ? "<div class=\"cover-report-id\">\(coverReportId!)</div>" : "")
@@ -228,7 +239,7 @@ enum HTMLReportRenderer {
         \(emailPhoneMeta)
         <p class="meta"><strong>Property:</strong> \((inspection.propertyAddress).htmlEscaped)</p>
         <p class="meta"><strong>Date:</strong> \(htmlDateFormatter.string(from: inspection.inspectionDate))</p>
-        <p class="meta"><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!InspectorProfile.shared.companyName.isEmpty ? " — \((InspectorProfile.shared.companyName).htmlEscaped)" : "")\(!InspectorProfile.shared.licenseNumber.isEmpty ? " (License: \((InspectorProfile.shared.licenseNumber).htmlEscaped))" : "")</p>
+        <p class="meta"><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!brandCompanyName.isEmpty ? " — \(brandCompanyName.htmlEscaped)" : "")\(!brandLicenseNumber.isEmpty ? " (License: \(brandLicenseNumber.htmlEscaped))" : "")</p>
         \(agentsBlock)
         <div class="summary">
         <span class="badge safety">Safety: \(counts.safety)</span>

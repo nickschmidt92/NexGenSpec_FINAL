@@ -122,11 +122,26 @@ public enum InspectionZIPExportService {
         let hash = FinalizationService.loadReportHash(jobId: jobId, versionId: version.id) ?? ""
         let iso = ISO8601DateFormatter()
 
+        // Branding for the manifest comes from the inspection's frozen snapshot
+        // (set at creation), falling back to the live device-local profile ONLY
+        // when the snapshot field is empty — i.e. for pre-build-26 inspections.
+        // This keeps the manifest's company identity correct for an inspection
+        // exported on a different device than the one it was created on.
+        let profile = InspectorProfile.shared
+        let manifestCompany = version.inspection.companyName.isEmpty ? profile.companyName : version.inspection.companyName
+        let manifestLicense = version.inspection.licenseNumber.isEmpty ? profile.licenseNumber : version.inspection.licenseNumber
+        let manifestPhone = version.inspection.companyPhone.isEmpty ? profile.phone : version.inspection.companyPhone
+        let manifestEmail = version.inspection.companyEmail.isEmpty ? profile.email : version.inspection.companyEmail
+
         let manifest: [String: Any] = [
             "exportFormat": "1.0",
             "client": version.inspection.clientName,
             "address": version.inspection.propertyAddress,
             "inspector": version.inspection.inspectorName,
+            "company": manifestCompany,
+            "licenseNumber": manifestLicense,
+            "companyPhone": manifestPhone,
+            "companyEmail": manifestEmail,
             "inspectionDate": iso.string(from: version.inspection.inspectionDate),
             "finalizedAt": version.finalizedAt.map { iso.string(from: $0) } ?? "",
             "versionId": version.id.uuidString,

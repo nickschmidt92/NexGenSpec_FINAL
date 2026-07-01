@@ -6,11 +6,19 @@ enum EncryptedBackupService {
 
     // MARK: - Config (B-0047)
 
-    /// Current backup format. v3 streams one encrypted file at a time (header +
+    /// Current backup format. v4 streams one encrypted file at a time (header +
     /// per-file frames) so peak memory is bounded by the largest single file,
-    /// not the whole store (T-01438). v1 (un-iterated SHA-256) and v2 (one-shot
-    /// JSON envelope) are no longer restorable (rejected with a clear error).
-    static let currentSchemaVersion = 3
+    /// not the whole store (T-01438). v4 adds STREAM-COMPLETENESS authentication
+    /// over v3: the header carries the total `fileCount`, and every frame is
+    /// sealed with the header bytes + its own relative path as AES-GCM additional
+    /// authenticated data (AAD). Restore therefore (a) rejects any frame whose
+    /// path or header was altered, and (b) requires the number of decrypted
+    /// frames to equal `fileCount` — so a truncated / frame-dropped backup fails
+    /// loudly instead of restoring a silent subset and reporting success
+    /// (B-0047 stream-truncation hardening). v1/v2/v3 are no longer restorable;
+    /// per the disposable-tester-data decision they are rejected with a clear
+    /// "create a new backup" error (no migration path).
+    static let currentSchemaVersion = 4
     /// Minimum passphrase length. Enforced at BOTH create and restore, and
     /// referenced by the UI gates (no literals) so they cannot drift.
     static let minPassphraseLength = 12
@@ -53,15 +61,19 @@ enum EncryptedBackupService {
         }
     }
 
-    /// JSON header at the front of a v3 backup, length-prefixed by a UInt32.
-    /// Carries the KDF parameters (the per-file ciphertext follows as binary
-    /// frames). No file data lives here — that is the whole point (T-01438).
+    /// JSON header at the front of a v4 backup, length-prefixed by a UInt32.
+    /// Carries the KDF parameters and the total `fileCount` (the per-file
+    /// ciphertext follows as binary frames). The exact header bytes are bound
+    /// into every frame as AES-GCM AAD, so `fileCount` (and the KDF params)
+    /// cannot be tampered without failing decryption. No file data lives here —
+    /// that is the whole point (T-01438).
     struct BackupHeader: Codable {
         var schemaVersion: Int
         var createdAt: Date
         var salt: Data
         var kdfAlgorithm: String
         var kdfIterations: Int
+        var fileCount: Int
     }
 
     static func createEncryptedBackup(passphrase: String, destinationURL: URL) throws {
@@ -71,11 +83,29 @@ enum EncryptedBackupService {
         let salt = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
         let key = try deriveKey(passphrase: passphrase, salt: salt, iterations: pbkdf2Iterations)
 
+        // Enumerate the file set FIRST so the total count can be committed in the
+        // header (which is written before any frame). Restore compares it to the
+        // number of frames actually decrypted and rejects a truncated stream
+        // (B-0047). Only relative paths are held here — not file bytes — so peak
+        // memory is still bounded by the largest single file (T-01438).
+        let root = FilePaths.appRoot
+        var relativePaths: [String] = []
+        if FileManager.default.fileExists(atPath: root.path) {
+            for relative in try FileManager.default.subpathsOfDirectory(atPath: root.path) {
+                let absolute = root.appendingPathComponent(relative)
+                var isDir: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: absolute.path, isDirectory: &isDir), !isDir.boolValue else { continue }
+                if relative.hasSuffix(".backup.enc") { continue }
+                relativePaths.append(relative)
+            }
+        }
+
         // Write the length-prefixed header first (creating the file with file
         // protection), then append one encrypted file at a time so peak memory
         // is bounded by the largest single file, not the whole store (T-01438).
         let header = BackupHeader(schemaVersion: currentSchemaVersion, createdAt: Date(),
-                                  salt: salt, kdfAlgorithm: kdfAlgorithmID, kdfIterations: pbkdf2Iterations)
+                                  salt: salt, kdfAlgorithm: kdfAlgorithmID,
+                                  kdfIterations: pbkdf2Iterations, fileCount: relativePaths.count)
         let headerData = try JSONEncoder().encode(header)
         var prefix = Data()
         prefix.appendUInt32BE(UInt32(headerData.count))
@@ -86,21 +116,16 @@ enum EncryptedBackupService {
         defer { try? handle.close() }
         try handle.seekToEnd()
 
-        var fileCount = 0
-        let root = FilePaths.appRoot
-        if FileManager.default.fileExists(atPath: root.path) {
-            for relative in try FileManager.default.subpathsOfDirectory(atPath: root.path) {
-                let absolute = root.appendingPathComponent(relative)
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: absolute.path, isDirectory: &isDir), !isDir.boolValue else { continue }
-                if relative.hasSuffix(".backup.enc") { continue }
-                let fileData = try Data(contentsOf: absolute)           // one file in RAM
-                let sealed = try AES.GCM.seal(fileData, using: key)
-                try handle.write(contentsOf: frame(relativePath: relative, sealed: sealed))
-                fileCount += 1
-            }
+        for relative in relativePaths {
+            let absolute = root.appendingPathComponent(relative)
+            let fileData = try Data(contentsOf: absolute)           // one file in RAM
+            // Bind the header bytes + this file's relative path as AAD so a
+            // tampered count/path or a substituted frame fails AES-GCM open.
+            let frameAAD = aad(headerData: headerData, relativePath: relative)
+            let sealed = try AES.GCM.seal(fileData, using: key, authenticating: frameAAD)
+            try handle.write(contentsOf: frame(relativePath: relative, sealed: sealed))
         }
-        AuditLog.log(event: "Encrypted backup created (schema v\(currentSchemaVersion), PBKDF2 \(pbkdf2Iterations), \(fileCount) files, streamed)")
+        AuditLog.log(event: "Encrypted backup created (schema v\(currentSchemaVersion), PBKDF2 \(pbkdf2Iterations), \(relativePaths.count) files, streamed)")
     }
 
     static func restoreEncryptedBackup(passphrase: String, sourceURL: URL) throws {
@@ -119,7 +144,8 @@ enum EncryptedBackupService {
         }
         let headerLen = Int((firstByte + (try readExact(3, from: handle))).toUInt32BE())
         guard headerLen > 0, headerLen < 1_000_000 else { throw BackupError.corruptBackup }
-        let header = try JSONDecoder().decode(BackupHeader.self, from: readExact(headerLen, from: handle))
+        let headerData = try readExact(headerLen, from: handle)
+        let header = try JSONDecoder().decode(BackupHeader.self, from: headerData)
 
         guard header.schemaVersion == currentSchemaVersion else {
             throw BackupError.unsupportedSchema(found: header.schemaVersion, supported: currentSchemaVersion)
@@ -176,11 +202,22 @@ enum EncryptedBackupService {
             let stagedTarget = staging.appendingPathComponent(relative)
             let box = try AES.GCM.SealedBox(nonce: try AES.GCM.Nonce(data: nonceData),
                                             ciphertext: ciphertext, tag: tag)
-            let clear = try AES.GCM.open(box, using: key)
+            // Re-bind the same AAD (header bytes + this frame's path). A frame
+            // whose path was altered, or that came from a header with a tampered
+            // fileCount/KDF, fails this open() — it never reaches staging.
+            let clear = try AES.GCM.open(box, using: key,
+                                         authenticating: aad(headerData: headerData, relativePath: relative))
             // Same file-protection attributes as a direct restore (writeProtected).
             try FileSecurity.writeProtected(clear, to: stagedTarget)
             fileCount += 1
         }
+
+        // Stream-completeness check (B-0047): the number of frames actually
+        // decrypted must equal the count the (authenticated) header committed to.
+        // A truncated / frame-dropped backup ends at a clean frame boundary and
+        // would otherwise "restore" a silent subset and report success — here it
+        // fails loudly BEFORE the atomic swap, so the live store is never touched.
+        guard fileCount == header.fileCount else { throw BackupError.corruptBackup }
 
         // Phase 2 — atomic swap with snapshot rollback. A whole-tree
         // FileManager.replaceItemAt is avoided here: the live appRoot also holds
@@ -238,6 +275,17 @@ enum EncryptedBackupService {
     }
 
     // MARK: - Binary framing (v3 streaming)
+
+    /// Additional authenticated data bound into every frame (v4): the exact
+    /// header bytes followed by the frame's relative path. Reconstructed
+    /// identically on seal and open, so any tampering with the header (including
+    /// `fileCount`) or a frame's path fails AES-GCM authentication.
+    private static func aad(headerData: Data, relativePath: String) -> Data {
+        var a = Data()
+        a.append(headerData)
+        a.append(Data(relativePath.utf8))
+        return a
+    }
 
     /// Builds one per-file frame:
     /// `[pathLen u32][path][nonce 12][ctLen u64][ciphertext][tag 16]`.

@@ -35,6 +35,15 @@ public final class AuthManager: ObservableObject {
     /// UI binds to this to present the fallback-email capture sheet.
     @Published public var pendingFallbackEmailPrompt = false
 
+    /// True when the signed-in account carries no human name (neither a Firebase
+    /// `displayName` nor a device-local `InspectorProfile.inspectorName`). UI
+    /// binds to this to present a one-time, required name-capture sheet so the
+    /// client report never prints the login email as the inspector's name. This
+    /// covers existing users created before name capture, Apple sign-ins where
+    /// the name was hidden, and Apple re-logins (name only returns on the first
+    /// authorization).
+    @Published public var pendingInspectorNamePrompt = false
+
     /// Kept for compatibility with existing views (AppSettingsView uses role / isAdmin).
     /// In V1 every Firebase user is a standard user. Admin/team roles come from a later
     /// Firestore custom-claims pass; do not gate UI on this yet.
@@ -84,12 +93,42 @@ public final class AuthManager: ObservableObject {
             currentUID = user.uid
             isEmailVerified = user.isEmailVerified
             role = .user
+            // Re-seed the inspector name from the account-bound Firebase
+            // displayName when the device-local name is empty (e.g. a returning
+            // user whose logout cleared the device-local profile). The name is
+            // bound to the account, so it should flow back onto reports on
+            // re-login without forcing a re-type. The didSet persists it, so the
+            // currentUID onChange reload() reads back this value rather than "".
+            if InspectorProfile.shared.inspectorName.isEmpty,
+               let displayName = user.displayName,
+               !displayName.isEmpty {
+                InspectorProfile.shared.inspectorName = displayName
+            }
+            // One-time REQUIRED name capture: prompt only when the account has
+            // neither a Firebase displayName nor a device-local inspector name
+            // (after the re-seed above), so reports never fall back to the login
+            // email. Derive it BOTH ways every time — the prior code only ever
+            // set it true, so a racy applyUser that ran before a signup committed
+            // the name left the prompt stuck on for users who DID provide one.
+            pendingInspectorNamePrompt =
+                (user.displayName ?? "").isEmpty && InspectorProfile.shared.inspectorName.isEmpty
         } else {
             isAuthenticated = false
             currentUsername = nil
             currentUID = nil
             isEmailVerified = false
             role = .none
+            pendingInspectorNamePrompt = false
+            // Clear the device-local profile on EVERY signed-out transition, not
+            // just the in-app logout() path. The profile text fields live in flat
+            // (non-per-UID) UserDefaults, so a Firebase/server-side sign-out
+            // (token revoked, account disabled, password changed elsewhere) that
+            // reaches us via the auth-state listener — without routing through
+            // logout() — would otherwise leave the prior inspector's name/company/
+            // license/phone/email resident for the next account on a shared
+            // device. Keep the per-UID logo file (restored on that user's own
+            // re-login); it can't leak across accounts.
+            InspectorProfile.shared.clear(removeLogoFile: false)
         }
     }
 
@@ -121,10 +160,16 @@ public final class AuthManager: ObservableObject {
 
     /// Creates an account and sends a verification email. Returns true on success.
     /// Password must meet complexity rules (see `validatePassword`).
+    ///
+    /// `fullName` is the inspector's human name collected at signup. It is
+    /// committed to the Firebase user's `displayName` and seeded into
+    /// `InspectorProfile.shared.inspectorName` so the client report never
+    /// prints the login email as the inspector's name.
     @discardableResult
-    public func createAccount(email: String, password: String) async -> Bool {
+    public func createAccount(email: String, password: String, fullName: String = "") async -> Bool {
         authErrorMessage = nil
         let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard Self.isValidEmail(cleanEmail) else {
             authErrorMessage = "Please enter a valid email address."
@@ -141,6 +186,15 @@ public final class AuthManager: ObservableObject {
             let result = try await Auth.auth().createUser(withEmail: cleanEmail, password: password)
             // Fire-and-forget verification email; don't block account creation on delivery.
             try? await result.user.sendEmailVerification()
+            // Commit the human name to the account (fire-and-forget, like the
+            // verification email) and seed the device-local inspector profile so
+            // the first report uses the name instead of the login email.
+            if !cleanName.isEmpty {
+                let changeRequest = result.user.createProfileChangeRequest()
+                changeRequest.displayName = cleanName
+                try? await changeRequest.commitChanges()
+                InspectorProfile.shared.inspectorName = cleanName
+            }
             applyUser(result.user)
             // Email/password signup gets the same fallback-email prompt as the
             // SIWA new-user flow. The primary email could become unreachable
@@ -201,6 +255,31 @@ public final class AuthManager: ObservableObject {
         do {
             let result = try await Auth.auth().signIn(with: firebaseCredential)
             applyUser(result.user)
+            // Apple only returns fullName on the FIRST authorization for this
+            // Apple ID; on re-login (or if the user hid their name) it is nil.
+            // When present, format it into a single display string and commit it
+            // to the account + seed the device-local inspector profile so reports
+            // print the name rather than the (often relay) login email. Skip the
+            // write when the formatted name is empty so we never clobber an
+            // already-set name with a blank.
+            if let nameComponents = appleCredential.fullName {
+                let formatter = PersonNameComponentsFormatter()
+                let displayName = formatter.string(from: nameComponents)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !displayName.isEmpty {
+                    let changeRequest = result.user.createProfileChangeRequest()
+                    changeRequest.displayName = displayName
+                    try? await changeRequest.commitChanges()
+                    InspectorProfile.shared.inspectorName = displayName
+                }
+            }
+            // applyUser ran at the top of this method BEFORE the Apple name was
+            // seeded above, so it may have set pendingInspectorNamePrompt = true
+            // even though this user just shared their name. Recompute it now that
+            // the seed (if any) is committed: a new Apple user who shared their
+            // name is no longer forced through the required name sheet, while a
+            // user who HID their name (nothing seeded) correctly still is.
+            pendingInspectorNamePrompt = InspectorProfile.shared.inspectorName.isEmpty
             // Apple users may share a @privaterelay.appleid.com address (or no email
             // at all if they hide it). The fallback we capture here is our only
             // out-of-band way to reach the inspector if Apple's relay is later
@@ -351,6 +430,26 @@ public final class AuthManager: ObservableObject {
         pendingFallbackEmailPrompt = false
     }
 
+    // MARK: - Inspector name (required, one-time capture)
+
+    /// Persists the inspector's human name from the one-time required prompt.
+    /// Commits it to the Firebase user's `displayName` and to the device-local
+    /// `InspectorProfile.inspectorName`, then clears `pendingInspectorNamePrompt`
+    /// so the sheet dismisses. Returns false if the name is blank or no user is
+    /// signed in. The name remains editable later via the inspector profile.
+    @discardableResult
+    public func setInspectorName(_ name: String) async -> Bool {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return false }
+        guard let user = Auth.auth().currentUser else { return false }
+        let changeRequest = user.createProfileChangeRequest()
+        changeRequest.displayName = cleaned
+        try? await changeRequest.commitChanges()
+        InspectorProfile.shared.inspectorName = cleaned
+        pendingInspectorNamePrompt = false
+        return true
+    }
+
     // MARK: - Forgot password
 
     @discardableResult
@@ -402,14 +501,24 @@ public final class AuthManager: ObservableObject {
     public func logout() {
         authErrorMessage = nil
         do {
-            try Auth.auth().signOut()
-            applyUser(nil)
             // Clear the device-local inspector profile so the next user to log
             // in on this device doesn't inherit the previous inspector's email
             // (auto-CC'd on invoices) or name/license/company (printed on the
             // client report). The profile is not account-scoped, so logout is
             // the boundary where it must be reset.
-            InspectorProfile.shared.clear()
+            //
+            // Clear the flat (non-per-UID) text fields here so the next user on a
+            // shared device can't see them. We deliberately KEEP the per-UID
+            // company logo file (removeLogoFile: false): it is namespaced under
+            // the logging-out user's UID, so it can never bleed into another
+            // account, and deleting it on every logout silently destroyed the
+            // inspector's own logo (a regression) — it is restored on their own
+            // re-login and wiped only on account deletion. (applyUser(nil) below
+            // also clears, covering Firebase-initiated sign-outs that bypass this
+            // path entirely.)
+            InspectorProfile.shared.clear(removeLogoFile: false)
+            try Auth.auth().signOut()
+            applyUser(nil)
             // Custom templates are per-UID but held in a launch-time singleton;
             // clear the in-memory list now so the next user can't observe the
             // previous inspector's templates before the onChange reload fires
