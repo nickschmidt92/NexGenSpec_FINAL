@@ -264,11 +264,13 @@ public final class SubscriptionManager: ObservableObject {
         // Restore the cached entitlement immediately so the UI shows Pro on
         // launch before the StoreKit async walk completes. Read from the
         // Keychain (build 27+); the old UserDefaults cache was a plaintext plist
-        // bool that could be flipped to unlock Pro offline, so purge any legacy
-        // copy here. A legit Pro user re-seeds the Keychain cache on the next
-        // `currentEntitlements` walk — which reads the signed on-device receipt,
-        // not the network, so it re-confirms offline too.
-        Self.purgeLegacyUserDefaultsEntitlementCache()
+        // bool that could be flipped to unlock Pro offline, so migrate any
+        // legacy copy into the Keychain (preserving the offline-grace window
+        // across the upgrade) and purge the plist keys. The signed
+        // `currentEntitlements` walk remains the authority and re-seeds the
+        // cache on every pass — it reads the on-device receipt, not the
+        // network, so it re-confirms offline too.
+        Self.migrateAndPurgeLegacyUserDefaultsEntitlementCache()
         if let cache = Self.keychainReadEntitlementCache(),
            cache.isPro,
            Date().timeIntervalSince(cache.lastVerified) < Self.gracePeriod {
@@ -472,10 +474,29 @@ public final class SubscriptionManager: ObservableObject {
         return status == errSecSuccess
     }
 
-    /// One-time cleanup of the legacy plaintext UserDefaults entitlement cache
-    /// (pre-build-27), which was editable to spoof Pro. Safe to call every launch.
-    private static func purgeLegacyUserDefaultsEntitlementCache() {
+    /// One-time migration of the legacy plaintext UserDefaults entitlement
+    /// cache (pre-build-27) into the Keychain, then purge of the plist keys.
+    /// The legacy snapshot is carried over only when the Keychain cache is
+    /// still empty and the snapshot is inside the grace window, so an
+    /// upgrading Pro user keeps offline-grace cover on their first build-27
+    /// launch (otherwise a transient empty `currentEntitlements` walk on that
+    /// launch would demote them with no cache to fall back on). Security
+    /// exposure is unchanged vs build 26: a spoofed plist value survives at
+    /// most the remaining grace window, and the signed `currentEntitlements`
+    /// walk overwrites it at the first opportunity. Safe to call every launch
+    /// (no-op once the keys are gone).
+    private static func migrateAndPurgeLegacyUserDefaultsEntitlementCache() {
         let defaults = UserDefaults.standard
+        if keychainReadEntitlementCache() == nil,
+           defaults.bool(forKey: CacheKey.isPro),
+           let lastVerified = defaults.object(forKey: CacheKey.lastVerified) as? Date,
+           Date().timeIntervalSince(lastVerified) < gracePeriod {
+            keychainWriteEntitlementCache(
+                EntitlementCache(isPro: true,
+                                 activeProductID: defaults.string(forKey: CacheKey.activeProduct),
+                                 lastVerified: lastVerified)
+            )
+        }
         defaults.removeObject(forKey: CacheKey.isPro)
         defaults.removeObject(forKey: CacheKey.activeProduct)
         defaults.removeObject(forKey: CacheKey.lastVerified)

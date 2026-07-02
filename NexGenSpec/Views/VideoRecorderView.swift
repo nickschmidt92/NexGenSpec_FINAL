@@ -25,14 +25,20 @@ struct VideoRecorderView: UIViewControllerRepresentable {
         // Defense-in-depth: `.camera` traps on camera-less devices. Callers gate
         // on isSourceTypeAvailable(.camera); guard here too so an unguarded path
         // degrades to library video selection instead of crashing.
+        // Ordering matters: UIKit validates cameraCaptureMode against the
+        // picker's CURRENT mediaTypes (a fresh picker defaults to images
+        // only) and throws NSInvalidArgumentException if movie isn't in the
+        // list yet. mediaTypes must be set after sourceType and before
+        // cameraCaptureMode.
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
             picker.sourceType = .camera
+            picker.mediaTypes = [UTType.movie.identifier]
             picker.cameraCaptureMode = .video
             picker.videoQuality = .typeHigh
         } else {
             picker.sourceType = .photoLibrary
+            picker.mediaTypes = [UTType.movie.identifier]
         }
-        picker.mediaTypes = [UTType.movie.identifier]
         // Don't allow trim/edit — keep the capture flow single-step. A
         // follow-up edit pass can happen after we add a video editor.
         picker.allowsEditing = false
