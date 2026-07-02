@@ -311,7 +311,13 @@ struct InspectionOverviewView: View {
                 Text(exportService.errorMessage ?? "The report could not be exported as PDF. It may be too large.")
             }
             .sheet(isPresented: $showLiDARCapture, onDismiss: { loadLiDARScans() }) {
-                LiDARCaptureView(jobId: UUID(uuidString: version.inspection.inspectionId) ?? version.id)
+                LiDARCaptureView(
+                    jobId: UUID(uuidString: version.inspection.inspectionId) ?? version.id,
+                    // The save is async now: a scan that commits after this
+                    // sheet's onDismiss fired would stay invisible until the
+                    // next onAppear without this refresh.
+                    onScanSaved: { _ in loadLiDARScans() }
+                )
             }
             .sheet(item: $videoToPlay) { video in
                 VideoPlayerSheet(
