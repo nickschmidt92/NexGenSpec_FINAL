@@ -38,7 +38,7 @@ struct AppSettingsView: View {
     private var iCloudSyncSection: some View {
         SettingsSectionCard(
             title: "iCloud Sync",
-            subtitle: "Your inspections (the inspection record, report PDF, and thumbnails) sync across your Apple devices through your private iCloud. They go only to your iCloud — NexGenSpec never receives or stores them. Turn on Local-Only mode to keep inspections on this device. Sync is not a backup: deletions sync across your devices."
+            subtitle: "Your inspection records sync across your Apple devices through your private iCloud. Photos, videos, report PDFs, and thumbnails stay on the device where they were created — they do not sync yet. Your data goes only to your iCloud — NexGenSpec never receives or stores it. Turn on Local-Only mode to keep inspections on this device. Sync is not a backup: deletions sync across your devices."
         ) {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Toggle("Local-Only mode", isOn: $localOnlyMode)
@@ -489,10 +489,26 @@ struct AppSettingsView: View {
                             Label("Permanently remove your authentication record from our servers.", systemImage: "person.crop.circle.badge.minus")
                             Label("Permanently erase ALL inspections, photos, signatures, audit logs, and PDF reports from this device.", systemImage: "trash.fill")
                             Label("Make all locally stored data unrecoverable. NexGenSpec does not maintain server-side copies.", systemImage: "icloud.slash")
-                            Label("Send an account-deletion receipt by email to your account address and to contact@nexgenspec.com for our records.", systemImage: "envelope.badge")
+                            Label("Generate an account-deletion receipt (PDF) you can save or email for your records via the share sheet.", systemImage: "envelope.badge")
                         }
                         .font(AppFont.footnote)
                         .foregroundStyle(.primary)
+
+                        Divider().padding(.vertical, 4)
+
+                        Text("Your subscription is separate:")
+                            .font(AppFont.subheadline.weight(.semibold))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("If you have an active Pro subscription, deleting your account does NOT cancel it — Apple keeps billing you until you cancel the subscription yourself.", systemImage: "creditcard.trianglebadge.exclamationmark")
+                        }
+                        .font(AppFont.footnote)
+                        .foregroundStyle(.primary)
+                        Button("Manage / Cancel Subscription") {
+                            if let url = URL(string: "itms-apps://apps.apple.com/account/subscriptions") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .font(AppFont.footnote.weight(.semibold))
 
                         Divider().padding(.vertical, 4)
 
