@@ -404,8 +404,25 @@ enum LiDARScanPersistence {
 
     /// Persist a processed CapturedRoom to disk: USDZ export, floor-plan PNG
     /// render, and a LiDARScan record. Returns the saved scan on success.
-    @MainActor
-    static func save(room: CapturedRoom, jobId: UUID, name: String?) -> LiDARScan? {
+    ///
+    /// The whole pipeline runs off the main actor: `room.export` is a
+    /// CPU-bound USD encode that takes seconds for a furnished room and
+    /// froze the naming sheet when it ran on main. CapturedRoom is a value
+    /// type, FloorplanRenderer uses the thread-safe UIGraphicsImageRenderer,
+    /// and FileSecurity/LiDARScanStore are static helpers already used
+    /// off-main elsewhere. The JSON record stays the LAST write (audit H4):
+    /// a torn save can orphan a USDZ but never produce a record whose files
+    /// are missing. NEEDS ON-DEVICE IPAD VERIFICATION: room.export(to:) has
+    /// no documented main-thread requirement, but Apple's RoomPlan sample
+    /// calls it from main and the simulator cannot exercise capture at all —
+    /// do not merge on simulator evidence alone.
+    static func save(room: CapturedRoom, jobId: UUID, name: String?) async -> LiDARScan? {
+        await Task.detached(priority: .userInitiated) { () -> LiDARScan? in
+            saveSync(room: room, jobId: jobId, name: name)
+        }.value
+    }
+
+    private static func saveSync(room: CapturedRoom, jobId: UUID, name: String?) -> LiDARScan? {
         let scanId = UUID()
         let usdzFileName = "\(scanId.uuidString).usdz"
         let lidarDir = FilePaths.lidarFolder(jobId: jobId)

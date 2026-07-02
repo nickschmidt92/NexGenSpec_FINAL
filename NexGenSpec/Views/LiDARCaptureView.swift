@@ -150,10 +150,21 @@ struct LiDARCaptureView: View {
         #if canImport(RoomPlan)
         if #available(iOS 16.0, *) {
             let name = pendingName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let room = pending.inner.takeRoom(),
-               let scan = LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name) {
-                lastSavedScan = scan
-                onScanSaved?(scan)
+            if let room = pending.inner.takeRoom() {
+                Task {
+                    // USDZ export + floor-plan render + record commit run off
+                    // the main actor; the naming sheet dismisses immediately
+                    // and the scan publishes via onScanSaved once the record
+                    // is on disk. Failure stays silent — same semantics as
+                    // the previous synchronous path.
+                    let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name)
+                    await MainActor.run {
+                        if let scan {
+                            lastSavedScan = scan
+                            onScanSaved?(scan)
+                        }
+                    }
+                }
             }
             pending.inner.reset()
         }
