@@ -747,7 +747,16 @@ struct AppSettingsView: View {
         SessionScope.pin(snapshot.firebaseUID)
         AuditLog.log(event: "Account deletion receipt requested for \(snapshot.firebaseUID)")
         do {
-            let receiptURL = try AccountDeletionReceiptService.generateReceipt(snapshot)
+            // Render + write the receipt PDF off the main actor.
+            // UIGraphicsPDFRenderer is safe off-main, drawReceipt only uses
+            // renderer-context drawing, FileSecurity's helpers are static,
+            // and `snapshot` is a value-type Inputs. The enclosing function
+            // is @MainActor, so resumption after `.value` hops back here —
+            // receipt-before-wipe ordering is preserved, and the UI is
+            // already locked by isDeletingAccount during the await.
+            let receiptURL = try await Task.detached(priority: .userInitiated) {
+                try AccountDeletionReceiptService.generateReceipt(snapshot)
+            }.value
             pendingDeletionReceiptURL = receiptURL
             pendingDeletionReceiptBody = AccountDeletionReceiptService.shareBody(
                 for: snapshot,
