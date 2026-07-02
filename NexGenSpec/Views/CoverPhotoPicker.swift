@@ -48,10 +48,17 @@ struct CoverPhotoPicker: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = source.uiSourceType
+        // Defense-in-depth: a `.camera` source traps on camera-less devices. Fall
+        // back to the library when camera is requested but unavailable, so an
+        // unguarded path degrades instead of crashing.
+        if source == .camera && !UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .photoLibrary
+        } else {
+            picker.sourceType = source.uiSourceType
+        }
         picker.allowsEditing = true   // Gives the user crop/zoom before commit
         picker.delegate = context.coordinator
-        if source == .camera {
+        if picker.sourceType == .camera {
             picker.cameraCaptureMode = .photo
         }
         return picker

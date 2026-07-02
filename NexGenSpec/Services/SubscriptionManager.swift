@@ -214,6 +214,23 @@ public final class SubscriptionManager: ObservableObject {
     /// Grace period: trust cached entitlement for 7 days offline.
     private static let gracePeriod: TimeInterval = 7 * 24 * 60 * 60
 
+    // MARK: - Entitlement cache (Keychain-backed, build 27+)
+
+    /// Keychain service/account for the cached Pro-entitlement snapshot. Stored
+    /// in the Keychain rather than UserDefaults so it can't be flipped by editing
+    /// a plist on a jailbroken/offline device to unlock Pro. The signed on-device
+    /// `Transaction.currentEntitlements` walk remains the authority; this cache
+    /// only drives the launch flash and the offline-grace window.
+    private static let entitlementKeychainService = "com.nexgenspec.entitlement.cache"
+    private static let entitlementKeychainAccount = "current"
+
+    /// Small, tamper-resistant snapshot of the last verified entitlement.
+    private struct EntitlementCache: Codable {
+        var isPro: Bool
+        var activeProductID: String?
+        var lastVerified: Date
+    }
+
     // MARK: - Published state
 
     /// All loaded subscription products, ordered highest tier → lowest.
@@ -244,14 +261,21 @@ public final class SubscriptionManager: ObservableObject {
         // refresh completes. Stale cache (>24h) is treated as "no opinion".
         self.deviceCheckTrialUsed = DeviceCheckTrialGate.lastKnownTrialUsed
 
-        // Restore cached entitlement immediately so UI shows Pro on launch
-        // even before StoreKit async calls complete.
-        let cached = UserDefaults.standard.bool(forKey: CacheKey.isPro)
-        let lastVerified = UserDefaults.standard.object(forKey: CacheKey.lastVerified) as? Date ?? .distantPast
-        let withinGrace = Date().timeIntervalSince(lastVerified) < Self.gracePeriod
-        if cached && withinGrace {
+        // Restore the cached entitlement immediately so the UI shows Pro on
+        // launch before the StoreKit async walk completes. Read from the
+        // Keychain (build 27+); the old UserDefaults cache was a plaintext plist
+        // bool that could be flipped to unlock Pro offline, so migrate any
+        // legacy copy into the Keychain (preserving the offline-grace window
+        // across the upgrade) and purge the plist keys. The signed
+        // `currentEntitlements` walk remains the authority and re-seeds the
+        // cache on every pass — it reads the on-device receipt, not the
+        // network, so it re-confirms offline too.
+        Self.migrateAndPurgeLegacyUserDefaultsEntitlementCache()
+        if let cache = Self.keychainReadEntitlementCache(),
+           cache.isPro,
+           Date().timeIntervalSince(cache.lastVerified) < Self.gracePeriod {
             self.isPro = true
-            self.activeProductID = UserDefaults.standard.string(forKey: CacheKey.activeProduct)
+            self.activeProductID = cache.activeProductID
         }
 
         // Start listening for transaction updates immediately so renewals
@@ -398,10 +422,84 @@ public final class SubscriptionManager: ObservableObject {
         self.activeProductID = foundID
         self.isPro = (foundID != nil)
 
-        // Persist for offline grace
-        UserDefaults.standard.set(self.isPro, forKey: CacheKey.isPro)
-        UserDefaults.standard.set(self.activeProductID, forKey: CacheKey.activeProduct)
-        UserDefaults.standard.set(Date(), forKey: CacheKey.lastVerified)
+        // Persist the verified snapshot to the Keychain for the launch flash and
+        // offline-grace window (not UserDefaults — a plaintext bool here was
+        // spoofable to unlock Pro). `currentEntitlements` stays the authority.
+        Self.keychainWriteEntitlementCache(
+            EntitlementCache(isPro: self.isPro,
+                             activeProductID: self.activeProductID,
+                             lastVerified: Date())
+        )
+    }
+
+    // MARK: - Entitlement cache Keychain backing store
+
+    /// Reads the Keychain-stored entitlement snapshot, or nil if absent/corrupt.
+    private static func keychainReadEntitlementCache() -> EntitlementCache? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: entitlementKeychainService,
+            kSecAttrAccount as String: entitlementKeychainAccount,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data,
+              let cache = try? JSONDecoder().decode(EntitlementCache.self, from: data) else {
+            return nil
+        }
+        return cache
+    }
+
+    /// Writes (replacing) the entitlement snapshot to the Keychain, stored
+    /// `AfterFirstUnlockThisDeviceOnly` so it never migrates to another device
+    /// or into an iCloud/iTunes backup.
+    @discardableResult
+    private static func keychainWriteEntitlementCache(_ cache: EntitlementCache) -> Bool {
+        guard let data = try? JSONEncoder().encode(cache) else { return false }
+        let baseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: entitlementKeychainService,
+            kSecAttrAccount as String: entitlementKeychainAccount
+        ]
+        SecItemDelete(baseQuery as CFDictionary)
+        var addQuery = baseQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess {
+            Diagnostics.logError(context: "Failed to store entitlement cache in Keychain (\(status))")
+        }
+        return status == errSecSuccess
+    }
+
+    /// One-time migration of the legacy plaintext UserDefaults entitlement
+    /// cache (pre-build-27) into the Keychain, then purge of the plist keys.
+    /// The legacy snapshot is carried over only when the Keychain cache is
+    /// still empty and the snapshot is inside the grace window, so an
+    /// upgrading Pro user keeps offline-grace cover on their first build-27
+    /// launch (otherwise a transient empty `currentEntitlements` walk on that
+    /// launch would demote them with no cache to fall back on). Security
+    /// exposure is unchanged vs build 26: a spoofed plist value survives at
+    /// most the remaining grace window, and the signed `currentEntitlements`
+    /// walk overwrites it at the first opportunity. Safe to call every launch
+    /// (no-op once the keys are gone).
+    private static func migrateAndPurgeLegacyUserDefaultsEntitlementCache() {
+        let defaults = UserDefaults.standard
+        if keychainReadEntitlementCache() == nil,
+           defaults.bool(forKey: CacheKey.isPro),
+           let lastVerified = defaults.object(forKey: CacheKey.lastVerified) as? Date,
+           Date().timeIntervalSince(lastVerified) < gracePeriod {
+            keychainWriteEntitlementCache(
+                EntitlementCache(isPro: true,
+                                 activeProductID: defaults.string(forKey: CacheKey.activeProduct),
+                                 lastVerified: lastVerified)
+            )
+        }
+        defaults.removeObject(forKey: CacheKey.isPro)
+        defaults.removeObject(forKey: CacheKey.activeProduct)
+        defaults.removeObject(forKey: CacheKey.lastVerified)
     }
 
     private func handle(transactionResult: VerificationResult<Transaction>) async {
