@@ -39,6 +39,16 @@ test every paywalled feature without going through StoreKit. To test the
 free-trial gate: any signed-in account starts with 3 free full
 inspections (counted by `SubscriptionManager.freeInspectionsUsed` against `freeInspectionLimit = 3`, plus DeviceCheck).
 
+**Important — this demo account can never reach the paywall.** Because
+Pro is pre-granted, no upgrade prompt or purchase gate will ever fire on
+it (upgrade entry points are hidden for pre-entitled accounts). In a
+prior submission the reviewer was unable to locate the in-app purchases
+(Guideline 2.1) for exactly this reason. To locate and test the IAPs,
+please create a fresh account (Sign Up with any email address): new
+accounts start on the free tier, and the paywall presents from the
+Dashboard upgrade prompt, from Settings, or automatically when starting
+a new inspection once the 3 free inspections are used.
+
 To test the paywall purchase flow, the reviewer should use a sandbox
 Apple ID — both subscriptions (`com.nexgenspec.annualv1` at $449/yr and
 `com.nexgenspec.monthlyv1` at $49/mo) are configured in App Store Connect
