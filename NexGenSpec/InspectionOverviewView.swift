@@ -86,6 +86,9 @@ struct InspectionOverviewView: View {
     @State private var showPaywall = false
     @State private var showAgentsSection: Bool = false
     @State private var coverPhotoTick: Int = 0   // bumps to invalidate cached preview after change
+    // Serializes camera cover-photo writes: retakes target the same file
+    // name, so a slow first write must not land after a faster second one.
+    @State private var coverPhotoWriteTask: Task<Void, Never>?
     @StateObject private var exportService = ReportExportService()
     @EnvironmentObject private var subscriptions: SubscriptionManager
 
@@ -246,10 +249,24 @@ struct InspectionOverviewView: View {
                                 showPaywall = true
                                 return
                             }
-                            if let url = ReportExporter.exportPlainText(for: version) {
-                                shareContent = ShareContent(items: [url])
-                            } else {
-                                showTextExportError = true
+                            let snapshot = version
+                            Task {
+                                // Build the summary and write the temp file off
+                                // the main actor: LiDARScanStore does a JSON read
+                                // per scan and FileSecurity a protected atomic
+                                // write, both scaling with inspection size.
+                                // `version` is a value type, so the detached task
+                                // gets an immutable snapshot.
+                                let url = await Task.detached(priority: .userInitiated) {
+                                    ReportExporter.exportPlainText(for: snapshot)
+                                }.value
+                                await MainActor.run {
+                                    if let url {
+                                        shareContent = ShareContent(items: [url])
+                                    } else {
+                                        showTextExportError = true
+                                    }
+                                }
                             }
                         } label: { Label(subscriptions.hasFeatureAccess ? "Quick summary (text)" : "Quick summary (text) – Pro", systemImage: "doc.text") }
                             .accessibilityLabel("Quick summary text")
@@ -1152,26 +1169,40 @@ struct InspectionOverviewView: View {
     /// path so the file size on disk is consistent regardless of
     /// source.
     private func setCoverPhotoFromCapturedImage(_ image: UIImage) {
-        let resized = image.resizedKeepingAspect(maxSide: 1600)
-        guard let jpegData = resized.jpegData(compressionQuality: 0.82) else { return }
         let fileName = FilePaths.defaultCoverPhotoFileName
         let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
-        do {
-            try FileSecurity.ensureProtectedDirectory(FilePaths.inspectionFolder(jobId: jobId))
-            try FileSecurity.writeProtected(jpegData, to: url)
-            var insp = version.inspection
-            insp.coverPhotoFileName = fileName
-            var v = version
-            v.inspection = insp
-            version = v
-            coverPhotoTick &+= 1
-            NotificationCenter.default.post(
-                name: .coverPhotoDidUpdate,
-                object: nil,
-                userInfo: ["jobId": jobId]
-            )
-        } catch {
-            Diagnostics.logError(context: "setCoverPhotoFromCapturedImage failed", error: error)
+        let folder = FilePaths.inspectionFolder(jobId: jobId)
+        coverPhotoWriteTask = Task { [previous = coverPhotoWriteTask] in
+            await previous?.value
+            do {
+                // Downscale + JPEG-encode + write the ~12MP camera frame off
+                // the main actor so the fullScreenCover dismissal doesn't
+                // hitch. UIImage is immutable and UIGraphicsImageRenderer /
+                // jpegData are safe off-main; FileSecurity helpers are static.
+                let wrote = try await Task.detached(priority: .userInitiated) { () -> Bool in
+                    let resized = image.resizedKeepingAspect(maxSide: 1600)
+                    guard let jpegData = resized.jpegData(compressionQuality: 0.82) else { return false }
+                    try FileSecurity.ensureProtectedDirectory(folder)
+                    try FileSecurity.writeProtected(jpegData, to: url)
+                    return true
+                }.value
+                guard wrote else { return }
+                await MainActor.run {
+                    var insp = version.inspection
+                    insp.coverPhotoFileName = fileName
+                    var v = version
+                    v.inspection = insp
+                    version = v
+                    coverPhotoTick &+= 1
+                    NotificationCenter.default.post(
+                        name: .coverPhotoDidUpdate,
+                        object: nil,
+                        userInfo: ["jobId": jobId]
+                    )
+                }
+            } catch {
+                Diagnostics.logError(context: "setCoverPhotoFromCapturedImage failed", error: error)
+            }
         }
     }
 
