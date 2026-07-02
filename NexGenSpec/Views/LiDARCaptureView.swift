@@ -150,10 +150,35 @@ struct LiDARCaptureView: View {
         #if canImport(RoomPlan)
         if #available(iOS 16.0, *) {
             let name = pendingName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let room = pending.inner.takeRoom(),
-               let scan = LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name) {
-                lastSavedScan = scan
-                onScanSaved?(scan)
+            if let room = pending.inner.takeRoom() {
+                Task { @MainActor in
+                    // Hold a background-task assertion across the save: the
+                    // sheet dismisses immediately, so the user may background
+                    // or lock the iPad while the 0.5-5s USDZ export is still
+                    // writing — without this, a suspension can kill the
+                    // process before the record commits and silently lose
+                    // the named scan.
+                    var bgTask: UIBackgroundTaskIdentifier = .invalid
+                    bgTask = UIApplication.shared.beginBackgroundTask(withName: "LiDARScanSave") {
+                        if bgTask != .invalid {
+                            UIApplication.shared.endBackgroundTask(bgTask)
+                            bgTask = .invalid
+                        }
+                    }
+                    // USDZ export + floor-plan render + record commit run off
+                    // the main actor; the scan publishes via onScanSaved once
+                    // the record is on disk. Failure stays silent — same
+                    // semantics as the previous synchronous path.
+                    let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name)
+                    if let scan {
+                        lastSavedScan = scan
+                        onScanSaved?(scan)
+                    }
+                    if bgTask != .invalid {
+                        UIApplication.shared.endBackgroundTask(bgTask)
+                        bgTask = .invalid
+                    }
+                }
             }
             pending.inner.reset()
         }
