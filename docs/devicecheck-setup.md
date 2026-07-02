@@ -5,7 +5,7 @@ Operator guide for wiring Apple DeviceCheck into the NexGenSpec iOS app and its 
 - **App bundle:** `com.nexgenspec.app`
 - **Apple Team ID:** `CPTLCQYSJJ`
 - **Firebase project:** `nexgenspec-prod`
-- **Backend:** `~/Documents/NexGenSpec_FINAL/functions/`
+- **Backend:** `~/Developer/NexGenSpec_FINAL/functions/`
 
 ---
 
@@ -48,15 +48,15 @@ Do this exactly once per environment. You will not be able to re-download the ke
 4. Move the downloaded file into the secrets store and lock it down:
 
    ```
-   mv ~/Downloads/AuthKey_<KeyID>.p8 ~/Documents/nickos-secrets/AuthKey_<KeyID>_DeviceCheck.p8
-   chmod 600 ~/Documents/nickos-secrets/AuthKey_<KeyID>_DeviceCheck.p8
+   mv ~/Downloads/AuthKey_<KeyID>.p8 ~/Developer/config/secrets/apple/AuthKey_<KeyID>_DeviceCheck.p8
+   chmod 600 ~/Developer/config/secrets/apple/AuthKey_<KeyID>_DeviceCheck.p8
    ```
 
    Replace `<KeyID>` in both filenames with the actual 10-char ID from step 3.
 
 5. Confirm the **Team ID**. It is `CPTLCQYSJJ` for NexGenSpec. (Apple shows it in the top-right of every page in the Developer portal.)
 
-You should now have a `.p8` file at `~/Documents/nickos-secrets/AuthKey_<KeyID>_DeviceCheck.p8`, mode `600`, plus the Key ID written down.
+You should now have a `.p8` file at `~/Developer/config/secrets/apple/AuthKey_<KeyID>_DeviceCheck.p8`, mode `600`, plus the Key ID written down.
 
 ---
 
@@ -67,7 +67,7 @@ You should now have a `.p8` file at `~/Documents/nickos-secrets/AuthKey_<KeyID>_
 3. In your terminal:
 
    ```
-   cd ~/Documents/NexGenSpec_FINAL
+   cd ~/Developer/NexGenSpec_FINAL
    firebase login                 # only if not already logged in
    firebase use nexgenspec-prod
    ```
@@ -81,7 +81,7 @@ You should now have a `.p8` file at `~/Documents/nickos-secrets/AuthKey_<KeyID>_
 4. Confirm the Functions source directory exists (the backend agent creates this; it should not be empty):
 
    ```
-   ls ~/Documents/NexGenSpec_FINAL/functions/
+   ls ~/Developer/NexGenSpec_FINAL/functions/
    ```
 
    You should see at least `package.json`, `tsconfig.json`, and a `src/` folder. If empty, the backend agent has not finished — wait for them or ping them.
@@ -89,7 +89,7 @@ You should now have a `.p8` file at `~/Documents/nickos-secrets/AuthKey_<KeyID>_
 5. Install dependencies:
 
    ```
-   cd ~/Documents/NexGenSpec_FINAL/functions
+   cd ~/Developer/NexGenSpec_FINAL/functions
    npm install
    ```
 
@@ -111,7 +111,7 @@ The Cloud Function code declares four secrets via `defineSecret(...)`. You must 
 Set each one using Firebase Functions Secret Manager. The first command pipes the `.p8` file directly in (so you don't have to copy-paste a multi-line PEM). The other three prompt interactively.
 
 ```
-firebase functions:secrets:set APPLE_DEVICECHECK_KEY < ~/Documents/nickos-secrets/AuthKey_<KeyID>_DeviceCheck.p8
+firebase functions:secrets:set APPLE_DEVICECHECK_KEY < ~/Developer/config/secrets/apple/AuthKey_<KeyID>_DeviceCheck.p8
 firebase functions:secrets:set APPLE_DEVICECHECK_KEY_ID
 firebase functions:secrets:set APPLE_TEAM_ID
 firebase functions:secrets:set APPLE_DEVICECHECK_USE_SANDBOX
@@ -144,7 +144,7 @@ Each prints the stored value to stdout. **Do not** run `:access` on `APPLE_DEVIC
 ## 6. Deploy
 
 ```
-cd ~/Documents/NexGenSpec_FINAL/functions
+cd ~/Developer/NexGenSpec_FINAL/functions
 npm run build
 firebase deploy --only functions
 ```
@@ -259,25 +259,25 @@ No billing alarms needed at current scale. If NexGenSpec ever grows beyond ~100K
 If the `.p8` key leaks, is committed to git, or is otherwise compromised:
 
 1. **Revoke immediately.** Apple Developer portal → **Keys** → click the compromised key → **Revoke**. Apple stops accepting JWTs signed with it instantly.
-2. **Generate a new DeviceCheck key.** Repeat all of §3 with a new key (e.g. name it `NexGenSpec DeviceCheck v2`). Save the new `.p8` to `~/Documents/nickos-secrets/AuthKey_<NewKeyID>_DeviceCheck.p8`, chmod 600.
+2. **Generate a new DeviceCheck key.** Repeat all of §3 with a new key (e.g. name it `NexGenSpec DeviceCheck v2`). Save the new `.p8` to `~/Developer/config/secrets/apple/AuthKey_<NewKeyID>_DeviceCheck.p8`, chmod 600.
 3. **Update both secrets** (the key file and the Key ID — they're a pair):
 
    ```
-   firebase functions:secrets:set APPLE_DEVICECHECK_KEY < ~/Documents/nickos-secrets/AuthKey_<NewKeyID>_DeviceCheck.p8
+   firebase functions:secrets:set APPLE_DEVICECHECK_KEY < ~/Developer/config/secrets/apple/AuthKey_<NewKeyID>_DeviceCheck.p8
    firebase functions:secrets:set APPLE_DEVICECHECK_KEY_ID
    ```
 
 4. **Redeploy** to push the new secret versions to running instances:
 
    ```
-   cd ~/Documents/NexGenSpec_FINAL/functions
+   cd ~/Developer/NexGenSpec_FINAL/functions
    firebase deploy --only functions
    ```
 
 5. **Existing device bits remain valid.** DeviceCheck bits are scoped per-device, per-app (per Team ID + Bundle ID), not per-key. Rotating the key does **not** reset any user's trial state. Inspectors who already burned their 3 inspections stay on the paywall; those mid-trial keep their remaining count.
 
-6. **Delete the old `.p8`** from `~/Documents/nickos-secrets/` once you've confirmed the new one works in production.
+6. **Delete the old `.p8`** from `~/Developer/config/secrets/apple/` once you've confirmed the new one works in production.
 
 ---
 
-**End of runbook.** Questions or failures during setup: cross-check against the backend agent's Function code (`~/Documents/NexGenSpec_FINAL/functions/src/`) and the iOS agent's DeviceCheck client integration before filing a bug.
+**End of runbook.** Questions or failures during setup: cross-check against the backend agent's Function code (`~/Developer/NexGenSpec_FINAL/functions/src/`) and the iOS agent's DeviceCheck client integration before filing a bug.

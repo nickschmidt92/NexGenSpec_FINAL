@@ -31,7 +31,7 @@ Trial enforcement is handled **outside StoreKit** by Apple DeviceCheck (Option A
 ## 2. Prerequisites
 
 - App Store Connect access with **App Manager** or higher role on the NexGenSpec app
-- App Store Connect Issuer ID already saved at `~/Documents/nickos-secrets/asc-issuer-id.txt` (verified 2026-05-10 as valid 36-char UUID; closes T-01219)
+- App Store Connect Issuer ID already saved at `~/Developer/config/secrets/apple/asc-issuer-id.txt` (verified 2026-05-10 as valid 36-char UUID; closes T-01219)
 - Bank, tax, and contracts complete in Agreements/Tax/Banking (otherwise IAPs cannot be approved)
 - NexGenSpec app already exists in App Store Connect with bundle `com.nexgenspec.app`
 
