@@ -1207,21 +1207,27 @@ struct InspectionOverviewView: View {
     }
 
     private func removeCoverPhoto() {
-        if let name = version.inspection.coverPhotoFileName {
-            let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
-            try? FileManager.default.removeItem(at: url)
+        // Serialized through the same chain as the writes: a delete tapped
+        // while a retake's write is still in flight must not be undone by
+        // that write's publish landing afterwards.
+        coverPhotoWriteTask = Task { [previous = coverPhotoWriteTask] in
+            await previous?.value
+            if let name = version.inspection.coverPhotoFileName {
+                let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
+                try? FileManager.default.removeItem(at: url)
+            }
+            var insp = version.inspection
+            insp.coverPhotoFileName = nil
+            var v = version
+            v.inspection = insp
+            version = v
+            coverPhotoTick &+= 1
+            NotificationCenter.default.post(
+                name: .coverPhotoDidUpdate,
+                object: nil,
+                userInfo: ["jobId": jobId]
+            )
         }
-        var insp = version.inspection
-        insp.coverPhotoFileName = nil
-        var v = version
-        v.inspection = insp
-        version = v
-        coverPhotoTick &+= 1
-        NotificationCenter.default.post(
-            name: .coverPhotoDidUpdate,
-            object: nil,
-            userInfo: ["jobId": jobId]
-        )
     }
 
     // MARK: - Real estate agents
