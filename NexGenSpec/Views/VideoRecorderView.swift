@@ -22,10 +22,17 @@ struct VideoRecorderView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = .camera
+        // Defense-in-depth: `.camera` traps on camera-less devices. Callers gate
+        // on isSourceTypeAvailable(.camera); guard here too so an unguarded path
+        // degrades to library video selection instead of crashing.
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .camera
+            picker.cameraCaptureMode = .video
+            picker.videoQuality = .typeHigh
+        } else {
+            picker.sourceType = .photoLibrary
+        }
         picker.mediaTypes = [UTType.movie.identifier]
-        picker.cameraCaptureMode = .video
-        picker.videoQuality = .typeHigh
         // Don't allow trim/edit — keep the capture flow single-step. A
         // follow-up edit pass can happen after we add a video editor.
         picker.allowsEditing = false

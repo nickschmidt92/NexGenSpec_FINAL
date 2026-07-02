@@ -840,8 +840,14 @@ struct InspectionOverviewView: View {
         let videosDir = FilePaths.videosFolder(jobId: jobId)
         let fileURL = videosDir.appendingPathComponent(fileName)
         do {
-            try FileSecurity.ensureProtectedDirectory(videosDir)
-            try FileSecurity.writeProtected(data, to: fileURL)
+            // Write the (potentially tens-of-MB) imported video off the main
+            // actor so large drone/walkthrough clips don't freeze the UI. `data`
+            // and the URLs are Sendable, and FileSecurity's helpers are static
+            // (already used off-main by the backup/ZIP export paths).
+            try await Task.detached(priority: .userInitiated) {
+                try FileSecurity.ensureProtectedDirectory(videosDir)
+                try FileSecurity.writeProtected(data, to: fileURL)
+            }.value
             let video = InspectionVideo(fileName: fileName, caption: "", sortOrder: version.inspection.videos.count, source: "drone")
             var insp = version.inspection
             insp.videos.append(video)
