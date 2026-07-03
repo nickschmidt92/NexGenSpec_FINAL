@@ -60,9 +60,27 @@ public struct SyncBinding: Codable, Equatable {
 
 public enum SyncBindingStore {
 
-    /// Default Keychain service for binding rows. Overridable (param) so tests use
-    /// a unique service and never collide with the real store.
-    public static let defaultService = "com.nexgenspec.syncBinding"
+    /// Default Keychain service for binding rows, scoped per CloudKit environment.
+    /// Debug builds sync against the Development environment and TestFlight/App
+    /// Store builds against Production (fixed by code signing), but both read the
+    /// same device Keychain — an unscoped shared row alternates its `changeToken`
+    /// between the two environments' token spaces, and CloudKit answers the foreign
+    /// token with `changeTokenExpired` = a full resync on every Debug↔TestFlight
+    /// swap (dev machines only; T-01618). Scoping the service gives each
+    /// environment its own row; a fresh row re-seeds idempotently, so no migration.
+    /// Overridable (param) so tests use a unique service and never collide with the
+    /// real store.
+    public static let defaultService: String = {
+        #if DEBUG
+        return "com.nexgenspec.syncBinding.dev"
+        #else
+        return "com.nexgenspec.syncBinding.prod"
+        #endif
+    }()
+
+    /// Pre-scoping service name (builds ≤28, both environments). Purged on the
+    /// first scoped save so a stale shared row can't linger on dev machines.
+    private static let legacyService = "com.nexgenspec.syncBinding"
 
     /// Reads the binding for a UID, or nil if none / undecodable.
     public static func load(forUID uid: String, service: String = defaultService) -> SyncBinding? {
@@ -101,6 +119,17 @@ public enum SyncBindingStore {
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess {
             Diagnostics.logError(context: "SyncBindingStore.save failed (\(status))", persistToDisk: false)
+        }
+        // One-time cleanup of the pre-scoping shared row (see `legacyService`).
+        // Only when writing the real store — a test's injected service must never
+        // reach outside its own namespace.
+        if status == errSecSuccess && service == defaultService {
+            let legacyQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: legacyService,
+                kSecAttrAccount as String: binding.firebaseUID
+            ]
+            SecItemDelete(legacyQuery as CFDictionary)
         }
         return status == errSecSuccess
     }
