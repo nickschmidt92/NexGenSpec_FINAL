@@ -298,7 +298,7 @@ struct AppSettingsView: View {
 
                     SettingsSectionCard(
                         title: "Reports",
-                        subtitle: "Browse and re-share the report PDFs and ZIP backups you’ve exported. They’re saved to your account; with iCloud Sync on, report PDFs sync across your own Apple devices through your private iCloud."
+                        subtitle: "Browse and re-share the report PDFs and ZIP backups you’ve exported. They’re saved with your account on this device. Report PDFs don’t sync — only inspection records sync through your private iCloud — so re-export the report on another device if you need it there."
                     ) {
                         NavigationLink {
                             MyReportsView()

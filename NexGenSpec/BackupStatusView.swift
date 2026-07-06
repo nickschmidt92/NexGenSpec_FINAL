@@ -3,18 +3,11 @@
 //  NexGenSpec
 //
 //  Settings card content for "Backup & Data". Shows:
-//  • iCloud Drive availability (proxy for "user is signed into iCloud")
 //  • Free disk space on the device
 //  • Active inspection count
 //  • Multi-device note
 //  • Plain-language guidance + a deep link to iOS Settings so the
 //    inspector can verify iCloud Backup is on.
-//
-//  iOS does not expose a public API for "is iCloud BACKUP turned on
-//  for THIS app" — only iCloud Drive availability via
-//  FileManager.url(forUbiquityContainerIdentifier:). We surface that
-//  signal AND tell the user to verify the per-device backup toggle in
-//  Settings → [Apple ID] → iCloud → iCloud Backup.
 //
 
 import SwiftUI
@@ -23,7 +16,6 @@ import UIKit
 struct BackupStatusView: View {
     let metadataCount: Int
 
-    @State private var iCloudAvailable: Bool = false
     @State private var freeSpaceLabel: String = "—"
     @State private var freeSpaceLow: Bool = false
 
@@ -44,15 +36,6 @@ struct BackupStatusView: View {
 
             // Status rows
             VStack(alignment: .leading, spacing: 10) {
-                statusRow(
-                    icon: iCloudAvailable ? "icloud.fill" : "icloud.slash",
-                    color: iCloudAvailable ? AppColor.success : AppColor.warning,
-                    title: iCloudAvailable ? "iCloud Drive: Available" : "iCloud Drive: Not Detected",
-                    subtitle: iCloudAvailable
-                        ? "You're signed into iCloud. To protect your data, also verify iCloud Backup is ON in iOS Settings → [Apple ID] → iCloud → iCloud Backup."
-                        : "iCloud not detected on this device. To protect your data from device loss, sign in to iCloud and enable iCloud Backup in iOS Settings."
-                )
-
                 statusRow(
                     icon: freeSpaceLow ? "exclamationmark.triangle.fill" : "internaldrive.fill",
                     color: freeSpaceLow ? AppColor.critical : AppColor.success,
@@ -115,11 +98,6 @@ struct BackupStatusView: View {
     }
 
     private func refreshStatus() {
-        // iCloud Drive availability — proxy for "user is signed into iCloud".
-        // The actual per-device "iCloud Backup" toggle is not queryable via
-        // public API; we tell the user to check Settings to verify.
-        iCloudAvailable = FileManager.default.url(forUbiquityContainerIdentifier: nil) != nil
-
         // Free space on the volume containing the app's Documents directory.
         if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory()),
            let bytes = attrs[.systemFreeSize] as? NSNumber {
