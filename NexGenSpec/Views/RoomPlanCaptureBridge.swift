@@ -32,7 +32,16 @@ final class LiDARCapturePending: ObservableObject {
 
     fileprivate var capturedRoom: CapturedRoom?
 
+    /// Advanced by every reset(). This instance is cached and reused across
+    /// capture sessions (LiDARCapturePendingBox), so the coordinator's fallback
+    /// RoomBuilder task snapshots this value and must not publish a room once a
+    /// reset (cancel, discard, or a new session starting) has advanced it —
+    /// otherwise a Done-then-Cancel scan could resurface as "ready" mid-way
+    /// through the NEXT capture session and save the discarded room.
+    private(set) var generation: UInt64 = 0
+
     func reset() {
+        generation &+= 1
         capturedRoom = nil
         isReady = false
         isNaming = false
@@ -116,17 +125,26 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
         // exactly as long as we need the pending state alive.
         guard let pending = self.pending else { return }
         Task {
+            // Snapshot the pending generation first: `pending` is reused across
+            // capture sessions, and reset() (cancel / new session) advances it.
+            // Any publish below must match this snapshot, or the room belongs
+            // to a session the user already discarded.
+            let generation = await MainActor.run { pending.generation }
             // Grace period: the view delegate's didPresent usually delivers the
             // processed room within a few seconds. Only run our own RoomBuilder
             // (a full duplicate pipeline) if it hasn't. Stays well inside the
             // 45 s processing timeout.
             try? await Task.sleep(for: .seconds(10))
-            let alreadyDelivered = await MainActor.run { pending.isReady }
-            guard !alreadyDelivered else { return }
+            let shouldBuild = await MainActor.run {
+                !pending.isReady && pending.generation == generation
+            }
+            guard shouldBuild else { return }
             do {
                 let room = try await builder.capturedRoom(from: data)
                 await MainActor.run {
-                    guard !pending.isReady else { return }   // primary path won during build
+                    // Primary path won during the build, or reset() invalidated
+                    // this session — never publish a stale room.
+                    guard !pending.isReady, pending.generation == generation else { return }
                     pending.capturedRoom = room
                     pending.isReady = true
                 }
