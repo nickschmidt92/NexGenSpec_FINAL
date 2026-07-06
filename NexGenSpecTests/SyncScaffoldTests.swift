@@ -109,6 +109,16 @@ final class SyncScaffoldTests: XCTestCase {
     /// Unique per-test service so we never touch the real binding store.
     private func makeTestService() -> String { "com.nexgenspec.test.syncBinding.\(UUID().uuidString)" }
 
+    /// The real store's service must be environment-scoped (T-01618): Debug (Dev
+    /// CloudKit env) and TestFlight/Release (Prod env) on one machine must not
+    /// share a binding row, or the alternating changeToken forces a full resync on
+    /// every swap. Tests compile under DEBUG, so pin the `.dev` name — and that the
+    /// pre-scoping shared name is no longer the live default.
+    func testDefaultBindingServiceIsEnvironmentScoped() {
+        XCTAssertEqual(SyncBindingStore.defaultService, "com.nexgenspec.syncBinding.dev")
+        XCTAssertNotEqual(SyncBindingStore.defaultService, "com.nexgenspec.syncBinding")
+    }
+
     func testBindingStoreRoundTripAndPerUIDIsolation() throws {
         let service = makeTestService()
         let uidA = "uidA-\(UUID().uuidString)"
