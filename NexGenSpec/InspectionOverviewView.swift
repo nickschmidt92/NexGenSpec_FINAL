@@ -971,6 +971,11 @@ struct InspectionOverviewView: View {
                         Text(scan.capturedAt, style: .date)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                        if let summary = scan.measurementsSummary {
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                         Label("Tap to view 3D scan", systemImage: "cube.transparent")
                             .font(.caption2)
                             .foregroundStyle(Color.accentColor)
@@ -982,6 +987,17 @@ struct InspectionOverviewView: View {
             .accessibilityLabel("View room scan \(scan.displayName)")
             .accessibilityHint("Opens the 3D scan in a viewer")
             Spacer(minLength: 0)
+            // Share the raw USDZ so clients can open it in AR QuickLook on their
+            // own device. ShareLink = system share sheet (iPad popover-safe).
+            let usdzURL = FilePaths.lidarFolder(jobId: jobId).appendingPathComponent(scan.usdzFileName)
+            if FileManager.default.fileExists(atPath: usdzURL.path) {
+                ShareLink(item: usdzURL) {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain).hoverEffect(.lift)
+                .accessibilityLabel("Share 3D scan")
+            }
             if isEditable {
                 Button {
                     renameText = scan.name ?? ""

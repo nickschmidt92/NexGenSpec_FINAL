@@ -12,6 +12,11 @@ import Combine
 
 struct LiDARCaptureView: View {
     var jobId: UUID
+    /// Section this capture is pre-linked to (per-section entry point). nil from
+    /// the Overview entry points — scan stays unlinked.
+    var sectionId: UUID? = nil
+    /// Prefill for the naming sheet (e.g. the section title). User can edit.
+    var defaultName: String? = nil
     var onScanSaved: ((LiDARScan) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var savedScans: [LiDARScan] = []
@@ -60,7 +65,7 @@ struct LiDARCaptureView: View {
                 // the box's Combine mirror failed to propagate.
                 #if canImport(RoomPlan)
                 if #available(iOS 16.0, *), pending.inner.isReady {
-                    pendingName = ""
+                    pendingName = defaultName ?? ""
                     showNamingSheet = true
                 }
                 #endif
@@ -169,7 +174,7 @@ struct LiDARCaptureView: View {
                     // the main actor; the scan publishes via onScanSaved once
                     // the record is on disk. Failure stays silent — same
                     // semantics as the previous synchronous path.
-                    let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name)
+                    let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name, sectionId: sectionId)
                     if let scan {
                         lastSavedScan = scan
                         onScanSaved?(scan)
@@ -223,6 +228,11 @@ struct LiDARCaptureView: View {
                                 Text(scan.capturedAt, style: .date)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                                if let summary = scan.measurementsSummary {
+                                    Text(summary)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }
