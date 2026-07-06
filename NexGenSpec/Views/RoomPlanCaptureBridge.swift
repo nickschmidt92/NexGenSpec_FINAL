@@ -416,13 +416,13 @@ enum LiDARScanPersistence {
     /// no documented main-thread requirement, but Apple's RoomPlan sample
     /// calls it from main and the simulator cannot exercise capture at all —
     /// do not merge on simulator evidence alone.
-    static func save(room: CapturedRoom, jobId: UUID, name: String?) async -> LiDARScan? {
+    static func save(room: CapturedRoom, jobId: UUID, name: String?, sectionId: UUID? = nil) async -> LiDARScan? {
         await Task.detached(priority: .userInitiated) { () -> LiDARScan? in
-            saveSync(room: room, jobId: jobId, name: name)
+            saveSync(room: room, jobId: jobId, name: name, sectionId: sectionId)
         }.value
     }
 
-    private static func saveSync(room: CapturedRoom, jobId: UUID, name: String?) -> LiDARScan? {
+    private static func saveSync(room: CapturedRoom, jobId: UUID, name: String?, sectionId: UUID?) -> LiDARScan? {
         let scanId = UUID()
         let usdzFileName = "\(scanId.uuidString).usdz"
         let lidarDir = FilePaths.lidarFolder(jobId: jobId)
@@ -445,14 +445,40 @@ enum LiDARScanPersistence {
                 }
             }
 
+            // Persist the CapturedRoom itself so multiple rooms can later be merged
+            // into a whole-home plan (StructureBuilder). Non-fatal, like the PNG.
+            var roomJSONFileName: String? = nil
+            do {
+                let roomData = try JSONEncoder().encode(room)
+                let fileName = "\(scanId.uuidString)_room.json"
+                try roomData.write(to: lidarDir.appendingPathComponent(fileName), options: .atomic)
+                roomJSONFileName = fileName
+            } catch {
+                // Non-fatal: scan still usable without the merge source.
+            }
+
             let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let userName = (trimmed?.isEmpty == false) ? trimmed : nil
+            var finalName = userName
+            var measurements: [Measurement] = []
+            // LiDARScanMeasurements is @available(iOS 17.0, *); this enum stays
+            // at 16.0, so gate the calls (deployment target 17.0 — always passes).
+            if #available(iOS 17.0, *) {
+                if finalName == nil {
+                    finalName = LiDARScanMeasurements.autoName(from: room)
+                }
+                measurements = LiDARScanMeasurements.compute(from: room)
+            }
+
             let scan = LiDARScan(
                 id: scanId,
                 versionId: jobId,
                 usdzFileName: usdzFileName,
                 floorplanPNGFileName: floorplanFileName,
-                name: (trimmed?.isEmpty == false) ? trimmed : nil,
-                measurements: [],
+                roomJSONFileName: roomJSONFileName,
+                name: finalName,
+                sectionId: sectionId,
+                measurements: measurements,
                 capturedAt: Date()
             )
             // If the scan record didn't reach disk, report capture as failed rather

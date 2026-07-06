@@ -1034,7 +1034,7 @@ struct InspectionOverviewView: View {
         loadLiDARScans()
     }
 
-    /// Removes a scan's record plus its USDZ and floor-plan files from disk.
+    /// Removes a scan's record plus its USDZ, floor-plan, and room-JSON files from disk.
     private func deleteLiDARScan(_ scan: LiDARScan) {
         let dir = FilePaths.lidarFolder(jobId: jobId)
         let fm = FileManager.default
@@ -1042,6 +1042,9 @@ struct InspectionOverviewView: View {
         try? fm.removeItem(at: dir.appendingPathComponent(scan.usdzFileName))
         if let png = scan.floorplanPNGFileName {
             try? fm.removeItem(at: dir.appendingPathComponent(png))
+        }
+        if let roomJSON = scan.roomJSONFileName {
+            try? fm.removeItem(at: dir.appendingPathComponent(roomJSON))
         }
         loadLiDARScans()
     }
