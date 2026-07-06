@@ -50,6 +50,12 @@ final class LiDARCapturePending: ObservableObject {
 final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomCaptureSessionDelegate, NSCoding {
     weak var pending: LiDARCapturePending?
 
+    /// True once the user tapped Done. The session-delegate fallback must not
+    /// build a room for a cancel/teardown stop() — that wasted seconds of CPU
+    /// and could set pending.isReady AFTER a cancel reset, resurrecting the
+    /// naming sheet for a discarded scan.
+    var finishRequested = false
+
     /// Fires when the underlying RoomCaptureSession reports an unrecoverable
     /// failure (ARKit tracking lost, sensor blocked, etc.). Host controller
     /// uses this to surface an actionable alert instead of leaving the user
@@ -102,6 +108,7 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
             }
             return
         }
+        guard finishRequested else { return }   // stop() came from cancel/teardown, not Done
         guard let builder = self.roomBuilder else { return }
         // Capture `pending` strongly into the Task so we don't have to touch
         // `self` from the concurrent context (Swift 6 rejects that). The
@@ -109,10 +116,17 @@ final class RoomPlanCaptureCoordinator: NSObject, RoomCaptureViewDelegate, RoomC
         // exactly as long as we need the pending state alive.
         guard let pending = self.pending else { return }
         Task {
+            // Grace period: the view delegate's didPresent usually delivers the
+            // processed room within a few seconds. Only run our own RoomBuilder
+            // (a full duplicate pipeline) if it hasn't. Stays well inside the
+            // 45 s processing timeout.
+            try? await Task.sleep(for: .seconds(10))
+            let alreadyDelivered = await MainActor.run { pending.isReady }
+            guard !alreadyDelivered else { return }
             do {
                 let room = try await builder.capturedRoom(from: data)
                 await MainActor.run {
-                    guard !pending.isReady else { return }   // primary path already won
+                    guard !pending.isReady else { return }   // primary path won during build
                     pending.capturedRoom = room
                     pending.isReady = true
                 }
@@ -142,11 +156,13 @@ struct RoomPlanCaptureViewControllerRepresentable: UIViewControllerRepresentable
         // fires first produces the CapturedRoom and sets pending.isReady.
         vc.captureView.delegate = context.coordinator
         vc.captureView.captureSession.delegate = context.coordinator
+        let coordinator = context.coordinator
         vc.onDoneTapped = { [weak vc] in
             // Finalize capture — triggers processing. When processing completes,
             // `pending.isReady` becomes true (either via the view delegate's
             // didPresent callback or via the session delegate's didEndWith),
             // and updateUIViewController flips the UI to "Save Scan".
+            coordinator.finishRequested = true
             vc?.showProcessingState()
             vc?.captureView.captureSession.stop()
         }
@@ -298,6 +314,9 @@ final class RoomCaptureHostController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        // ARKit does not disable auto-lock; a mid-scan screen lock kills tracking.
+        UIApplication.shared.isIdleTimerDisabled = true
+        LiDARCaptureActivity.shared.captureDidStart()
         guard LiDARCapability.isSupported else { return }
         let config = RoomCaptureSession.Configuration()
         captureView.captureSession.run(configuration: config)
@@ -305,6 +324,8 @@ final class RoomCaptureHostController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        UIApplication.shared.isIdleTimerDisabled = false
+        LiDARCaptureActivity.shared.captureDidEnd()
         captureView.captureSession.stop()
     }
 

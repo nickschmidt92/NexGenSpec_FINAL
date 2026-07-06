@@ -152,7 +152,15 @@ final class SyncCoordinator: ObservableObject {
     /// whose `pull()` does nothing. Cross-device pulls also run on each bind.
     func pullNow() {
         let active = port
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
+            // A live RoomPlan capture owns the main thread; applying pulled
+            // records mid-scan causes visible jitter (main-actor applyRemoteVersion
+            // + metadata publishes). Defer to a one-shot catch-up pull that fires
+            // when the capture ends.
+            if LiDARCaptureActivity.shared.isActive {
+                LiDARCaptureActivity.shared.setPendingPull { self?.pullNow() }
+                return
+            }
             await active.pull()
             // Also re-drive any outbound changes queued during a transient unbind
             // window (fix F). Inert on a NoopSyncPort (flag off).
