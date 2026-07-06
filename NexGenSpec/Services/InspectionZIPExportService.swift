@@ -74,6 +74,12 @@ public enum InspectionZIPExportService {
         let stagingRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("zip-staging-\(version.id.uuidString)", isDirectory: true)
 
+        // Regenerate the cached whole-home floor plan (if the scan set changed)
+        // BEFORE the synchronous HTML render, which only reads the cache.
+        await WholeHomeFloorplanService.regenerateIfNeeded(
+            jobId: UUID(uuidString: version.inspection.inspectionId) ?? version.id
+        )
+
         // 1. Set up staging, render the canonical HTML, and copy the photo/video
         //    assets — all OFF the main thread. This is the CPU/IO-heavy step (it
         //    processes every photo) and would otherwise hang the UI for several

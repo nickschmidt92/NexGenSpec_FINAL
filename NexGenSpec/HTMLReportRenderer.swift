@@ -14,6 +14,10 @@ import CoreImage
 /// If imageFolderURL is set, images are written there and HTML references them (reduces memory for large reports).
 enum HTMLReportRenderer {
 
+    /// Shared rough-estimates disclaimer for every LiDAR floor-plan surface —
+    /// wording must stay identical across the report.
+    private static let lidarDisclaimerHTML = "<p class=\"meta\" style=\"font-style:italic;color:#666;\">These floor plans are generated from a device-level LiDAR scan and represent rough estimates of room geometry. They are intended as spatial reference only and should not be used for construction or measurement-critical decisions.</p>"
+
     private static let reportIdDateFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
@@ -278,9 +282,15 @@ enum HTMLReportRenderer {
             html += "</div>"
         }
 
+        // Loaded once: linked scans render inline in their section; unlinked scans
+        // render in the end-of-report reference card.
+        let lidarScans = LiDARScanStore.loadScans(jobId: jobId).sorted { $0.capturedAt < $1.capturedAt }
+        let lidarDir = FilePaths.lidarFolder(jobId: jobId)
+
         for section in inspection.sections {
             let reportItems = section.items.filter { $0.isDefect && $0.includeInReport }
-            guard !reportItems.isEmpty else { continue }
+            let sectionScans = lidarScans.filter { $0.sectionId == section.id }
+            guard !reportItems.isEmpty || !sectionScans.isEmpty else { continue }
             html += "<h2 class=\"section-title\">\((section.title).htmlEscaped)</h2>"
             for item in reportItems {
                 guard let severity = item.defectSeverity else { continue }
@@ -319,6 +329,22 @@ enum HTMLReportRenderer {
                 </div>
                 """
             }
+            // Section-linked room scans render inline here and are EXCLUDED
+            // from the end-of-report reference card (the base64 floorplans are
+            // large — duplicating them bloats the PDF and reads redundantly).
+            for scan in sectionScans {
+                guard let pngName = scan.floorplanPNGFileName,
+                      let pngData = try? Data(contentsOf: lidarDir.appendingPathComponent(pngName)) else { continue }
+                let b64 = pngData.base64EncodedString()
+                html += "<div class=\"card\" style=\"page-break-inside:avoid;break-inside:avoid;\">"
+                html += "<h3>Room Scan — \((scan.displayName).htmlEscaped)</h3>"
+                html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;max-height:7in;height:auto;object-fit:contain;border:1px solid #ccc;border-radius:6px;\" />"
+                if let summary = scan.measurementsSummary {
+                    html += "<p class=\"meta\">\(summary.htmlEscaped)</p>"
+                }
+                html += Self.lidarDisclaimerHTML
+                html += "</div>"
+            }
         }
 
         if !inspection.signatures.isEmpty {
@@ -332,17 +358,32 @@ enum HTMLReportRenderer {
             html += "</div>"
         }
 
+        // Whole-home floor plan — merged from individual room scans
+        // (StructureBuilder) when at least two scans persisted their CapturedRoom.
+        // Pre-generated + cached by WholeHomeFloorplanService; renderHTML only
+        // reads the cache so it stays synchronous. Missing cache ⇒ page skipped.
+        if let wholeHomePNG = WholeHomeFloorplanService.cachedPNG(jobId: jobId) {
+            let b64 = wholeHomePNG.base64EncodedString()
+            html += "<div class=\"card\" style=\"page-break-before:always;\"><h2 class=\"section-title\">Whole-Home Floor Plan (LiDAR) — Reference</h2>"
+            html += Self.lidarDisclaimerHTML
+            html += "<p class=\"meta\">Assembled automatically from this inspection&rsquo;s individual room scans.</p>"
+            html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Whole-home floor plan\" style=\"max-width:100%;max-height:8in;height:auto;object-fit:contain;border:1px solid #ccc;border-radius:6px;\" />"
+            html += "</div>"
+        }
+
         // Room scans (LiDAR) — moved to end of report per beta feedback.
         // Floor-plan PDFs read as supporting reference material, not
         // primary findings, so inspectors wanted them grouped at the
         // back. A heading + "rough estimate" disclaimer sets the right
-        // expectation for the client reading the report.
-        let lidarScans = LiDARScanStore.loadScans(jobId: jobId)
-        if !lidarScans.isEmpty {
-            let lidarDir = FilePaths.lidarFolder(jobId: jobId)
+        // expectation for the client reading the report. Section-linked
+        // scans already rendered inline in their section, so only scans
+        // that are unlinked (or whose section no longer exists) land here.
+        let sectionIds = Set(inspection.sections.map(\.id))
+        let unlinkedScans = lidarScans.filter { $0.sectionId == nil || !sectionIds.contains($0.sectionId!) }
+        if !unlinkedScans.isEmpty {
             html += "<div class=\"card\" style=\"page-break-before:always;\"><h2 class=\"section-title\">Room Scans (LiDAR) — Reference</h2>"
-            html += "<p class=\"meta\" style=\"font-style:italic;color:#666;\">These floor plans are generated from a device-level LiDAR scan and represent rough estimates of room geometry. They are intended as spatial reference only and should not be used for construction or measurement-critical decisions.</p>"
-            for scan in lidarScans {
+            html += Self.lidarDisclaimerHTML
+            for scan in unlinkedScans {
                 html += "<div style=\"margin-bottom:18px;page-break-inside:avoid;break-inside:avoid;\">"
                 html += "<p class=\"meta\"><strong>\((scan.displayName).htmlEscaped)</strong> — \(htmlDateFormatter.string(from: scan.capturedAt))</p>"
                 if let pngName = scan.floorplanPNGFileName {
@@ -351,6 +392,9 @@ enum HTMLReportRenderer {
                         let b64 = pngData.base64EncodedString()
                         html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;max-height:7in;height:auto;object-fit:contain;border:1px solid #ccc;border-radius:6px;\" />"
                     }
+                }
+                if let summary = scan.measurementsSummary {
+                    html += "<p class=\"meta\">\(summary.htmlEscaped)</p>"
                 }
                 html += "</div>"
             }

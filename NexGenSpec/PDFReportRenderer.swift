@@ -48,6 +48,11 @@ public enum PDFReportRenderer {
         }
         try FileSecurity.ensureProtectedDirectory(imagesDir)
 
+        // Regenerate the cached whole-home floor plan (if the scan set changed)
+        // BEFORE the synchronous HTML render, which only reads the cache.
+        let jobId = UUID(uuidString: version.inspection.inspectionId) ?? version.id
+        await WholeHomeFloorplanService.regenerateIfNeeded(jobId: jobId)
+
         // Render HTML off the main actor. Images are streamed to disk so we never hold
         // all photo bytes in memory simultaneously.
         let versionCopy = version

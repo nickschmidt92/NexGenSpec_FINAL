@@ -39,6 +39,10 @@ public final class ReportExportService: ObservableObject {
         let versionCopy = version
         let wm = watermark
         let task = Task {
+            // Regenerate the cached whole-home floor plan (if the scan set
+            // changed) BEFORE the synchronous HTML render, which only reads it.
+            let jobId = UUID(uuidString: versionCopy.inspection.inspectionId) ?? versionCopy.id
+            await WholeHomeFloorplanService.regenerateIfNeeded(jobId: jobId)
             // Heavy work (HTML + write) off main thread; then PDF on main (WKWebView needs main).
             // Step 1: render HTML + assets off main. HTML is the source of truth and must always succeed.
             let htmlResult: (htmlURL: URL, reportDir: URL)? = await Task.detached(priority: .userInitiated) {
