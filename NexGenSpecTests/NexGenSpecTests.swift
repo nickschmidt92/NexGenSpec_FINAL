@@ -8,6 +8,7 @@ import PDFKit
 import UIKit
 import Combine
 import CoreImage
+import Security
 @testable import NexGenSpec
 
 final class FilePathsTests: XCTestCase {
@@ -1777,6 +1778,31 @@ final class SubscriptionManagerBetaUnlockTests: XCTestCase {
 @MainActor
 final class SubscriptionMonetizationGateTests: XCTestCase {
 
+    /// Deletes the Keychain entitlement-cache item (mirrors the private
+    /// constants at SubscriptionManager.swift:224-225). A stale
+    /// EntitlementCache(isPro:false) left by a prior run's async
+    /// updateEntitlements() would skip legacy UserDefaults migration and rot
+    /// these fixtures; clearing it in setUp AND tearDown makes both tests
+    /// deterministic regardless of prior Keychain state.
+    private func clearKeychainEntitlementCache() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.nexgenspec.entitlement.cache",
+            kSecAttrAccount as String: "current"
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    override func setUp() {
+        super.setUp()
+        clearKeychainEntitlementCache()
+    }
+
+    override func tearDown() {
+        clearKeychainEntitlementCache()
+        super.tearDown()
+    }
+
     private func makeManager(trialUsed: Int) -> SubscriptionManager {
         UserDefaults.standard.set(trialUsed, forKey: "nexgenspec.trial.inspectionsCreated")
         // Re-init so the counter is read fresh from UserDefaults.
@@ -3300,5 +3326,68 @@ final class Build22Slice4cSyncTests: XCTestCase {
         XCTAssertEqual(meta.updatedAt, ts, "VersionMetadata mirrors the version's updatedAt.")
         let metaData = try JSONEncoder().encode(meta)
         XCTAssertEqual(try JSONDecoder().decode(VersionMetadata.self, from: metaData).updatedAt, ts)
+    }
+}
+
+// MARK: - Asset sync classifier + recordName (W1, D-0203)
+
+/// Pure-function coverage for the synced-asset path classifier (defense-in-depth on
+/// both push and pull) and the deterministic asset recordName. No CloudKit / disk.
+final class SyncAssetPathsTests: XCTestCase {
+
+    private let jobId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    private let scanId = "22222222-2222-2222-2222-222222222222"
+    private let photoId = "33333333-3333-3333-3333-333333333333"
+
+    func testCanonicalPathsMapToExpectedKinds() {
+        let insp = "Inspections/\(jobId.uuidString)"
+        XCTAssertEqual(SyncAssetPaths.kind(forRelativePath: "\(insp)/thumbnails/\(photoId).jpg"), .thumbnail)
+        XCTAssertEqual(SyncAssetPaths.kind(forRelativePath: "\(insp)/lidar/\(scanId).json"), .lidarScan)
+        XCTAssertEqual(SyncAssetPaths.kind(forRelativePath: "\(insp)/lidar/\(scanId)_floorplan.png"), .lidarFloorplan)
+        XCTAssertEqual(SyncAssetPaths.kind(forRelativePath: "\(insp)/lidar/\(scanId)_room.json"), .lidarRoom)
+        XCTAssertEqual(SyncAssetPaths.kind(forRelativePath: "Reports/123 Main St/Inspection_Report.pdf"), .reportPDF)
+    }
+
+    func testExcludedAndForeignPathsMapToNil() {
+        let insp = "Inspections/\(jobId.uuidString)"
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "\(insp)/photos/\(photoId).jpg"))     // full-res photo
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "\(insp)/videos/\(scanId).mov"))       // video
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "\(insp)/lidar/\(scanId).usdz"))        // 3D scan
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "\(insp)/lidar/whole_home_x.png"))      // derived cache
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "\(insp)/lidar/other.png"))             // other png guard
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "somewhere/else.txt"))                  // foreign
+    }
+
+    func testTraversalAndMalformedPathsRejected() {
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "Inspections/\(jobId.uuidString)/lidar/../../escape.json"))
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: ""))
+        XCTAssertNil(SyncAssetPaths.kind(forRelativePath: "/abs/Reports/x.pdf"))
+    }
+
+    func testAssetRecordNameIsDeterministicAndPathSensitive() {
+        let a = "Inspections/\(jobId.uuidString)/lidar/\(scanId).json"
+        let b = "Inspections/\(jobId.uuidString)/lidar/\(scanId)_room.json"
+        // Same inputs → same output (idempotent overwrite target).
+        XCTAssertEqual(CloudKitSchema.assetRecordName(jobId: jobId, relativePath: a),
+                       CloudKitSchema.assetRecordName(jobId: jobId, relativePath: a))
+        // Different path → different record.
+        XCTAssertNotEqual(CloudKitSchema.assetRecordName(jobId: jobId, relativePath: a),
+                          CloudKitSchema.assetRecordName(jobId: jobId, relativePath: b))
+        // Different jobId → different record.
+        XCTAssertNotEqual(CloudKitSchema.assetRecordName(jobId: jobId, relativePath: a),
+                          CloudKitSchema.assetRecordName(jobId: UUID(), relativePath: a))
+        // Prefixed + bounded, never collides with a versionId.uuidString.
+        let name = CloudKitSchema.assetRecordName(jobId: jobId, relativePath: a)
+        XCTAssertTrue(name.hasPrefix("asset-"))
+        XCTAssertNil(UUID(uuidString: name))
+    }
+
+    func testRecordTypeRoutingByKind() {
+        XCTAssertEqual(CloudKitSchema.recordType(forAssetKind: SyncAssetKind.reportPDF.rawValue),
+                       CloudKitSchema.RecordType.reportPDF)
+        for kind: SyncAssetKind in [.thumbnail, .lidarFloorplan, .lidarScan, .lidarRoom] {
+            XCTAssertEqual(CloudKitSchema.recordType(forAssetKind: kind.rawValue),
+                           CloudKitSchema.RecordType.mediaAsset)
+        }
     }
 }

@@ -24,12 +24,23 @@ enum FloorplanRenderer {
         size: CGSize = CGSize(width: 1600, height: 1200),
         margin: CGFloat = 80
     ) -> Data? {
-        let wallLines = room.walls.map(lineSegment(from:))
+        renderPNG(from: [room], size: size, margin: margin)
+    }
+
+    /// Render a combined top-down floor plan from one or more rooms whose
+    /// surface transforms share a coordinate space (a single CapturedRoom, or
+    /// CapturedStructure.rooms after a StructureBuilder merge).
+    static func renderPNG(
+        from rooms: [CapturedRoom],
+        size: CGSize = CGSize(width: 1600, height: 1200),
+        margin: CGFloat = 80
+    ) -> Data? {
+        let wallLines = rooms.flatMap { $0.walls.map(lineSegment(from:)) }
         guard !wallLines.isEmpty else { return nil }
 
-        let doorLines = room.doors.map(lineSegment(from:))
-        let windowLines = room.windows.map(lineSegment(from:))
-        let openingLines = room.openings.map(lineSegment(from:))
+        let doorLines = rooms.flatMap { $0.doors.map(lineSegment(from:)) }
+        let windowLines = rooms.flatMap { $0.windows.map(lineSegment(from:)) }
+        let openingLines = rooms.flatMap { $0.openings.map(lineSegment(from:)) }
 
         // Bounding box of everything that will be drawn (XZ plane).
         let allPoints = (wallLines + doorLines + windowLines + openingLines)

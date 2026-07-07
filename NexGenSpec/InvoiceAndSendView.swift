@@ -19,6 +19,7 @@ struct InvoiceAndSendView: View {
     @State private var additionalServices = ""
     @State private var invoiceTotal = ""
     @State private var showMailCompose = false
+    @State private var showInvoiceShareSheet = false
     @State private var exportedPDFURL: URL?
     @State private var mailUnavailableAlert = false
     @State private var showExportError = false
@@ -210,10 +211,20 @@ struct InvoiceAndSendView: View {
         .sheet(isPresented: $showMailCompose) {
             mailComposeSheet
         }
+        .sheet(isPresented: $showInvoiceShareSheet) {
+            // Mac (Designed-for-iPad) fallback: MFMailComposeViewController can't
+            // send here, so hand the invoice PDF to the system share sheet
+            // (Mail / Messages / AirDrop / Files). Only the HTML body exists, so
+            // share the PDF alone rather than raw markup as body text.
+            if let url = exportedPDFURL {
+                ShareSheet(activityItems: [url])
+                    .ignoresSafeArea()
+            }
+        }
         .alert("Mail Unavailable", isPresented: $mailUnavailableAlert) {
             Button("OK") {}
         } message: {
-            Text("This device is not set up to send email. Add a mail account in Settings.")
+            Text("This device can't send email from the app. You can export the invoice PDF and send it from another app instead.")
         }
         .overlay {
             if exportService.isExporting {
@@ -226,6 +237,10 @@ struct InvoiceAndSendView: View {
                 // Proceed to email the large report. Previously this was an
                 // empty no-op, so the labelled action did nothing and the user
                 // had to hunt for the separate Send button.
+                if Platform.isMac {
+                    showInvoiceShareSheet = true
+                    return
+                }
                 guard MFMailComposeViewController.canSendMail() else {
                     mailUnavailableAlert = true
                     return
@@ -432,20 +447,37 @@ struct InvoiceAndSendView: View {
     }
 
     private func sendInvoiceTapped() {
-        guard MFMailComposeViewController.canSendMail() else {
-            mailUnavailableAlert = true
-            return
-        }
+        // Ensure the PDF exists first, then hand off to the platform-appropriate
+        // delivery path. The Mac branch lives in presentInvoiceDelivery() so it
+        // fires only once a real PDF is in hand (never an empty share sheet).
         if exportedPDFURL != nil {
-            showMailCompose = true
+            presentInvoiceDelivery()
             return
         }
         Task { @MainActor in
             await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
             if case .success(_, let pdf?) = exportService.result {
                 exportedPDFURL = pdf
-                showMailCompose = true
+                presentInvoiceDelivery()
             }
+            // Export failure surfaces via the existing showExportError path
+            // (onChange of exportService.isExporting); nothing to present here.
         }
+    }
+
+    /// Route the exported invoice to the right delivery UI. On a Designed-for-iPad
+    /// Mac, MFMailComposeViewController.canSendMail() is always false, so route
+    /// through the system share sheet (Mail / Messages / AirDrop / Files) instead
+    /// of dead-ending in the "no mail account" alert.
+    private func presentInvoiceDelivery() {
+        if Platform.isMac {
+            showInvoiceShareSheet = true
+            return
+        }
+        guard MFMailComposeViewController.canSendMail() else {
+            mailUnavailableAlert = true
+            return
+        }
+        showMailCompose = true
     }
 }

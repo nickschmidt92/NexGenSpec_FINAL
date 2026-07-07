@@ -32,6 +32,20 @@ protocol CloudDatabase: Sendable {
     func recordTombstone(versionId: String, inZone zoneName: String) async throws
     /// The set of tombstoned (deleted) versionIds for the zone (empty if no SyncMeta).
     func tombstonedIds(inZone zoneName: String) async throws -> Set<String>
+
+    // MARK: - Asset sync (D-0203). Overwrite-on-re-push; last-writer-overwrites —
+    // assets are regenerable deliverables, not immutable legal records.
+    /// Upsert one asset record (CKAsset payload) into the zone, overwriting any
+    /// existing record with the same recordName.
+    func saveAsset(_ record: SyncAssetRecord, inZone zoneName: String) async throws
+    /// Append an asset key ("<jobId>/<relativePath>") to the zone's SyncMeta
+    /// asset-deletion log (independent of `deletedIds`). Idempotent.
+    func recordAssetTombstone(key: String, inZone zoneName: String) async throws
+    /// Remove an asset key from the asset-deletion log (idempotent no-op if absent),
+    /// so a deleted-then-recreated asset isn't re-deleted on a later pull.
+    func clearAssetTombstone(key: String, inZone zoneName: String) async throws
+    /// The set of tombstoned asset keys for the zone (empty if no SyncMeta / field).
+    func tombstonedAssetKeys(inZone zoneName: String) async throws -> Set<String>
 }
 
 /// Resolves the current iCloud user as an opaque token (nil ⇒ no iCloud account).
@@ -165,8 +179,23 @@ struct DiskVersionReader: LocalVersionReader {
 /// A batch of remote changes for a zone, plus the new server change token.
 struct ZoneChanges {
     let changed: [RemoteVersion]
+    /// Synced assets (D-0203) that changed in this window — report PDFs, thumbnails,
+    /// LiDAR floor plans + scan/room JSON. Carried alongside versions; applied by the
+    /// port after the version batch. Defaults to empty so pre-asset call sites (and
+    /// a Prod schema that lacks the asset record types) keep the version-only shape.
+    let changedAssets: [SyncAssetRecord]
+    /// InspectionVersion deletions ONLY (asset deletions are driven by the
+    /// `deletedAssets` tombstone log, never CK-native deletions — the asset
+    /// recordName is a non-reversible hash that can't map back to a local file).
     let deletedRecordNames: [String]
     let newToken: Data?
+
+    init(changed: [RemoteVersion], changedAssets: [SyncAssetRecord] = [], deletedRecordNames: [String], newToken: Data?) {
+        self.changed = changed
+        self.changedAssets = changedAssets
+        self.deletedRecordNames = deletedRecordNames
+        self.newToken = newToken
+    }
 }
 
 /// A remote version record plus its server modification time (the LWW clock).
@@ -185,7 +214,7 @@ protocol CloudZoneFetcher: Sendable {
 /// Default: no remote changes (push-only until the real fetcher is wired).
 struct NoopZoneFetcher: CloudZoneFetcher {
     func fetchChanges(inZone zoneName: String, since token: Data?) async throws -> ZoneChanges {
-        ZoneChanges(changed: [], deletedRecordNames: [], newToken: token)
+        ZoneChanges(changed: [], changedAssets: [], deletedRecordNames: [], newToken: token)
     }
 }
 
@@ -200,6 +229,14 @@ struct NoopZoneFetcher: CloudZoneFetcher {
 protocol LocalVersionWriter: Sendable {
     func applyRemoteVersion(_ payload: Data) async -> Bool
     func deleteLocalVersion(recordName: String) async -> Bool
+    /// Write one synced asset's bytes to the correct on-disk location under the
+    /// receiver's PINNED bound-UID root (D-0203). true = durably applied or a safe
+    /// no-op (foreign/traversal path, sync detached, LWW keep-local); false = a
+    /// transient write failure worth retrying (holds the change token).
+    func applyRemoteAsset(_ record: SyncAssetRecord) async -> Bool
+    /// Remove one synced asset from disk (tombstone-driven). true = removed or
+    /// already-absent (idempotent); false = a transient failure worth retrying.
+    func deleteLocalAsset(jobId: UUID, relativePath: String) async -> Bool
 }
 
 /// Default: applies nothing (used until the InspectionStore-backed writer is wired).
@@ -207,6 +244,8 @@ protocol LocalVersionWriter: Sendable {
 struct NoopLocalVersionWriter: LocalVersionWriter {
     func applyRemoteVersion(_ payload: Data) async -> Bool { true }
     func deleteLocalVersion(recordName: String) async -> Bool { true }
+    func applyRemoteAsset(_ record: SyncAssetRecord) async -> Bool { true }
+    func deleteLocalAsset(jobId: UUID, relativePath: String) async -> Bool { true }
 }
 
 /// Persists the identity binding. Real impl is the Keychain store; tests use an

@@ -10,13 +10,18 @@ Guideline 5.1 auto-reject + misrepresentation exposure).
 
 ## The data-handling reality (what the copy must accurately reflect)
 
-- Inspections sync **across the user's own devices** (iPhone, iPad, Mac) through **the
-  user's private iCloud account** (Apple CloudKit *private database*). The data goes
+- Inspection records sync **across the user's own devices** (iPhone, iPad, Mac) through
+  **the user's private iCloud account** (Apple CloudKit *private database*). The data goes
   **only to the user's iCloud** — **NexGenSpec never receives, stores, or can access
   it** server-side. There is no NexGenSpec server in the path.
-- **What syncs:** the inspection record (JSON), the report PDF, and thumbnails — always.
-  Original media (full-resolution photos, videos, LiDAR/USDZ scans) is on-demand and not
-  part of the default sync set.
+- **What syncs:** the inspection record (JSON), report PDFs, thumbnails, and LiDAR floor
+  plans (plan images, room dimensions, scan metadata). Full-resolution original media
+  (photos, videos, and 3D room-scan/USDZ files) stays on the device where it was captured
+  and does **not** sync in this version; on-demand media sync is a planned later release.
+  (Matches build 29 behavior — light-asset sync slice, D-0203/T-01623.)
+- **Per-device status flags (by design):** archive status and invoice sent/paid status are
+  stored per-device — archiving an inspection on one device leaves it active on the
+  others. (T-01612 addendum 2026-07-03.)
 - **Encryption:** CloudKit private-database data is encrypted in transit and at rest by
   Apple; identity uses Sign in with Apple.
 - **Roles:** the inspector is the **data controller**; NexGenSpec is a **no-access tool
@@ -33,15 +38,18 @@ Guideline 5.1 auto-reject + misrepresentation exposure).
 ## 1) Privacy policy — replace the "no sync / local-only" section with:
 
 > **Cross-device sync (your iCloud).** When iCloud Sync is on (the default), your
-> inspections — the inspection record, the report PDF, and thumbnails — sync across the
-> Apple devices signed in to your iCloud account, through Apple's iCloud (CloudKit) in
-> your **private** database. This data goes **only to your iCloud account. NexGenSpec
-> never receives, stores, or has access to it**, and there is no NexGenSpec server in
-> the path. Apple encrypts this data in transit and at rest. Because inspections can
-> contain your client's personal information and e-signatures, that information is
-> replicated into **your** iCloud; you are responsible for it as the inspector. To keep
-> inspections on a single device instead, turn on **Local-Only mode** in Settings. Sync
-> is not a backup: deletions propagate across your devices, so keep your own backups.
+> inspections — the inspection record, report PDFs, thumbnails, and LiDAR floor plans —
+> sync across the Apple devices signed in to your iCloud account, through Apple's iCloud
+> (CloudKit) in your **private** database. This data goes **only to your iCloud account.
+> NexGenSpec never receives, stores, or has access to it**, and there is no NexGenSpec
+> server in the path. Apple encrypts this data in transit and at rest. Full-resolution
+> photos, videos, and 3D room-scan files stay on the device where they were captured and
+> do not sync; archive and invoice status are stored per-device.
+> Because inspection records can contain your client's personal information and
+> e-signatures, that information is replicated into **your** iCloud; you are responsible
+> for it as the inspector. To keep inspections on a single device instead, turn on
+> **Local-Only mode** in Settings. Sync is not a backup: deletions propagate across your
+> devices, so keep your own backups.
 
 ## 2) Terms of use — replace the "Multi-device note":
 
@@ -57,11 +65,14 @@ Guideline 5.1 auto-reject + misrepresentation exposure).
 The live FAQ hard-codes **"Do my inspections sync? No."** Change to:
 
 > **Q: Do my inspections sync between my devices?**
-> A: Yes. By default, NexGenSpec syncs your inspections (record, report PDF, and
-> thumbnails) across the Apple devices on your iCloud account, through your **private**
-> iCloud — NexGenSpec never receives or stores them. Prefer to keep everything on one
-> device? Turn on **Local-Only mode** in Settings. Note that sync is not a backup:
-> deleting an inspection removes it from your other devices too.
+> A: Yes. By default, NexGenSpec syncs your inspections — the inspection record, report
+> PDFs, thumbnails, and LiDAR floor plans — across the Apple devices on your iCloud
+> account, through your **private** iCloud — NexGenSpec never receives or stores them.
+> Full-resolution photos, videos, and 3D scan files stay on the device where they were
+> captured (use **Save to Files** to move a complete inspection package), and
+> archive/invoice status is tracked per-device. Prefer to keep everything on one device?
+> Turn on **Local-Only mode** in Settings. Note that sync is not a backup: deleting an
+> inspection removes it from your other devices too.
 
 **Also update the `FAQPage` JSON-LD** on the same page so the structured-data answer
 matches (it currently encodes the "No" answer).
@@ -72,7 +83,7 @@ The local-first label must change to disclose iCloud sync. Per data type:
 - **Other User Content** (the inspection content, incl. client PII + e-signatures):
   collected, **Linked** to identity, App Functionality. Now **"shared with third
   parties" = Apple iCloud** as the sync transport (the user's own private DB).
-- **Photos/Videos:** Linked, App Functionality (unchanged for capture; on-demand for sync).
+- **Photos/Videos:** Linked, App Functionality (unchanged — captured and stored on-device; not synced).
 - **Email Address:** Linked (Sign in with Apple), App Functionality.
 - **Precise Location:** Not Linked, App Functionality (weather + address auto-fill — unchanged).
 - **Crash Data:** Not Linked.

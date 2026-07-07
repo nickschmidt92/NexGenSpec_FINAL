@@ -670,6 +670,7 @@ private struct SectionItemsListView: View {
     let jobId: UUID
 
     @State private var selectedRef: SectionItemRef?
+    @State private var showLiDARCapture = false
 
     var body: some View {
         let section = draft.inspection.sections[sectionIndex]
@@ -700,9 +701,33 @@ private struct SectionItemsListView: View {
                     }
                 }
             }
+            // Per-section LiDAR capture: pre-links the scan to this section so the
+            // report renders its floor plan inside the section block. Hidden on
+            // non-LiDAR devices (LiDARCapability gate, false on Mac).
+            if draft.state.isEditable && LiDARCapability.isSupported {
+                Section {
+                    Button {
+                        showLiDARCapture = true
+                    } label: {
+                        Label("Scan Room (LiDAR)", systemImage: "dot.viewfinder")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .accessibilityLabel("Scan room with LiDAR")
+                    .accessibilityHint("Captures a 3D scan and floor plan linked to this section")
+                } footer: {
+                    Text("The scan's floor plan will appear in this section of the report.")
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(section.title)
+        .sheet(isPresented: $showLiDARCapture) {
+            LiDARCaptureView(
+                jobId: jobId,
+                sectionId: draft.inspection.sections[sectionIndex].id,
+                defaultName: draft.inspection.sections[sectionIndex].title
+            )
+        }
         .sheet(item: $selectedRef) { ref in
             NavigationStack {
                 itemDetailView(for: ref)

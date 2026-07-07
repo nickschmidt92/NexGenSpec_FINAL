@@ -128,6 +128,9 @@ struct NexGenSpecApp: App {
                     // CloudKit port whose writer applies pulled changes through it).
                     store.syncCoordinator = syncCoordinator
                     syncCoordinator.store = store
+                    // Publish the live coordinator so decoupled media services can emit
+                    // asset-sync changes without a store reference (D-0203).
+                    SyncCoordinator.active = syncCoordinator
                     syncCoordinator.start()
                     syncCoordinator.userDidChange(uid: authManager.currentUID)
                 }

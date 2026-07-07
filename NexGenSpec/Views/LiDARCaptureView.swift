@@ -12,6 +12,11 @@ import Combine
 
 struct LiDARCaptureView: View {
     var jobId: UUID
+    /// Section this capture is pre-linked to (per-section entry point). nil from
+    /// the Overview entry points — scan stays unlinked.
+    var sectionId: UUID? = nil
+    /// Prefill for the naming sheet (e.g. the section title). User can edit.
+    var defaultName: String? = nil
     var onScanSaved: ((LiDARScan) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var savedScans: [LiDARScan] = []
@@ -29,6 +34,7 @@ struct LiDARCaptureView: View {
 
     @State private var pendingName: String = ""
     @State private var showNamingSheet = false
+    @State private var showSaveError = false
 
     var body: some View {
         NavigationStack {
@@ -60,7 +66,7 @@ struct LiDARCaptureView: View {
                 // the box's Combine mirror failed to propagate.
                 #if canImport(RoomPlan)
                 if #available(iOS 16.0, *), pending.inner.isReady {
-                    pendingName = ""
+                    pendingName = defaultName ?? ""
                     showNamingSheet = true
                 }
                 #endif
@@ -142,6 +148,16 @@ struct LiDARCaptureView: View {
                     }
                 }
             }
+            // Attached to the naming sheet's OWN NavigationStack (not the parent) so a
+            // save-failure alert presents FROM the sheet's controller and appears over
+            // it — keeping the sheet open for retry. Anchored on the parent it would be
+            // covered by this sheet and never show (SwiftUI defers a second modal on one
+            // host controller), leaving the sheet looking frozen. Mirrors SignatureView.
+            .alert("Couldn't Save Scan", isPresented: $showSaveError) {
+                Button("OK") { showSaveError = false }
+            } message: {
+                Text("The room scan couldn't be saved to this device. Please try again.")
+            }
         }
         .presentationDetents([.medium])
     }
@@ -150,7 +166,13 @@ struct LiDARCaptureView: View {
         #if canImport(RoomPlan)
         if #available(iOS 16.0, *) {
             let name = pendingName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let room = pending.inner.takeRoom() {
+            // Peek (non-consuming): the captured room MUST survive a failed save so
+            // the user can retry. It is cleared via `reset()` only on save SUCCESS
+            // (below), Discard, or Cancel — never merely by starting a save attempt.
+            // Using takeRoom() here would clear it before the async save resolves, so
+            // a retry after a transient failure would find nothing and silently lose
+            // the (iPad-only) capture.
+            if let room = pending.inner.peekRoom() {
                 Task { @MainActor in
                     // Hold a background-task assertion across the save: the
                     // sheet dismisses immediately, so the user may background
@@ -167,23 +189,34 @@ struct LiDARCaptureView: View {
                     }
                     // USDZ export + floor-plan render + record commit run off
                     // the main actor; the scan publishes via onScanSaved once
-                    // the record is on disk. Failure stays silent — same
-                    // semantics as the previous synchronous path.
-                    let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name)
+                    // the record is on disk.
+                    let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name, sectionId: sectionId)
                     if let scan {
                         lastSavedScan = scan
                         onScanSaved?(scan)
+                        // Advance the pending generation only now that the room is
+                        // committed, so a Done-then-Cancel fallback can't resurface it.
+                        pending.inner.reset()
+                        showNamingSheet = false          // dismiss ONLY on success
+                    } else {
+                        // Save failed: keep the naming sheet open and surface an
+                        // error so the user can retry rather than silently lose an
+                        // iPad-only LiDAR capture. Do NOT reset pending state or
+                        // dismiss on this path.
+                        showSaveError = true
                     }
                     if bgTask != .invalid {
                         UIApplication.shared.endBackgroundTask(bgTask)
                         bgTask = .invalid
                     }
                 }
+            } else {
+                // No captured room to persist (nothing taken) — dismiss the sheet.
+                pending.inner.reset()
+                showNamingSheet = false
             }
-            pending.inner.reset()
         }
         #endif
-        showNamingSheet = false
     }
 
     // MARK: - Content
@@ -223,6 +256,11 @@ struct LiDARCaptureView: View {
                                 Text(scan.capturedAt, style: .date)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                                if let summary = scan.measurementsSummary {
+                                    Text(summary)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }

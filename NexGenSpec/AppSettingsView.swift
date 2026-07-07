@@ -38,7 +38,7 @@ struct AppSettingsView: View {
     private var iCloudSyncSection: some View {
         SettingsSectionCard(
             title: "iCloud Sync",
-            subtitle: "Your inspection records sync across your Apple devices through your private iCloud. Photos, videos, report PDFs, and thumbnails stay on the device where they were created — they do not sync yet. Your data goes only to your iCloud — NexGenSpec never receives or stores it. Turn on Local-Only mode to keep inspections on this device. Sync is not a backup: deletions sync across your devices."
+            subtitle: "Your inspections — the inspection record, report PDFs, thumbnails, and LiDAR floor plans — sync across your Apple devices through your private iCloud. Full-resolution photos, videos, and 3D scan files stay on the device where they were captured. Archive and invoice status are tracked per device. Your data goes only to your iCloud — NexGenSpec never receives or stores it. Turn on Local-Only mode to keep inspections on this device. Sync is not a backup: deletions sync across your devices."
         ) {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Toggle("Local-Only mode", isOn: $localOnlyMode)
@@ -52,7 +52,31 @@ struct AppSettingsView: View {
                      : "Inspections sync across your own devices through your private iCloud.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                // Release-visible sync status. Reflects the coordinator's
+                // last-published status, which updates at bind outcomes
+                // (off / localOnly / idle-after-bind / paused) — the reliably
+                // published states. Live .syncing/.error flush transitions are
+                // NOT forwarded this wave; a live-status publisher is a follow-up.
+                Text(releaseSyncStatusText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Sync status: \(releaseSyncStatusText)")
             }
+        }
+    }
+
+    /// End-user-worded sync status for Release builds. Deliberately does NOT
+    /// surface the raw `.error(message)` string (it can carry internal queue
+    /// phrasing); it maps to a calm "will retry" line. `.paused` reasons are
+    /// user-meaningful account-state strings and are shown verbatim.
+    private var releaseSyncStatusText: String {
+        switch syncCoordinator.status {
+        case .off: return "Sync is off."
+        case .localOnly: return "Local-Only — not signed in to iCloud."
+        case .idle: return "Up to date."
+        case .syncing: return "Syncing…"
+        case .paused(let reason): return "Paused — \(reason)"
+        case .error: return "Sync paused — will retry automatically."
         }
     }
 #if DEBUG
@@ -200,7 +224,7 @@ struct AppSettingsView: View {
 #if DEBUG
                     SettingsSectionCard(
                         title: "CloudKit Sync (DEBUG)",
-                        subtitle: "Developer-only. Pushes inspection JSON to the DEVELOPMENT CloudKit environment so sync can be tested on a real device. Push-only for now: changes appear in the CloudKit Dashboard, not on other devices. Compiled out of release builds."
+                        subtitle: "Developer-only. Mirrors inspection records and their synced assets (report PDFs, thumbnails, LiDAR floor plans and scan data) to the DEVELOPMENT CloudKit environment for on-device testing. Compiled out of release builds."
                     ) {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             Toggle("Enable sync (this debug build only)", isOn: $syncDevEnabled)
@@ -298,7 +322,7 @@ struct AppSettingsView: View {
 
                     SettingsSectionCard(
                         title: "Reports",
-                        subtitle: "Browse and re-share the report PDFs and ZIP backups you’ve exported. They’re saved to your account; with iCloud Sync on, report PDFs sync across your own Apple devices through your private iCloud."
+                        subtitle: "Browse and re-share the report PDFs and ZIP backups you’ve exported. They’re saved to your account; with iCloud Sync on, report PDFs sync across your own Apple devices through your private iCloud. ZIP backups stay on the device where they were exported."
                     ) {
                         NavigationLink {
                             MyReportsView()

@@ -92,9 +92,11 @@ collected, transmitted, or stored.
 
 NexGenSpec stores inspection data on-device with iOS Data Protection
 enabled (NSFileProtectionCompleteUnlessOpen). With iCloud Sync ON (the
-default), a user's inspections — the inspection record, report PDF, and
-thumbnails — sync across THAT user's own Apple devices through their
-PRIVATE iCloud account (Apple CloudKit private database). The data goes
+default), a user's inspections — the inspection record, report PDF,
+thumbnails, and LiDAR floor plans / scan data — sync across THAT user's own
+Apple devices through their PRIVATE iCloud account (Apple CloudKit private
+database). Full-resolution photos, videos, and 3D scan (USDZ) files do not
+sync and remain only on the device that captured them. The data goes
 only to the user's own iCloud; NexGenSpec never receives, stores, hosts,
 or has access to it (there is no NexGenSpec server/backend). Users can turn
 on Local-Only mode to keep inspections on a single device. iCloud Sync is

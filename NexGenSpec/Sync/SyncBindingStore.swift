@@ -35,6 +35,14 @@ public struct SyncBinding: Codable, Equatable {
     public var boundAt: Date
     /// Set once one-time seeding completes; nil means "not yet seeded" (idempotency).
     public var seededAt: Date?
+    /// Set once the one-time ASSET backfill completes (D-0203): pre-existing
+    /// thumbnails, floor plans, room/scan JSON, and report PDFs mirrored to CloudKit.
+    /// Tracked SEPARATELY from `seededAt` so an already-version-seeded (build-22)
+    /// binding still backfills its assets on its first build-29 bind, and so a
+    /// Prod-schema-missing asset failure re-runs the asset seed WITHOUT re-pushing
+    /// every version. Additive/optional: legacy rows decode it as nil ⇒ the backfill
+    /// runs once. nil means "assets not yet seeded".
+    public var assetsSeededAt: Date?
     /// Per-zone CloudKit server change token (opaque), for incremental two-way pulls.
     public var changeToken: Data?
     public var schemaVersion: Int
@@ -45,6 +53,7 @@ public struct SyncBinding: Codable, Equatable {
         zoneName: String,
         boundAt: Date,
         seededAt: Date? = nil,
+        assetsSeededAt: Date? = nil,
         changeToken: Data? = nil,
         schemaVersion: Int = 1
     ) {
@@ -53,6 +62,7 @@ public struct SyncBinding: Codable, Equatable {
         self.zoneName = zoneName
         self.boundAt = boundAt
         self.seededAt = seededAt
+        self.assetsSeededAt = assetsSeededAt
         self.changeToken = changeToken
         self.schemaVersion = schemaVersion
     }

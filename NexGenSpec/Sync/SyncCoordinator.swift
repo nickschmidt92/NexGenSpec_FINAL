@@ -18,6 +18,13 @@ final class SyncCoordinator: ObservableObject {
 
     @Published private(set) var status: SyncStatus = .off
 
+    /// Weak handle to the live coordinator so decoupled services (PhotoLoadService,
+    /// FilesAppPublisher, LiDARScanStore, capture bridge, …) can record media-file
+    /// changes without threading a store reference through every call site. Set once
+    /// at app wiring; survives port rebinds (the coordinator instance is stable, only
+    /// the underlying port swaps).
+    @MainActor static weak var active: SyncCoordinator?
+
     /// The active port. NoopSyncPort whenever sync is disabled / no user.
     private var port: SyncPort = NoopSyncPort()
     private var currentUID: String?
@@ -146,13 +153,33 @@ final class SyncCoordinator: ObservableObject {
         port.recordLocalChange(change)
     }
 
+    /// Record that a synced media file was written. Main-actor-hopping so services on
+    /// any queue/thread can call it after a successful byte write. Inert when sync is
+    /// off / no user (the active port is a NoopSyncPort).
+    nonisolated static func noteMediaUpserted(jobId: UUID, relativePath: String) {
+        Task { @MainActor in active?.recordLocalChange(.mediaUpserted(jobId: jobId, relativePath: relativePath)) }
+    }
+
+    /// Record that a synced media file was removed. See `noteMediaUpserted`.
+    nonisolated static func noteMediaDeleted(jobId: UUID, relativePath: String) {
+        Task { @MainActor in active?.recordLocalChange(.mediaDeleted(jobId: jobId, relativePath: relativePath)) }
+    }
+
     /// Pull remote changes now — e.g. when the app returns to the foreground, so a
     /// device that was backgrounded while another device edited catches up without
     /// a relaunch. Inert with sync off: the active port is then a `NoopSyncPort`
     /// whose `pull()` does nothing. Cross-device pulls also run on each bind.
     func pullNow() {
         let active = port
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
+            // A live RoomPlan capture owns the main thread; applying pulled
+            // records mid-scan causes visible jitter (main-actor applyRemoteVersion
+            // + metadata publishes). Defer to a one-shot catch-up pull that fires
+            // when the capture ends.
+            if LiDARCaptureActivity.shared.isActive {
+                LiDARCaptureActivity.shared.setPendingPull { self?.pullNow() }
+                return
+            }
             await active.pull()
             // Also re-drive any outbound changes queued during a transient unbind
             // window (fix F). Inert on a NoopSyncPort (flag off).

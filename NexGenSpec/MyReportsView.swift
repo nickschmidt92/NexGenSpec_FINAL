@@ -32,6 +32,11 @@ struct MyReportsView: View {
         let url: URL
     }
 
+    /// Only used to resolve a report folder back to its inspection jobId so a
+    /// swipe-delete can emit the matching CloudKit asset tombstone (D-0203).
+    /// MyReportsView is only ever presented under the store's environment.
+    @EnvironmentObject private var store: InspectionStore
+
     @State private var reports: [Deliverable] = []
     @State private var backups: [Deliverable] = []
     @State private var shareItem: ShareItem?
@@ -143,7 +148,27 @@ struct MyReportsView: View {
     // MARK: - Actions
 
     private func delete(_ d: Deliverable) {
+        // Propagate a report-PDF deletion to CloudKit (D-0203). Only report folders
+        // (under reportsFolder) sync — ZIP backups are not emitted. Recover the jobId
+        // from the folder's own sidecar (rename-proof), which lives INSIDE the folder,
+        // so read it BEFORE the removeItem below. Recomputing folderName from CURRENT
+        // metadata alone orphans the tombstone if the address / client changed after
+        // export (the on-disk folder keeps its export-time name) — the sidecar closes
+        // that gap; the name-match remains only as a legacy fallback (D-0203 review).
+        let reportsPath = FilePaths.reportsFolder.standardizedFileURL.path
+        let syncedReportJobId: UUID? = d.deleteURL.standardizedFileURL.path.hasPrefix(reportsPath + "/")
+            ? (FilesAppPublisher.publishedJobId(inFolder: d.deleteURL)
+               ?? store.metadataList.first(where: {
+                   FilesAppPublisher.folderName(propertyAddress: $0.propertyAddress, clientName: $0.clientName, jobId: $0.inspectionId) == d.deleteURL.lastPathComponent
+               })?.inspectionId)
+            : nil
+
         try? FileManager.default.removeItem(at: d.deleteURL)
+        if let syncedReportJobId {
+            SyncCoordinator.noteMediaDeleted(
+                jobId: syncedReportJobId,
+                relativePath: "Reports/\(d.deleteURL.lastPathComponent)/Inspection_Report.pdf")
+        }
         load()
     }
 

@@ -172,6 +172,93 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         }
     }
 
+    // MARK: - Asset sync (D-0203)
+
+    func saveAsset(_ record: SyncAssetRecord, inZone zoneName: String) async throws {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: record.recordName, zoneID: zoneID)
+
+        // Stage the payload bytes to a temp file the CKAsset points at; removed after.
+        let assetURL = try Self.writeTempPayload(record.payload, recordName: record.recordName)
+        defer { try? FileManager.default.removeItem(at: assetURL) }
+
+        // Assets are regenerable deliverables (thumbnail regen, PDF re-export, scan
+        // rename all overwrite the same recordName), NOT immutable legal records — so
+        // unlike `save(_:)` there is no fetch-first immutability guard and no
+        // serverRecordChanged retry: a simple `.changedKeys` last-writer-overwrites is
+        // correct. A stale copy losing a race just re-pushes on its next change.
+        let ck = CKRecord(recordType: CloudKitSchema.recordType(forAssetKind: record.kind.rawValue), recordID: recordID)
+        ck[CloudKitSchema.Field.assetJobId] = record.jobId.uuidString as CKRecordValue
+        ck[CloudKitSchema.Field.assetRelativePath] = record.relativePath as CKRecordValue
+        ck[CloudKitSchema.Field.assetKind] = record.kind.rawValue as CKRecordValue
+        ck[CloudKitSchema.Field.assetModifiedAt] = record.modifiedAt as CKRecordValue
+        ck[CloudKitSchema.Field.schemaVersion] = record.schemaVersion as CKRecordValue
+        ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
+
+        _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .changedKeys, atomically: true)
+    }
+
+    func recordAssetTombstone(key: String, inZone zoneName: String) async throws {
+        try await modifyAssetTombstones(inZone: zoneName) { keys in
+            guard !keys.contains(key) else { return false }   // already tombstoned — idempotent
+            keys.append(key)
+            return true
+        }
+    }
+
+    func clearAssetTombstone(key: String, inZone zoneName: String) async throws {
+        try await modifyAssetTombstones(inZone: zoneName) { keys in
+            guard let idx = keys.firstIndex(of: key) else { return false }   // absent — idempotent no-op
+            keys.remove(at: idx)
+            return true
+        }
+    }
+
+    func tombstonedAssetKeys(inZone zoneName: String) async throws -> Set<String> {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: CloudKitSchema.syncMetaRecordName, zoneID: zoneID)
+        do {
+            let meta = try await database.record(for: recordID)
+            return Set((meta[CloudKitSchema.Field.deletedAssets] as? [String]) ?? [])
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            return []   // no SyncMeta yet → nothing tombstoned
+        }
+    }
+
+    /// Read-modify-write of the per-zone SyncMeta `deletedAssets` field ONLY (never
+    /// touches `deletedIds`, so an asset-tombstone write that fails on a Prod schema
+    /// missing this field can't break version-deletion sync). `mutate` edits the key
+    /// list in place and returns whether it changed anything; on no-change we skip the
+    /// save. Same bounded serverRecordChanged retry as `recordTombstone`.
+    private func modifyAssetTombstones(inZone zoneName: String, _ mutate: (inout [String]) -> Bool) async throws {
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        let recordID = CKRecord.ID(recordName: CloudKitSchema.syncMetaRecordName, zoneID: zoneID)
+
+        let maxAttempts = 3
+        var lastConflict: Error?
+        for attempt in 1...maxAttempts {
+            let existing: CKRecord?
+            do {
+                existing = try await database.record(for: recordID)
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                existing = nil
+            }
+            let meta = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.syncMeta, recordID: recordID)
+            var keys = (meta[CloudKitSchema.Field.deletedAssets] as? [String]) ?? []
+            guard mutate(&keys) else { return }   // no change → nothing to persist
+            meta[CloudKitSchema.Field.deletedAssets] = keys as CKRecordValue
+            do {
+                _ = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                return
+            } catch let error where Self.isServerRecordChanged(error) {
+                lastConflict = error
+                Diagnostics.logInfo("CKCloudDatabase: SyncMeta changed mid-asset-tombstone (attempt \(attempt)/\(maxAttempts)); re-fetching and retrying.")
+                continue
+            }
+        }
+        throw lastConflict ?? CKError(.serverRecordChanged)
+    }
+
     /// Sets every InspectionVersion field (plus a freshly-wrapped payload CKAsset) on
     /// `ck` from `record`. Factored out so the save-retry loop can rebuild the record
     /// against a re-fetched change tag without duplicating the field mapping.
@@ -250,6 +337,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         var serverToken = startToken
         var changed: [RemoteVersion] = []
+        var changedAssets: [SyncAssetRecord] = []
         var deleted: [String] = []
         var moreComing = true
 
@@ -258,8 +346,12 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             for (_, modificationResult) in result.modificationResultsByID {
                 switch modificationResult {
                 case .success(let modification):
+                    // A record is EITHER a version OR an asset (remoteVersion returns
+                    // nil for the asset record types, and vice versa) — no double-count.
                     if let remote = Self.remoteVersion(from: modification.record) {
                         changed.append(remote)
+                    } else if let asset = Self.remoteAsset(from: modification.record) {
+                        changedAssets.append(asset)
                     }
                 case .failure(let error):
                     // A single record failing to materialize must not abort the
@@ -268,8 +360,10 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
                 }
             }
             // Symmetric with the change path's recordType guard (review F2): only
-            // forward InspectionVersion deletions. A later slice's ReportPDF /
-            // MediaAsset deletion must not be mistaken for a version tombstone.
+            // forward InspectionVersion deletions. Asset deletions are NOT taken from
+            // CK-native deletions — the asset recordName is a non-reversible hash that
+            // can't map back to a (jobId, relativePath), so asset deletion is driven
+            // entirely by the `deletedAssets` tombstone log (see CloudKitSyncPort.pull).
             for deletion in result.deletions where deletion.recordType == CloudKitSchema.RecordType.inspectionVersion {
                 deleted.append(deletion.recordID.recordName)
             }
@@ -277,7 +371,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             moreComing = result.moreComing
         }
 
-        return ZoneChanges(changed: changed, deletedRecordNames: deleted, newToken: Self.encodeToken(serverToken))
+        return ZoneChanges(changed: changed, changedAssets: changedAssets, deletedRecordNames: deleted, newToken: Self.encodeToken(serverToken))
     }
 
     /// Decodes one `InspectionVersion` CKRecord into the transport projection plus
@@ -308,6 +402,35 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             payload: payload
         )
         return RemoteVersion(record: record, modifiedAt: modifiedAt)
+    }
+
+    /// Decodes one asset CKRecord (D-0203) into the transport projection. Returns nil
+    /// for non-asset records or a record that fails receiver-side validation, so the
+    /// caller simply skips it.
+    private static func remoteAsset(from ck: CKRecord) -> SyncAssetRecord? {
+        let type = ck.recordType
+        guard type == CloudKitSchema.RecordType.reportPDF || type == CloudKitSchema.RecordType.mediaAsset else { return nil }
+        guard let jobIdStr = ck[CloudKitSchema.Field.assetJobId] as? String, let jobId = UUID(uuidString: jobIdStr),
+              let relPath = ck[CloudKitSchema.Field.assetRelativePath] as? String,
+              let kindRaw = ck[CloudKitSchema.Field.assetKind] as? String, let kind = SyncAssetKind(rawValue: kindRaw),
+              // Re-validate the path on the RECEIVER (defense-in-depth: reject
+              // traversal/foreign, and confirm the declared kind matches the path).
+              SyncAssetPaths.kind(forRelativePath: relPath) == kind,
+              let asset = ck[CloudKitSchema.Field.payload] as? CKAsset, let fileURL = asset.fileURL,
+              let payload = try? Data(contentsOf: fileURL) else { return nil }
+        // LWW clock (D-0203 review): prefer CloudKit's SERVER modificationDate over the
+        // pusher's client-supplied `assetModifiedAt` so last-writer-wins arbitrates on a
+        // single authoritative clock — skew between a user's OWN devices can no longer
+        // permanently drop an asset update (e.g. a scan rename) the way comparing the
+        // receiver's local mtime against the pushing device's client mtime could. Unlike
+        // a version — whose embedded model `updatedAt` travels with the content and is
+        // compared like-for-like — a synced asset is an opaque blob with no embedded
+        // logical clock, so the server date is the skew-minimal comparand. Falls back to
+        // the client field, then distantPast (any local copy wins) — never nil.
+        let modifiedAt = ck.modificationDate ?? (ck[CloudKitSchema.Field.assetModifiedAt] as? Date) ?? .distantPast
+        return SyncAssetRecord(recordName: ck.recordID.recordName, jobId: jobId, relativePath: relPath,
+                               kind: kind, modifiedAt: modifiedAt,
+                               schemaVersion: (ck[CloudKitSchema.Field.schemaVersion] as? Int) ?? 1, payload: payload)
     }
 
     // MARK: - Change token archiving
