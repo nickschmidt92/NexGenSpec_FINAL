@@ -261,6 +261,68 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             }
         }
 
+        // MARK: Asset pull (D-0203). Applied AFTER the version batch and BEFORE the
+        // change token advances, so the token settles only when versions AND assets
+        // land cleanly. Asset DELETION is tombstone-driven (the asset recordName is a
+        // non-reversible hash, so CK-native deletions can't map back to a local file);
+        // asset UPSERTS ride `changes.changedAssets`.
+        //
+        // Fail-CLOSED on the asset-tombstone fetch (mirrors the version-tombstone fetch
+        // above): without it we can't distinguish a deleted asset from a live one, so a
+        // transient throw defers the whole batch (token held) rather than risk leaving a
+        // tombstoned asset on disk. `tombstonedAssetKeys` already returns [] for a
+        // missing SyncMeta / `deletedAssets` field (Prod-without-the-schema), so a throw
+        // here is a real transient error.
+        let deadAssets: Set<String>
+        do {
+            deadAssets = try await database.tombstonedAssetKeys(inZone: binding.zoneName)
+        } catch {
+            Diagnostics.logError(context: "CloudKitSyncPort.pull asset-tombstone fetch failed; deferring (token held)", error: error)
+            return
+        }
+
+        // Order asset writes so a scan record (<scanId>.json) is applied AFTER its
+        // floor-plan PNG / room JSON siblings PRESENT IN THIS BATCH — preserves the
+        // local torn-save intent on the receiver, so an interrupted write sequence never
+        // surfaces a scan whose PNG/room JSON haven't landed. Cross-batch ordering can't
+        // be controlled; readers tolerate the partial state (loadScans lists the scan,
+        // the renderer skips a scan with no readable PNG, whole-home waits for room JSON).
+        let assetOrder: [SyncAssetKind: Int] = [.lidarFloorplan: 0, .lidarRoom: 0, .thumbnail: 0, .reportPDF: 0, .lidarScan: 1]
+        let orderedAssets = changes.changedAssets.sorted { (assetOrder[$0.kind] ?? 0) < (assetOrder[$1.kind] ?? 0) }
+
+        // Keys present as a CHANGED asset in THIS batch. A record arriving in
+        // changedAssets means it was (re)created and its tombstone was cleared on push
+        // (§1.6 clear-then-save), so upsert-WINS: apply it and do NOT treat it as
+        // tombstoned. Consequence: `deadAssets` only deletes assets NOT also re-created
+        // in this same batch.
+        let changedAssetKeys = Set(orderedAssets.map { "\($0.jobId.uuidString)/\($0.relativePath)" })
+
+        for record in orderedAssets {
+            // Same TOCTOU guard as the version loop: bail before writing if an account
+            // switch detached/cancelled this pull mid-flight (defense in depth — the
+            // writer is also pinned to its bound UID).
+            if Task.isCancelled { return }
+            let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
+            guard stillBound else { return }
+            // false ⇒ a transient write failure: hold the token (don't advance) so the
+            // next pull re-fetches and retries this window. Applies are idempotent.
+            if await writer.applyRemoteAsset(record) == false { allApplied = false }
+        }
+
+        for key in deadAssets where !changedAssetKeys.contains(key) {
+            // Parse "<uuid>/<relativePath>": split on the FIRST slash (relativePath
+            // itself contains slashes). A malformed key (no slash / non-UUID prefix /
+            // empty path) is skipped — never applied as a delete.
+            guard let slash = key.firstIndex(of: "/") else { continue }
+            guard let jobId = UUID(uuidString: String(key[..<slash])) else { continue }
+            let relativePath = String(key[key.index(after: slash)...])
+            guard !relativePath.isEmpty else { continue }
+            if Task.isCancelled { return }
+            let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
+            guard stillBound else { return }
+            if await writer.deleteLocalAsset(jobId: jobId, relativePath: relativePath) == false { allApplied = false }
+        }
+
         // Persist the new change token only when the whole batch applied cleanly.
         guard allApplied, let newToken = changes.newToken else { return }
         var updated = binding

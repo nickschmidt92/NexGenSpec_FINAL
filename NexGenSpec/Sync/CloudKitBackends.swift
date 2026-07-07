@@ -337,6 +337,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         var serverToken = startToken
         var changed: [RemoteVersion] = []
+        var changedAssets: [SyncAssetRecord] = []
         var deleted: [String] = []
         var moreComing = true
 
@@ -345,8 +346,12 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             for (_, modificationResult) in result.modificationResultsByID {
                 switch modificationResult {
                 case .success(let modification):
+                    // A record is EITHER a version OR an asset (remoteVersion returns
+                    // nil for the asset record types, and vice versa) — no double-count.
                     if let remote = Self.remoteVersion(from: modification.record) {
                         changed.append(remote)
+                    } else if let asset = Self.remoteAsset(from: modification.record) {
+                        changedAssets.append(asset)
                     }
                 case .failure(let error):
                     // A single record failing to materialize must not abort the
@@ -355,8 +360,10 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
                 }
             }
             // Symmetric with the change path's recordType guard (review F2): only
-            // forward InspectionVersion deletions. A later slice's ReportPDF /
-            // MediaAsset deletion must not be mistaken for a version tombstone.
+            // forward InspectionVersion deletions. Asset deletions are NOT taken from
+            // CK-native deletions — the asset recordName is a non-reversible hash that
+            // can't map back to a (jobId, relativePath), so asset deletion is driven
+            // entirely by the `deletedAssets` tombstone log (see CloudKitSyncPort.pull).
             for deletion in result.deletions where deletion.recordType == CloudKitSchema.RecordType.inspectionVersion {
                 deleted.append(deletion.recordID.recordName)
             }
@@ -364,7 +371,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             moreComing = result.moreComing
         }
 
-        return ZoneChanges(changed: changed, deletedRecordNames: deleted, newToken: Self.encodeToken(serverToken))
+        return ZoneChanges(changed: changed, changedAssets: changedAssets, deletedRecordNames: deleted, newToken: Self.encodeToken(serverToken))
     }
 
     /// Decodes one `InspectionVersion` CKRecord into the transport projection plus
@@ -395,6 +402,26 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             payload: payload
         )
         return RemoteVersion(record: record, modifiedAt: modifiedAt)
+    }
+
+    /// Decodes one asset CKRecord (D-0203) into the transport projection. Returns nil
+    /// for non-asset records or a record that fails receiver-side validation, so the
+    /// caller simply skips it.
+    private static func remoteAsset(from ck: CKRecord) -> SyncAssetRecord? {
+        let type = ck.recordType
+        guard type == CloudKitSchema.RecordType.reportPDF || type == CloudKitSchema.RecordType.mediaAsset else { return nil }
+        guard let jobIdStr = ck[CloudKitSchema.Field.assetJobId] as? String, let jobId = UUID(uuidString: jobIdStr),
+              let relPath = ck[CloudKitSchema.Field.assetRelativePath] as? String,
+              let kindRaw = ck[CloudKitSchema.Field.assetKind] as? String, let kind = SyncAssetKind(rawValue: kindRaw),
+              // Re-validate the path on the RECEIVER (defense-in-depth: reject
+              // traversal/foreign, and confirm the declared kind matches the path).
+              SyncAssetPaths.kind(forRelativePath: relPath) == kind,
+              let asset = ck[CloudKitSchema.Field.payload] as? CKAsset, let fileURL = asset.fileURL,
+              let payload = try? Data(contentsOf: fileURL) else { return nil }
+        let modifiedAt = (ck[CloudKitSchema.Field.assetModifiedAt] as? Date) ?? ck.modificationDate ?? .distantPast
+        return SyncAssetRecord(recordName: ck.recordID.recordName, jobId: jobId, relativePath: relPath,
+                               kind: kind, modifiedAt: modifiedAt,
+                               schemaVersion: (ck[CloudKitSchema.Field.schemaVersion] as? Int) ?? 1, payload: payload)
     }
 
     // MARK: - Change token archiving

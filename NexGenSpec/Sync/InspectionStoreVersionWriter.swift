@@ -57,4 +57,52 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
         guard let store = self.store else { return true }
         return await MainActor.run { store.applyRemoteDelete(id: id, expectedUID: boundUID) }
     }
+
+    // MARK: - Asset sync (D-0203)
+
+    func applyRemoteAsset(_ record: SyncAssetRecord) async -> Bool {
+        // Defense-in-depth: re-validate the path on the RECEIVER and confirm the
+        // declared kind matches; a foreign/excluded/traversal path is a safe skip
+        // (never a token-holding failure).
+        guard SyncAssetPaths.kind(forRelativePath: record.relativePath) == record.kind else { return true }
+        // Cross-account safety: assets don't route through InspectionStore, so the
+        // guard here is (a) the writer's pinned bound-UID root and (b) an explicit
+        // active-segment check that mirrors InspectionStore.applyRemoteVersion's
+        // intent — on a mismatch, hold (safe no-op) rather than write into another
+        // UID's disk after an A→B switch. Unpinned construction (boundUID nil) skips
+        // the segment check for back-compat, matching the version writer.
+        if let boundUID, await MainActor.run(body: { SessionScope.currentSegment }) != boundUID {
+            Diagnostics.logError(context: "applyRemoteAsset: refused cross-account write (bound=\(boundUID)); holding")
+            return true
+        }
+        let root = FilePaths.userRoot(uid: boundUID ?? SessionScope.currentSegment)
+        let dest = root.appendingPathComponent(record.relativePath)
+        let fm = FileManager.default
+        // LWW: if a local file exists and is newer-or-equal, keep it (a local
+        // re-export/regeneration wins over an older remote copy — no clobber/flicker).
+        if let attrs = try? fm.attributesOfItem(atPath: dest.path),
+           let localMtime = attrs[.modificationDate] as? Date,
+           localMtime >= record.modifiedAt {
+            return true
+        }
+        do {
+            try FileSecurity.writeProtected(record.payload, to: dest)
+            return true
+        } catch {
+            Diagnostics.logError(context: "applyRemoteAsset write failed \(record.relativePath)", error: error)
+            return false   // transient → hold token, retry next pull
+        }
+    }
+
+    func deleteLocalAsset(jobId: UUID, relativePath: String) async -> Bool {
+        guard SyncAssetPaths.kind(forRelativePath: relativePath) != nil else { return true }
+        if let boundUID, await MainActor.run(body: { SessionScope.currentSegment }) != boundUID {
+            Diagnostics.logError(context: "deleteLocalAsset: refused cross-account delete (bound=\(boundUID)); holding")
+            return true
+        }
+        let root = FilePaths.userRoot(uid: boundUID ?? SessionScope.currentSegment)
+        let dest = root.appendingPathComponent(relativePath)
+        try? FileManager.default.removeItem(at: dest)   // absent = success (idempotent)
+        return true
+    }
 }

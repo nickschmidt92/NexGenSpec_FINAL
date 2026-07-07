@@ -119,6 +119,18 @@ private final class FakeWriter: LocalVersionWriter, @unchecked Sendable {
     func deleteLocalVersion(recordName: String) async -> Bool { lock.withLock { deleted.append(recordName) }; return deleteResult }
     var appliedCount: Int { lock.withLock { applied.count } }
     var deletedCount: Int { lock.withLock { deleted.count } }
+
+    // Asset sync (D-0203). Records the assets the pull applied/deleted, in order, so
+    // tests can assert kind-ordering (scan record after its siblings) and tombstone
+    // handling; the result flags simulate a transient write failure (token held).
+    private(set) var appliedAssets: [SyncAssetRecord] = []
+    private(set) var deletedAssets: [(jobId: UUID, relativePath: String)] = []
+    var applyAssetResult = true
+    var deleteAssetResult = true
+    func applyRemoteAsset(_ record: SyncAssetRecord) async -> Bool { lock.withLock { appliedAssets.append(record) }; return applyAssetResult }
+    func deleteLocalAsset(jobId: UUID, relativePath: String) async -> Bool { lock.withLock { deletedAssets.append((jobId, relativePath)) }; return deleteAssetResult }
+    var appliedAssetKinds: [SyncAssetKind] { lock.withLock { appliedAssets.map { $0.kind } } }
+    var deletedAssetCount: Int { lock.withLock { deletedAssets.count } }
 }
 
 private final class FakeBindings: BindingStoring, @unchecked Sendable {
@@ -775,6 +787,80 @@ final class CloudKitSyncPortTests: XCTestCase {
         await port.bind(firebaseUID: "uidA")
         XCTAssertEqual(writer.appliedCount, 0, "A settled keepLocal does not overwrite the local record.")
         XCTAssertNotNil(binds.current("uidA")?.changeToken, "A settled keepLocal advances the token (does not retry forever).")
+    }
+
+    // MARK: - Asset pull (D-0203 / W2)
+
+    private func assetRecord(jobId: UUID, relativePath: String, kind: SyncAssetKind, modifiedAt: Date = Date()) -> SyncAssetRecord {
+        SyncAssetRecord(
+            recordName: CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath),
+            jobId: jobId, relativePath: relativePath, kind: kind,
+            modifiedAt: modifiedAt, schemaVersion: CloudKitSchema.schemaVersion, payload: Data("x".utf8)
+        )
+    }
+
+    func testPullAppliesAssetsWithScanRecordLast() async {
+        let jobId = UUID(); let scanId = UUID()
+        // Deliberately list the scan record FIRST so only the kind-ordering can move it
+        // after its PNG/room siblings (receiver-side torn-save intent).
+        let assets = [
+            assetRecord(jobId: jobId, relativePath: "Inspections/\(jobId.uuidString)/lidar/\(scanId.uuidString).json", kind: .lidarScan),
+            assetRecord(jobId: jobId, relativePath: "Inspections/\(jobId.uuidString)/lidar/\(scanId.uuidString)_floorplan.png", kind: .lidarFloorplan),
+            assetRecord(jobId: jobId, relativePath: "Inspections/\(jobId.uuidString)/lidar/\(scanId.uuidString)_room.json", kind: .lidarRoom)
+        ]
+        let changes = ZoneChanges(changed: [], changedAssets: assets, deletedRecordNames: [], newToken: Data("tok".utf8))
+        let writer = FakeWriter()
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedAssets.count, 3, "All three synced assets in the batch are applied.")
+        XCTAssertEqual(writer.appliedAssetKinds.last, .lidarScan, "The scan record (<scanId>.json) is applied AFTER its PNG/room siblings in the same batch.")
+        XCTAssertNotNil(binds.current("uidA")?.changeToken, "A clean asset batch advances the change token.")
+    }
+
+    func testPullUpsertWinsOverAssetTombstone() async {
+        let jobId = UUID()
+        let path = "Reports/123-Main-St/Inspection_Report.pdf"
+        let key = "\(jobId.uuidString)/\(path)"
+        let changes = ZoneChanges(changed: [], changedAssets: [assetRecord(jobId: jobId, relativePath: path, kind: .reportPDF)], deletedRecordNames: [], newToken: Data("tok".utf8))
+        let db = FakeDatabase(); db.seedAssetTombstones([key])   // deleted-then-recreated elsewhere
+        let writer = FakeWriter()
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedAssets.count, 1, "An asset present in the changed set is applied even though its key is still tombstoned (upsert-wins).")
+        XCTAssertEqual(writer.deletedAssetCount, 0, "It is NOT also deleted — the recreation wins over the stale tombstone.")
+    }
+
+    func testPullAppliesAssetTombstoneDeletion() async {
+        let jobId = UUID()
+        let path = "Inspections/\(jobId.uuidString)/thumbnails/\(UUID().uuidString).jpg"
+        let key = "\(jobId.uuidString)/\(path)"
+        let changes = ZoneChanges(changed: [], changedAssets: [], deletedRecordNames: [], newToken: Data("tok".utf8))
+        let db = FakeDatabase(); db.seedAssetTombstones([key])
+        let writer = FakeWriter()
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db, fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.deletedAssetCount, 1, "A tombstoned asset NOT re-created this batch is deleted locally.")
+        XCTAssertEqual(writer.deletedAssets.first?.jobId, jobId, "The key parses back to the right jobId.")
+        XCTAssertEqual(writer.deletedAssets.first?.relativePath, path, "The key parses back to the full root-relative path (split on the FIRST slash).")
+    }
+
+    func testPullHoldsTokenOnAssetWriteFailure() async {
+        let jobId = UUID()
+        let path = "Inspections/\(jobId.uuidString)/thumbnails/\(UUID().uuidString).jpg"
+        let changes = ZoneChanges(changed: [], changedAssets: [assetRecord(jobId: jobId, relativePath: path, kind: .thumbnail)], deletedRecordNames: [], newToken: Data("tok".utf8))
+        let writer = FakeWriter(); writer.applyAssetResult = false
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: FakeDatabase(), fetcher: FakeFetcher(changes: changes), writer: writer)
+
+        await port.bind(firebaseUID: "uidA")
+        XCTAssertEqual(writer.appliedAssets.count, 1, "The asset write was attempted.")
+        XCTAssertNil(binds.current("uidA")?.changeToken, "A transient asset write failure holds (does not advance) the change token.")
     }
 
     func testPullDeletesLocalDraftButKeepsFinalizedOnTombstone() async {
