@@ -20,12 +20,15 @@ below are the remaining gaps.
 `multiDeviceLegalClause`) and `NexGenSpec/LegalScreens.swift`.
 
 **The one-paragraph truth the copy must reflect:** *With iCloud Sync on (the default),
-inspections — the record, the report PDF, and thumbnails — sync across the Apple devices
-on the user's iCloud account, through the user's **private** iCloud (Apple CloudKit),
-**only** to their iCloud; NexGenSpec never receives, stores, or can access them, and there
-is no NexGenSpec server in the path. A **Local-Only** mode keeps inspections on one
-device. Sync is not a backup (deletions propagate).* Full-resolution original media
-(photos/videos/LiDAR) is on-demand, not part of the default sync set.
+inspections — the inspection record, report PDFs, thumbnails, and LiDAR floor plans —
+sync across the Apple devices on the user's iCloud account, through the user's
+**private** iCloud (Apple CloudKit), **only** to their iCloud; NexGenSpec never receives,
+stores, or can access them, and there is no NexGenSpec server in the path. A
+**Local-Only** mode keeps inspections on one device. Sync is not a backup (deletions
+propagate).* Full-resolution original media (photos, videos, 3D room-scan/USDZ files)
+stays on the device where it was captured — it does **not** sync in this version
+(build-29 light-asset slice, D-0203/T-01623). Archive and invoice sent/paid status are
+per-device by design (T-01612 addendum).
 
 ---
 
@@ -44,8 +47,8 @@ device. Sync is not a backup (deletions propagate).* Full-resolution original me
 ```html
 <summary>Do my inspections sync between my devices?</summary>
 <div class="answer">
-  <p>Yes. With iCloud Sync on (the default), NexGenSpec syncs your inspections &mdash; the inspection record, the report PDF, and thumbnails &mdash; across the Apple devices signed in to your iCloud account, through your <strong>private</strong> iCloud (Apple CloudKit). The data goes only to your iCloud account: <strong>NexGenSpec never receives, stores, or can access it</strong>, and there is no NexGenSpec server in the path.</p>
-  <p>Prefer to keep everything on a single device? Turn on <strong>Local-Only mode</strong> in Settings. Note that sync is not a backup &mdash; deleting an inspection removes it from your other devices too, so keep your own backups.</p>
+  <p>Yes. With iCloud Sync on (the default), NexGenSpec syncs your inspections &mdash; the inspection record, report PDFs, thumbnails, and LiDAR floor plans &mdash; across the Apple devices signed in to your iCloud account, through your <strong>private</strong> iCloud (Apple CloudKit). The data goes only to your iCloud account: <strong>NexGenSpec never receives, stores, or can access it</strong>, and there is no NexGenSpec server in the path.</p>
+  <p>Full-resolution photos, videos, and 3D scan files stay on the device where they were captured, and archive/invoice status is tracked per-device. Prefer to keep everything on a single device? Turn on <strong>Local-Only mode</strong> in Settings. Note that sync is not a backup &mdash; deleting an inspection removes it from your other devices too, so keep your own backups.</p>
   <p>To move a full inspection package (PDF + photos + LiDAR scans) intentionally, open the inspection, tap the share icon, and choose <strong>Save to Files</strong>.</p>
 </div>
 ```
@@ -75,7 +78,7 @@ This is machine-readable and indexed by search engines; it must match Surface 1.
   "name": "Do my inspections sync between my devices?",
   "acceptedAnswer": {
     "@type": "Answer",
-    "text": "Yes. With iCloud Sync on (the default), NexGenSpec syncs your inspections (the inspection record, the report PDF, and thumbnails) across the Apple devices on your iCloud account, through your private iCloud (Apple CloudKit). The data goes only to your iCloud account; NexGenSpec never receives, stores, or can access it. Prefer one device? Turn on Local-Only mode in Settings. Sync is not a backup: deleting an inspection removes it from your other devices too."
+    "text": "Yes. With iCloud Sync on (the default), NexGenSpec syncs your inspections (the inspection record, report PDFs, thumbnails, and LiDAR floor plans) across the Apple devices on your iCloud account, through your private iCloud (Apple CloudKit). The data goes only to your iCloud account; NexGenSpec never receives, stores, or can access it. Full-resolution photos, videos, and 3D scan files stay on the device where they were captured. Prefer one device? Turn on Local-Only mode in Settings. Sync is not a backup: deleting an inspection removes it from your other devices too."
   }
 },
 ```
@@ -93,7 +96,7 @@ Keep the TRUE "no NexGenSpec server" claim; add the iCloud-sync clause.
 
 ### AFTER (ready to paste):
 ```html
-<p>With iCloud Sync on (the default), NexGenSpec syncs your inspections across the Apple devices on your private iCloud account (Apple CloudKit) &mdash; the data goes only to your iCloud, and <strong>NexGenSpec never hosts, receives, or can access your reports, photos, or client information on any server</strong>. Turn on <strong>Local-Only mode</strong> in Settings to keep inspections on a single device. See the <a href="privacy.html">Privacy Policy</a> for the full data-handling story and the <a href="terms.html">Terms of Service</a> for usage terms.</p>
+<p>With iCloud Sync on (the default), NexGenSpec syncs your inspections &mdash; records, report PDFs, thumbnails, and LiDAR floor plans &mdash; across the Apple devices on your private iCloud account (Apple CloudKit). The data goes only to your iCloud, and <strong>NexGenSpec never hosts, receives, or can access your reports, photos, or client information on any server</strong>. Full-resolution photos and videos stay on the device that captured them. Turn on <strong>Local-Only mode</strong> in Settings to keep inspections on a single device. See the <a href="privacy.html">Privacy Policy</a> for the full data-handling story and the <a href="terms.html">Terms of Service</a> for usage terms.</p>
 ```
 
 ---
@@ -121,7 +124,7 @@ Not a sync denial (it correctly describes iCloud *Backup*, which is separate fro
 **Suggested addition** to the end of the answer:
 
 ```html
-  <p>iCloud Sync (on by default) keeps your inspections on your other Apple devices, but it is <strong>not</strong> a backup &mdash; deleting an inspection removes it everywhere it synced. Keep iCloud Backup on, or save periodic <strong>Save to Files</strong> archives, for a true backup.</p>
+  <p>iCloud Sync (on by default) keeps your inspection records, report PDFs, and floor plans on your other Apple devices, but it is <strong>not</strong> a backup &mdash; deleting an inspection removes it everywhere it synced, and full-resolution photos and videos live only on the device that captured them. Keep iCloud Backup on, or save periodic <strong>Save to Files</strong> archives, for a true backup.</p>
 ```
 
 ---
@@ -142,7 +145,7 @@ device" wording.
 ### AFTER (ready to paste):
 ```
 • PRIVATE BY DESIGN
-  Your inspections sync across your own Apple devices through your private iCloud account — only to your iCloud, never to a NexGenSpec server. Prefer one device? Turn on Local-Only mode. Calendar access is optional.
+  Your inspections — records, reports, and floor plans — sync across your own Apple devices through your private iCloud account: only to your iCloud, never to a NexGenSpec server. Full-resolution photos stay on the device that captured them. Prefer one device? Turn on Local-Only mode. Calendar access is optional.
 ```
 
 ### Two adjacent `ASO.md` lines to reconcile while you're in the file (not sync-denials, but inaccurate):
