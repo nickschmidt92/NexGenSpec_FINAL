@@ -35,6 +35,7 @@ struct ItemDetailView: View {
     // so a partial import isn't silently reported as a full "N/N" success.
     @State private var importFailureCount = 0
     @State private var showImportError = false
+    @State private var showAnnotationSaveError = false
 
     private func bind<T>(_ keyPath: WritableKeyPath<InspectionItem, T>) -> Binding<T> {
         Binding(
@@ -425,9 +426,20 @@ struct ItemDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $photoToAnnotate) { photo in
             AsyncPhotoAnnotationSheet(jobId: jobId, photo: photo, onSaveOverlay: { overlay in
-                AnnotationStore.save(overlay, jobId: jobId, photoId: photo.id)
-                PhotoLoadService.shared.regenerateAnnotatedThumbnail(jobId: jobId, photo: photo)
+                // Only regenerate the thumbnail (which also emits the sync change)
+                // when the overlay actually persisted; on failure surface an alert
+                // and leave nothing consumed.
+                if AnnotationStore.save(overlay, jobId: jobId, photoId: photo.id) {
+                    PhotoLoadService.shared.regenerateAnnotatedThumbnail(jobId: jobId, photo: photo)
+                } else {
+                    showAnnotationSaveError = true
+                }
             })
+        }
+        .alert("Couldn't Save Annotation", isPresented: $showAnnotationSaveError) {
+            Button("OK") { showAnnotationSaveError = false }
+        } message: {
+            Text("The annotation couldn't be saved to this device. Please try again.")
         }
         .alert("Delete Photo", isPresented: $showDeleteConfirmation, presenting: photoToDelete) { photo in
             Button("Delete", role: .destructive) {

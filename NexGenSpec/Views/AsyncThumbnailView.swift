@@ -16,6 +16,7 @@ struct AsyncThumbnailView: View {
     @State private var image: UIImage?
     @State private var loadTask: Task<Void, Never>?
     @State private var reloadToken: UUID = UUID()
+    @State private var didFinishLoading = false
 
     var body: some View {
         Group {
@@ -23,6 +24,17 @@ struct AsyncThumbnailView: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+            } else if didFinishLoading {
+                // Loaded but no image: the full-resolution original isn't on this
+                // device (it stays on the device that captured it — only the record,
+                // report, thumbnail, and floor plans sync). Show a neutral placeholder
+                // instead of an infinite spinner.
+                Rectangle()
+                    .fill(Color(.systemGray6))
+                    .overlay(
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .foregroundStyle(.secondary)
+                    )
             } else {
                 Rectangle()
                     .fill(Color(.systemGray5))
@@ -34,10 +46,14 @@ struct AsyncThumbnailView: View {
         .cornerRadius(6)
         .task(id: "\(jobId)-\(photo.id)-\(reloadToken)") {
             let img = await PhotoLoadService.shared.loadThumbnail(jobId: jobId, photo: photo)
-            await MainActor.run { image = img }
+            await MainActor.run {
+                image = img
+                didFinishLoading = true
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .thumbnailDidUpdate)) { notification in
             if let updatedId = notification.userInfo?["photoId"] as? UUID, updatedId == photo.id {
+                didFinishLoading = false   // reset to loading before the reload
                 reloadToken = UUID()
             }
         }

@@ -12,6 +12,37 @@ import UniformTypeIdentifiers
 import EventKit
 import AVKit
 
+/// Bundles the room-scan rename alert and its save-failure alert so the host
+/// view's body stays under the SwiftUI type-checker complexity ceiling.
+private struct RenameScanAlerts: ViewModifier {
+    @Binding var scanToRename: LiDARScan?
+    @Binding var renameText: String
+    @Binding var showRenameSaveError: Bool
+    let commit: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Rename Room Scan",
+                isPresented: Binding(
+                    get: { scanToRename != nil },
+                    set: { if !$0 { scanToRename = nil } }
+                )
+            ) {
+                TextField("Room name", text: $renameText)
+                Button("Save") { commit() }
+                Button("Cancel", role: .cancel) { scanToRename = nil }
+            } message: {
+                Text("Give this scan a name (e.g. \"Living Room\") so it's easy to identify in the report.")
+            }
+            .alert("Couldn't Rename Scan", isPresented: $showRenameSaveError) {
+                Button("OK") { showRenameSaveError = false }
+            } message: {
+                Text("The new name couldn't be saved to this device. Please try again.")
+            }
+    }
+}
+
 /// Shows the cover page for an inspection. Displays metadata and summary counts. Editable client/property/inspector when draft.
 @available(iOS 16.0, *)
 struct InspectionOverviewView: View {
@@ -83,6 +114,7 @@ struct InspectionOverviewView: View {
     }
     @State private var showExportError = false
     @State private var showTextExportError = false
+    @State private var showRenameSaveError = false
     @State private var showPaywall = false
     @State private var showAgentsSection: Bool = false
     @State private var coverPhotoTick: Int = 0   // bumps to invalidate cached preview after change
@@ -353,19 +385,16 @@ struct InspectionOverviewView: View {
             } message: {
                 Text("Give this recording a name so it's easy to identify in the report.")
             }
-            .alert(
-                "Rename Room Scan",
-                isPresented: Binding(
-                    get: { scanToRename != nil },
-                    set: { if !$0 { scanToRename = nil } }
-                )
-            ) {
-                TextField("Room name", text: $renameText)
-                Button("Save") { commitScanRename() }
-                Button("Cancel", role: .cancel) { scanToRename = nil }
-            } message: {
-                Text("Give this scan a name (e.g. \"Living Room\") so it's easy to identify in the report.")
-            }
+            // The scan-rename alert and its save-failure alert are bundled into a
+            // single ViewModifier: this view's body is at the SwiftUI type-checker
+            // complexity ceiling, so collapsing two modifiers into one keeps it
+            // compiling without changing behavior.
+            .modifier(RenameScanAlerts(
+                scanToRename: $scanToRename,
+                renameText: $renameText,
+                showRenameSaveError: $showRenameSaveError,
+                commit: commitScanRename
+            ))
             // fullScreenCover (not sheet) because UIImagePickerController
             // with sourceType = .camera wants the entire screen — using
             // .sheet was causing the sheet-dismissal state machine to
@@ -1045,9 +1074,13 @@ struct InspectionOverviewView: View {
         let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
         var updated = target
         updated.name = trimmed.isEmpty ? nil : trimmed
-        LiDARScanStore.save(updated, jobId: jobId)
-        scanToRename = nil
-        loadLiDARScans()
+        if LiDARScanStore.save(updated, jobId: jobId) {
+            scanToRename = nil
+            loadLiDARScans()
+        } else {
+            // Keep scanToRename set so the user can retry the rename.
+            showRenameSaveError = true
+        }
     }
 
     /// Removes a scan's record plus its USDZ, floor-plan, and room-JSON files from disk.

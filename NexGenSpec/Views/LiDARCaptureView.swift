@@ -34,6 +34,7 @@ struct LiDARCaptureView: View {
 
     @State private var pendingName: String = ""
     @State private var showNamingSheet = false
+    @State private var showSaveError = false
 
     var body: some View {
         NavigationStack {
@@ -74,6 +75,11 @@ struct LiDARCaptureView: View {
             }
             .sheet(isPresented: $showNamingSheet) {
                 namingSheet
+            }
+            .alert("Couldn't Save Scan", isPresented: $showSaveError) {
+                Button("OK") { showSaveError = false }
+            } message: {
+                Text("The room scan couldn't be saved to this device. Please try again.")
             }
         }
     }
@@ -172,23 +178,34 @@ struct LiDARCaptureView: View {
                     }
                     // USDZ export + floor-plan render + record commit run off
                     // the main actor; the scan publishes via onScanSaved once
-                    // the record is on disk. Failure stays silent — same
-                    // semantics as the previous synchronous path.
+                    // the record is on disk.
                     let scan = await LiDARScanPersistence.save(room: room, jobId: jobId, name: name.isEmpty ? nil : name, sectionId: sectionId)
                     if let scan {
                         lastSavedScan = scan
                         onScanSaved?(scan)
+                        // Advance the pending generation only now that the room is
+                        // committed, so a Done-then-Cancel fallback can't resurface it.
+                        pending.inner.reset()
+                        showNamingSheet = false          // dismiss ONLY on success
+                    } else {
+                        // Save failed: keep the naming sheet open and surface an
+                        // error so the user can retry rather than silently lose an
+                        // iPad-only LiDAR capture. Do NOT reset pending state or
+                        // dismiss on this path.
+                        showSaveError = true
                     }
                     if bgTask != .invalid {
                         UIApplication.shared.endBackgroundTask(bgTask)
                         bgTask = .invalid
                     }
                 }
+            } else {
+                // No captured room to persist (nothing taken) — dismiss the sheet.
+                pending.inner.reset()
+                showNamingSheet = false
             }
-            pending.inner.reset()
         }
         #endif
-        showNamingSheet = false
     }
 
     // MARK: - Content
