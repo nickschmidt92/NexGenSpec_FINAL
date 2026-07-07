@@ -53,6 +53,12 @@ final class LiDARCapturePending: ObservableObject {
         capturedRoom = nil
         return r
     }
+
+    /// Non-consuming read of the captured room. Unlike `takeRoom()`, this leaves the
+    /// stored room in place so a FAILED save can be retried without losing the
+    /// (iPad-only) capture. The room is cleared explicitly via `reset()` — on save
+    /// success, Discard, or Cancel — never merely by being read for a save attempt.
+    func peekRoom() -> CapturedRoom? { capturedRoom }
 }
 
 @available(iOS 16.0, *)

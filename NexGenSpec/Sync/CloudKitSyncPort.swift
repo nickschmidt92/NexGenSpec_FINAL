@@ -129,38 +129,127 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
     /// - push-only — it never deletes or mutates local data.
     func seedIfNeeded(firebaseUID: String) async {
         let binding: SyncBinding? = lock.withLock { activeBinding }
-        guard let binding, binding.firebaseUID == firebaseUID, binding.seededAt == nil else { return }
+        // Run while EITHER phase is outstanding: an already-version-seeded build-22
+        // binding still needs its one-time asset backfill (assetsSeededAt == nil).
+        guard let binding, binding.firebaseUID == firebaseUID,
+              binding.seededAt == nil || binding.assetsSeededAt == nil else { return }
 
-        var allSucceeded = true
-        for snapshot in reader.allLocalVersions() {
-            // TOCTOU guard (fix B / landmine 1): an account switch can detach this
-            // binding (unbind clears `activeBinding`) and cancel this task while we
-            // are suspended at an `await`. Re-check both BEFORE every cloud write so
-            // a captured A-binding can never push into A's zone after the device has
-            // re-scoped to B. (The reader is also pinned to A's disk, so it only ever
-            // reads A's data — this is defense in depth on top of that.)
-            if Task.isCancelled { return }
-            let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
-            guard stillBound else { return }
-            do {
-                let record = InspectionRecordMapper.make(meta: snapshot.meta, payload: snapshot.payload)
-                // `save` is idempotent on re-seed: it never overwrites an already-
-                // finalized server record, and re-pushing an unchanged draft is a
-                // harmless overwrite (same recordName). (fix A unified the policy.)
-                try await database.save(record, inZone: binding.zoneName)
-            } catch {
-                allSucceeded = false
-                Diagnostics.logError(context: "CloudKitSyncPort.seed push failed", error: error)
+        // Enumerated once and reused by both phases (the asset phase derives report
+        // folder names from the same version metadata).
+        let snapshots = reader.allLocalVersions()
+
+        // TOCTOU guard (fix B / landmine 1): an account switch can detach this
+        // binding (unbind clears `activeBinding`) and cancel this task while we are
+        // suspended at an `await`. Re-check both BEFORE every cloud write so a
+        // captured A-binding can never push into A's zone after the device has
+        // re-scoped to B. (The reader/root are also pinned to A's disk, so they only
+        // ever read A's data — this is defense in depth on top of that.)
+        func stillBound() -> Bool { lock.withLock { activeBinding?.zoneName == binding.zoneName } }
+
+        // --- Phase 1: version records (unchanged) — only if not yet seeded. ---
+        var versionsSucceeded = true
+        if binding.seededAt == nil {
+            for snapshot in snapshots {
+                if Task.isCancelled { return }
+                guard stillBound() else { return }
+                do {
+                    let record = InspectionRecordMapper.make(meta: snapshot.meta, payload: snapshot.payload)
+                    // `save` is idempotent on re-seed: it never overwrites an already-
+                    // finalized server record, and re-pushing an unchanged draft is a
+                    // harmless overwrite (same recordName). (fix A unified the policy.)
+                    try await database.save(record, inZone: binding.zoneName)
+                } catch {
+                    versionsSucceeded = false
+                    Diagnostics.logError(context: "CloudKitSyncPort.seed push failed", error: error)
+                }
             }
         }
-        guard allSucceeded else { return }
 
-        var seeded = binding
-        seeded.seededAt = Date()
-        bindings.save(seeded)
-        lock.withLock {
-            if activeBinding?.zoneName == binding.zoneName { activeBinding = seeded }
+        // --- Phase 2: pre-existing assets (D-0203 backfill) — only if not yet done. ---
+        // Live asset sync is purely event-driven: a thumbnail/floor-plan/room-JSON/
+        // scan-record/report-PDF only emits on a (re)write, and existing assets are
+        // never re-written. Without this one-time backfill, all pre-upgrade assets
+        // (build-21 → build-29) would never sync — reports would render with no floor
+        // plans, the whole-home merge would never assemble, and My Reports would be
+        // empty on the second device. Reuse the live push path in
+        // `apply(.mediaUpserted:)` so the allowlist, mtime clock, and tombstone-clear
+        // are byte-identical to the event-driven emits.
+        var assetsSucceeded = true
+        if binding.assetsSeededAt == nil {
+            let root = FilePaths.userRoot(uid: binding.firebaseUID)
+            for (jobId, relativePath) in Self.seedableAssetPaths(root: root, snapshots: snapshots) {
+                if Task.isCancelled { return }
+                guard stillBound() else { return }
+                do {
+                    try await apply(.mediaUpserted(jobId: jobId, relativePath: relativePath),
+                                    binding: binding, tombstoned: [])
+                } catch {
+                    assetsSucceeded = false
+                    Diagnostics.logError(context: "CloudKitSyncPort.seed asset push failed (queued for retry)", error: error)
+                }
+            }
         }
+
+        // Mark ONLY the phases that fully succeeded. A failed phase stays unmarked and
+        // re-runs on the next bind (interrupt/degradation-safe): when Prod still lacks
+        // the asset record types the asset phase fails and re-drives every bind, while
+        // versions — already marked — are never re-pushed. Re-read under the lock so a
+        // concurrent pull's advanced changeToken isn't clobbered.
+        let toSave: SyncBinding? = lock.withLock {
+            guard var current = activeBinding, current.zoneName == binding.zoneName else { return nil }
+            var changed = false
+            if current.seededAt == nil, versionsSucceeded { current.seededAt = Date(); changed = true }
+            if current.assetsSeededAt == nil, assetsSucceeded { current.assetsSeededAt = Date(); changed = true }
+            guard changed else { return nil }
+            activeBinding = current
+            return current
+        }
+        if let toSave { bindings.save(toSave) }
+    }
+
+    /// Enumerates every pre-existing on-disk asset that D-0203 syncs, as
+    /// (jobId, root-relative path) pairs whose strings match the canonical emit-site
+    /// paths exactly (so a seeded record and a later live re-emit share one recordName
+    /// — idempotent overwrite, never a duplicate). Pure filesystem + the shared
+    /// `SyncAssetPaths.kind` allowlist, so photos/videos/USDZ/whole-home caches are
+    /// never included. Used only by the one-time asset backfill in `seedIfNeeded`.
+    private static func seedableAssetPaths(root: URL,
+                                           snapshots: [LocalVersionSnapshot]) -> [(jobId: UUID, relativePath: String)] {
+        let fm = FileManager.default
+        var pairs: [(jobId: UUID, relativePath: String)] = []
+
+        func appendFiles(inDir dir: URL, relativeDir: String, jobId: UUID) {
+            guard let entries = try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ) else { return }   // directory absent (legacy inspection) → nothing to seed
+            for url in entries {
+                let rel = "\(relativeDir)/\(url.lastPathComponent)"
+                // The allowlist excludes USDZ, whole_home_*.png, and any foreign file.
+                if SyncAssetPaths.kind(forRelativePath: rel) != nil { pairs.append((jobId, rel)) }
+            }
+        }
+
+        for snapshot in snapshots {
+            let jobId = snapshot.meta.inspectionId
+            let jobStr = jobId.uuidString
+            let inspectionDir = root.appendingPathComponent("Inspections/\(jobStr)", isDirectory: true)
+            appendFiles(inDir: inspectionDir.appendingPathComponent("thumbnails", isDirectory: true),
+                        relativeDir: "Inspections/\(jobStr)/thumbnails", jobId: jobId)
+            appendFiles(inDir: inspectionDir.appendingPathComponent("lidar", isDirectory: true),
+                        relativeDir: "Inspections/\(jobStr)/lidar", jobId: jobId)
+            // Report PDF: derive the published folder name from the SAME metadata
+            // FilesAppPublisher.publish uses, so the seeded key matches a later
+            // re-export's key exactly (idempotent overwrite, not a duplicate record).
+            let folder = FilesAppPublisher.folderName(propertyAddress: snapshot.meta.propertyAddress,
+                                                      clientName: snapshot.meta.clientName,
+                                                      jobId: jobId)
+            let pdfRel = "Reports/\(folder)/Inspection_Report.pdf"
+            if fm.fileExists(atPath: root.appendingPathComponent(pdfRel).path),
+               SyncAssetPaths.kind(forRelativePath: pdfRel) != nil {
+                pairs.append((jobId, pdfRel))
+            }
+        }
+        return pairs
     }
 
     /// Pull remote changes for the bound zone and apply them locally, resolving

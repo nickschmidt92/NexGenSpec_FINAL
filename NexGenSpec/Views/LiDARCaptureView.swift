@@ -76,11 +76,6 @@ struct LiDARCaptureView: View {
             .sheet(isPresented: $showNamingSheet) {
                 namingSheet
             }
-            .alert("Couldn't Save Scan", isPresented: $showSaveError) {
-                Button("OK") { showSaveError = false }
-            } message: {
-                Text("The room scan couldn't be saved to this device. Please try again.")
-            }
         }
     }
 
@@ -153,6 +148,16 @@ struct LiDARCaptureView: View {
                     }
                 }
             }
+            // Attached to the naming sheet's OWN NavigationStack (not the parent) so a
+            // save-failure alert presents FROM the sheet's controller and appears over
+            // it — keeping the sheet open for retry. Anchored on the parent it would be
+            // covered by this sheet and never show (SwiftUI defers a second modal on one
+            // host controller), leaving the sheet looking frozen. Mirrors SignatureView.
+            .alert("Couldn't Save Scan", isPresented: $showSaveError) {
+                Button("OK") { showSaveError = false }
+            } message: {
+                Text("The room scan couldn't be saved to this device. Please try again.")
+            }
         }
         .presentationDetents([.medium])
     }
@@ -161,7 +166,13 @@ struct LiDARCaptureView: View {
         #if canImport(RoomPlan)
         if #available(iOS 16.0, *) {
             let name = pendingName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let room = pending.inner.takeRoom() {
+            // Peek (non-consuming): the captured room MUST survive a failed save so
+            // the user can retry. It is cleared via `reset()` only on save SUCCESS
+            // (below), Discard, or Cancel — never merely by starting a save attempt.
+            // Using takeRoom() here would clear it before the async save resolves, so
+            // a retry after a transient failure would find nothing and silently lose
+            // the (iPad-only) capture.
+            if let room = pending.inner.peekRoom() {
                 Task { @MainActor in
                     // Hold a background-task assertion across the save: the
                     // sheet dismisses immediately, so the user may background
