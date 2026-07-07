@@ -52,7 +52,31 @@ struct AppSettingsView: View {
                      : "Inspections sync across your own devices through your private iCloud.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                // Release-visible sync status. Reflects the coordinator's
+                // last-published status, which updates at bind outcomes
+                // (off / localOnly / idle-after-bind / paused) — the reliably
+                // published states. Live .syncing/.error flush transitions are
+                // NOT forwarded this wave; a live-status publisher is a follow-up.
+                Text(releaseSyncStatusText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Sync status: \(releaseSyncStatusText)")
             }
+        }
+    }
+
+    /// End-user-worded sync status for Release builds. Deliberately does NOT
+    /// surface the raw `.error(message)` string (it can carry internal queue
+    /// phrasing); it maps to a calm "will retry" line. `.paused` reasons are
+    /// user-meaningful account-state strings and are shown verbatim.
+    private var releaseSyncStatusText: String {
+        switch syncCoordinator.status {
+        case .off: return "Sync is off."
+        case .localOnly: return "Local-Only — not signed in to iCloud."
+        case .idle: return "Up to date."
+        case .syncing: return "Syncing…"
+        case .paused(let reason): return "Paused — \(reason)"
+        case .error: return "Sync paused — will retry automatically."
         }
     }
 #if DEBUG
