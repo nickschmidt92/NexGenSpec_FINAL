@@ -390,8 +390,35 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // device from resurrecting this id.
             try await database.recordTombstone(versionId: versionId.uuidString, inZone: binding.zoneName)
             try await database.delete(recordName: versionId.uuidString, inZone: binding.zoneName)
-        case .mediaUpserted, .mediaDeleted:
-            break // JSON-only push in this slice; raw media is a later slice
+        case .mediaUpserted(let jobId, let relativePath):
+            // Excluded/foreign path (photos, videos, USDZ, whole-home cache, traversal)
+            // → ignore. The same allowlist gates the receiver on pull (W2).
+            guard let kind = SyncAssetPaths.kind(forRelativePath: relativePath) else { return }
+            // Resolve against the pinned bound-UID root (mirrors DiskVersionReader),
+            // never the live appRoot, so an in-flight push after an account switch can
+            // never read another UID's disk.
+            let root = FilePaths.userRoot(uid: binding.firebaseUID)
+            let fileURL = root.appendingPathComponent(relativePath)
+            let fm = FileManager.default
+            guard fm.fileExists(atPath: fileURL.path) else { return }  // already deleted → nothing to push
+            guard let data = try? Data(contentsOf: fileURL) else { return }
+            let attrs = try? fm.attributesOfItem(atPath: fileURL.path)
+            let mtime = (attrs?[.modificationDate] as? Date) ?? Date()
+            let record = SyncAssetRecord(
+                recordName: CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath),
+                jobId: jobId, relativePath: relativePath, kind: kind,
+                modifiedAt: mtime, schemaVersion: CloudKitSchema.schemaVersion, payload: data)
+            // A synced asset that was deleted-then-recreated must win: clear any stale
+            // asset tombstone first so a later pull doesn't re-delete this fresh copy.
+            try await database.clearAssetTombstone(key: "\(jobId.uuidString)/\(relativePath)", inZone: binding.zoneName)
+            try await database.saveAsset(record, inZone: binding.zoneName)
+
+        case .mediaDeleted(let jobId, let relativePath):
+            // Record-then-delete (mirrors versionDeleted): the tombstone is what stops a
+            // stale device from re-pushing/resurrecting the asset; retry is idempotent.
+            let key = "\(jobId.uuidString)/\(relativePath)"
+            try await database.recordAssetTombstone(key: key, inZone: binding.zoneName)
+            try await database.delete(recordName: CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath), inZone: binding.zoneName)
         }
     }
 

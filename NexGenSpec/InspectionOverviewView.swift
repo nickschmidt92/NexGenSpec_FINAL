@@ -1054,13 +1054,19 @@ struct InspectionOverviewView: View {
     private func deleteLiDARScan(_ scan: LiDARScan) {
         let dir = FilePaths.lidarFolder(jobId: jobId)
         let fm = FileManager.default
+        let lidarPrefix = "Inspections/\(jobId.uuidString)/lidar/"
         try? fm.removeItem(at: dir.appendingPathComponent("\(scan.id.uuidString).json"))
         try? fm.removeItem(at: dir.appendingPathComponent(scan.usdzFileName))
+        // Propagate the deletions to CloudKit (D-0203). The USDZ is NOT emitted —
+        // 3D scans don't sync. Emit only the files that syncable-exist.
+        SyncCoordinator.noteMediaDeleted(jobId: jobId, relativePath: lidarPrefix + "\(scan.id.uuidString).json")
         if let png = scan.floorplanPNGFileName {
             try? fm.removeItem(at: dir.appendingPathComponent(png))
+            SyncCoordinator.noteMediaDeleted(jobId: jobId, relativePath: lidarPrefix + png)
         }
         if let roomJSON = scan.roomJSONFileName {
             try? fm.removeItem(at: dir.appendingPathComponent(roomJSON))
+            SyncCoordinator.noteMediaDeleted(jobId: jobId, relativePath: lidarPrefix + roomJSON)
         }
         loadLiDARScans()
     }

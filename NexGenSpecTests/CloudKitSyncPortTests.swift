@@ -65,6 +65,27 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     /// Test helper: pre-seed tombstones as if another device deleted these ids.
     func seedTombstones(_ ids: [String]) { lock.withLock { tombstones.formUnion(ids) } }
     var tombstoneSnapshot: Set<String> { lock.withLock { tombstones } }
+
+    // Asset sync (D-0203).
+    private(set) var savedAssets: [(record: SyncAssetRecord, zone: String)] = []
+    private(set) var deletedAssetKeys: [String] = []
+    private(set) var clearedAssetKeys: [String] = []
+    private var assetTombstones: Set<String> = []
+    func saveAsset(_ record: SyncAssetRecord, inZone zoneName: String) async throws {
+        if failSave { throw NSError(domain: "test", code: 4) }
+        lock.withLock { savedAssets.append((record, zoneName)) }
+    }
+    func recordAssetTombstone(key: String, inZone zoneName: String) async throws {
+        lock.withLock { assetTombstones.insert(key); deletedAssetKeys.append(key) }
+    }
+    func clearAssetTombstone(key: String, inZone zoneName: String) async throws {
+        lock.withLock { assetTombstones.remove(key); clearedAssetKeys.append(key) }
+    }
+    func tombstonedAssetKeys(inZone zoneName: String) async throws -> Set<String> {
+        lock.withLock { assetTombstones }
+    }
+    func seedAssetTombstones(_ keys: [String]) { lock.withLock { assetTombstones.formUnion(keys) } }
+    var assetTombstoneSnapshot: Set<String> { lock.withLock { assetTombstones } }
 }
 
 private struct FakeAccount: CloudAccountProviding {

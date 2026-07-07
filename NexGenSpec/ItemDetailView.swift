@@ -530,6 +530,11 @@ struct ItemDetailView: View {
         // Remove the thumbnail from disk
         let thumbURL = FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(photo.fileName)
         try? FileManager.default.removeItem(at: thumbURL)
+        // Propagate the thumbnail deletion to CloudKit (D-0203). The full-res photo
+        // removal above is NOT emitted — photos don't sync.
+        SyncCoordinator.noteMediaDeleted(
+            jobId: jobId,
+            relativePath: "Inspections/\(jobId.uuidString)/thumbnails/\(photo.fileName)")
         // Remove annotation if any
         let annotationURL = FilePaths.annotationFile(jobId: jobId, photoId: photo.id)
         try? FileManager.default.removeItem(at: annotationURL)

@@ -21,7 +21,7 @@ public struct LiDARScan: Identifiable, Codable, Equatable {
     public var name: String?
     /// InspectionSection.id this scan is linked to (report placement).
     /// Section ids are deterministic per inspection (StableUUID), so the link
-    /// is stable across revisions. Device-local — never synced.
+    /// is stable across revisions and survives cross-device sync.
     public var sectionId: UUID?
     public var measurements: [Measurement]
     public var capturedAt: Date

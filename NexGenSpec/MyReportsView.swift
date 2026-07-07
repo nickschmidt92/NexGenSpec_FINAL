@@ -32,6 +32,11 @@ struct MyReportsView: View {
         let url: URL
     }
 
+    /// Only used to resolve a report folder back to its inspection jobId so a
+    /// swipe-delete can emit the matching CloudKit asset tombstone (D-0203).
+    /// MyReportsView is only ever presented under the store's environment.
+    @EnvironmentObject private var store: InspectionStore
+
     @State private var reports: [Deliverable] = []
     @State private var backups: [Deliverable] = []
     @State private var shareItem: ShareItem?
@@ -144,6 +149,22 @@ struct MyReportsView: View {
 
     private func delete(_ d: Deliverable) {
         try? FileManager.default.removeItem(at: d.deleteURL)
+        // Propagate a report-PDF deletion to CloudKit (D-0203). Only report folders
+        // (under reportsFolder) sync — ZIP backups are not emitted. The folder name is
+        // a property address, so recover the inspection jobId by matching the same
+        // folder-naming the publisher used; if no inspection matches (already deleted),
+        // skip — the record is cleaned up by the eventual zone teardown.
+        let reportsPath = FilePaths.reportsFolder.standardizedFileURL.path
+        if d.deleteURL.standardizedFileURL.path.hasPrefix(reportsPath + "/") {
+            let folderName = d.deleteURL.lastPathComponent
+            if let meta = store.metadataList.first(where: {
+                FilesAppPublisher.folderName(propertyAddress: $0.propertyAddress, clientName: $0.clientName, jobId: $0.inspectionId) == folderName
+            }) {
+                SyncCoordinator.noteMediaDeleted(
+                    jobId: meta.inspectionId,
+                    relativePath: "Reports/\(folderName)/Inspection_Report.pdf")
+            }
+        }
         load()
     }
 

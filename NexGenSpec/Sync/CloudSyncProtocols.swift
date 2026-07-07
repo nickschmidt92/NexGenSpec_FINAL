@@ -32,6 +32,20 @@ protocol CloudDatabase: Sendable {
     func recordTombstone(versionId: String, inZone zoneName: String) async throws
     /// The set of tombstoned (deleted) versionIds for the zone (empty if no SyncMeta).
     func tombstonedIds(inZone zoneName: String) async throws -> Set<String>
+
+    // MARK: - Asset sync (D-0203). Overwrite-on-re-push; last-writer-overwrites —
+    // assets are regenerable deliverables, not immutable legal records.
+    /// Upsert one asset record (CKAsset payload) into the zone, overwriting any
+    /// existing record with the same recordName.
+    func saveAsset(_ record: SyncAssetRecord, inZone zoneName: String) async throws
+    /// Append an asset key ("<jobId>/<relativePath>") to the zone's SyncMeta
+    /// asset-deletion log (independent of `deletedIds`). Idempotent.
+    func recordAssetTombstone(key: String, inZone zoneName: String) async throws
+    /// Remove an asset key from the asset-deletion log (idempotent no-op if absent),
+    /// so a deleted-then-recreated asset isn't re-deleted on a later pull.
+    func clearAssetTombstone(key: String, inZone zoneName: String) async throws
+    /// The set of tombstoned asset keys for the zone (empty if no SyncMeta / field).
+    func tombstonedAssetKeys(inZone zoneName: String) async throws -> Set<String>
 }
 
 /// Resolves the current iCloud user as an opaque token (nil ⇒ no iCloud account).

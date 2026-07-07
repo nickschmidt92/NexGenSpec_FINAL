@@ -479,6 +479,10 @@ enum LiDARScanPersistence {
                 do {
                     try pngData.write(to: pngURL, options: .atomic)
                     floorplanFileName = pngFileName
+                    // Mirror the floor-plan PNG to CloudKit (D-0203).
+                    SyncCoordinator.noteMediaUpserted(
+                        jobId: jobId,
+                        relativePath: "Inspections/\(jobId.uuidString)/lidar/\(pngFileName)")
                 } catch {
                     // Non-fatal: scan still usable without floor-plan image.
                 }
@@ -492,6 +496,11 @@ enum LiDARScanPersistence {
                 let fileName = "\(scanId.uuidString)_room.json"
                 try roomData.write(to: lidarDir.appendingPathComponent(fileName), options: .atomic)
                 roomJSONFileName = fileName
+                // Mirror the CapturedRoom JSON to CloudKit (D-0203 — enables
+                // whole-home merge on any device).
+                SyncCoordinator.noteMediaUpserted(
+                    jobId: jobId,
+                    relativePath: "Inspections/\(jobId.uuidString)/lidar/\(fileName)")
             } catch {
                 // Non-fatal: scan still usable without the merge source.
             }

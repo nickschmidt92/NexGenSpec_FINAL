@@ -81,6 +81,12 @@ enum FilesAppPublisher {
             if let pdfURL, fm.fileExists(atPath: pdfURL.path) {
                 let pdfDest = destFolder.appendingPathComponent("Inspection_Report.pdf")
                 try FileSecurity.copyProtectedItem(from: pdfURL, to: pdfDest)
+                // Mirror the finalized report PDF to CloudKit (D-0203). This is the
+                // only persistent PDF (temp export folders are never published); a
+                // same-address re-export overwrites the same recordName.
+                SyncCoordinator.noteMediaUpserted(
+                    jobId: jobId,
+                    relativePath: "Reports/\(destFolder.lastPathComponent)/Inspection_Report.pdf")
             }
 
             return destFolder
@@ -141,9 +147,16 @@ enum FilesAppPublisher {
     /// separator-bearing name) so folderName can only return a single, contained
     /// subfolder name; the fallback chain guarantees it is never empty.
     static func folderName(for inspection: Inspection, jobId: UUID) -> String {
-        let address = sanitized(inspection.propertyAddress)
+        folderName(propertyAddress: inspection.propertyAddress, clientName: inspection.clientName, jobId: jobId)
+    }
+
+    /// Field-level overload so callers that only hold `VersionMetadata` (e.g.
+    /// MyReportsView resolving a report folder back to its jobId for a delete-sync
+    /// emit) can compute the identical folder name without a full `Inspection`.
+    static func folderName(propertyAddress: String, clientName: String, jobId: UUID) -> String {
+        let address = sanitized(propertyAddress)
         if isSafeComponent(address) { return address }
-        let client = sanitized(inspection.clientName)
+        let client = sanitized(clientName)
         if isSafeComponent(client) { return client }
         return "Inspection-\(jobId.uuidString.prefix(8))"
     }

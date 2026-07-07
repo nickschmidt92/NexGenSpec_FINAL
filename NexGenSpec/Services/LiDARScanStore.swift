@@ -20,6 +20,13 @@ enum LiDARScanStore {
             try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
             let data = try JSONEncoder().encode(scan)
             try FileSecurity.writeProtected(data, to: url)
+            // Mirror the scan record to CloudKit (D-0203). This single point covers
+            // both initial capture and commitScanRename (both route through here), and
+            // — as the LAST write in the capture save — preserves the torn-save order
+            // on the receiver (the record push trails the floor-plan/room-JSON pushes).
+            SyncCoordinator.noteMediaUpserted(
+                jobId: jobId,
+                relativePath: "Inspections/\(jobId.uuidString)/lidar/\(scan.id.uuidString).json")
             return true
         } catch {
             Diagnostics.logError(context: "LiDAR scan save failed", error: error)

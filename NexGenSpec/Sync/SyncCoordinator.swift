@@ -18,6 +18,13 @@ final class SyncCoordinator: ObservableObject {
 
     @Published private(set) var status: SyncStatus = .off
 
+    /// Weak handle to the live coordinator so decoupled services (PhotoLoadService,
+    /// FilesAppPublisher, LiDARScanStore, capture bridge, …) can record media-file
+    /// changes without threading a store reference through every call site. Set once
+    /// at app wiring; survives port rebinds (the coordinator instance is stable, only
+    /// the underlying port swaps).
+    @MainActor static weak var active: SyncCoordinator?
+
     /// The active port. NoopSyncPort whenever sync is disabled / no user.
     private var port: SyncPort = NoopSyncPort()
     private var currentUID: String?
@@ -144,6 +151,18 @@ final class SyncCoordinator: ObservableObject {
     /// Forward a local mutation to the active port (no-op when not bound).
     func recordLocalChange(_ change: SyncChange) {
         port.recordLocalChange(change)
+    }
+
+    /// Record that a synced media file was written. Main-actor-hopping so services on
+    /// any queue/thread can call it after a successful byte write. Inert when sync is
+    /// off / no user (the active port is a NoopSyncPort).
+    nonisolated static func noteMediaUpserted(jobId: UUID, relativePath: String) {
+        Task { @MainActor in active?.recordLocalChange(.mediaUpserted(jobId: jobId, relativePath: relativePath)) }
+    }
+
+    /// Record that a synced media file was removed. See `noteMediaUpserted`.
+    nonisolated static func noteMediaDeleted(jobId: UUID, relativePath: String) {
+        Task { @MainActor in active?.recordLocalChange(.mediaDeleted(jobId: jobId, relativePath: relativePath)) }
     }
 
     /// Pull remote changes now — e.g. when the app returns to the foreground, so a

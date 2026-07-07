@@ -63,7 +63,13 @@ public final class PhotoLoadService: @unchecked Sendable {
                 let thumb = self.resizedForThumbnail(full, maxSize: self.thumbMaxSize)
                 if let jpeg = thumb.jpegData(compressionQuality: 0.8) {
                     try? FileSecurity.ensureProtectedDirectory(thumbURL.deletingLastPathComponent())
-                    try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])
+                    if (try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])) != nil {
+                        // Mirror the thumbnail to CloudKit (D-0203). The on-disk name is
+                        // photo.fileName (a "<uuid>.jpg"), so use it verbatim.
+                        SyncCoordinator.noteMediaUpserted(
+                            jobId: jobId,
+                            relativePath: "Inspections/\(jobId.uuidString)/thumbnails/\(photoFileName)")
+                    }
                 }
                 self.thumbCache.setObject(thumb, forKey: key, cost: self.imageCost(thumb))
                 continuation.resume(returning: thumb)
@@ -103,7 +109,12 @@ public final class PhotoLoadService: @unchecked Sendable {
             let thumb = self.resizedForThumbnail(full, maxSize: self.thumbMaxSize)
             if let jpeg = thumb.jpegData(compressionQuality: 0.8) {
                 try? FileSecurity.ensureProtectedDirectory(thumbURL.deletingLastPathComponent())
-                try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])
+                if (try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])) != nil {
+                    // Mirror the thumbnail to CloudKit (D-0203); on-disk name is fileName.
+                    SyncCoordinator.noteMediaUpserted(
+                        jobId: jobId,
+                        relativePath: "Inspections/\(jobId.uuidString)/thumbnails/\(fileName)")
+                }
             }
         }
     }
@@ -131,7 +142,13 @@ public final class PhotoLoadService: @unchecked Sendable {
             let thumbURL = FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(photoFileName)
             if let jpeg = thumb.jpegData(compressionQuality: 0.8) {
                 try? FileSecurity.ensureProtectedDirectory(thumbURL.deletingLastPathComponent())
-                try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])
+                if (try? FileSecurity.writeProtected(jpeg, to: thumbURL, options: [.atomic])) != nil {
+                    // Mirror the regenerated (annotated) thumbnail to CloudKit (D-0203);
+                    // re-upserts the same recordName, overwriting the prior copy.
+                    SyncCoordinator.noteMediaUpserted(
+                        jobId: jobId,
+                        relativePath: "Inspections/\(jobId.uuidString)/thumbnails/\(photoFileName)")
+                }
             }
             self.thumbCache.setObject(thumb, forKey: cacheKey, cost: self.imageCost(thumb))
             DispatchQueue.main.async {
