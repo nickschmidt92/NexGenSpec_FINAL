@@ -186,7 +186,7 @@ private struct EmptyArchivedState: View {
                 .foregroundStyle(.tertiary)
             Text("No Archived Inspections")
                 .font(.title3.weight(.semibold))
-            Text("Swipe an inspection on the Workspace tab to archive it. Archived inspections stay on your device — swipe again to restore, or to permanently delete drafts. Finalized inspections cannot be deleted (5-year retention).")
+            Text("Swipe an inspection on the Workspace tab to archive it. Archiving is tracked per device — archiving here doesn’t archive the inspection on your other Apple devices. Swipe again to restore, or to permanently delete drafts. Finalized inspections cannot be deleted (5-year retention).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

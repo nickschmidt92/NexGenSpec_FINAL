@@ -64,14 +64,14 @@ enum SyncFeature {
     /// Privacy-policy "Multi-Device" clause.
     static var multiDeviceLegalClause: String {
         isEnabled
-        ? "When you turn on iCloud Sync, your inspections sync across your own devices through your private iCloud account (Apple's CloudKit). They go only to your iCloud — NexGenSpec never receives or stores them. With iCloud Sync off, or in Local-Only mode, inspections stay on the device they were created on; use the Files-app export to move them between your devices intentionally."
+        ? "When you turn on iCloud Sync, your inspections — the record, report PDFs, thumbnails, and LiDAR floor plans — sync across your own devices through your private iCloud account (Apple's CloudKit). Full-resolution photos, videos, and 3D scan files stay on the device that captured them."
         : "NexGenSpec stores inspections on the device they were created on. Inspections do NOT sync between devices. Use the Files-app export feature to move inspections between your own devices intentionally."
     }
 
     /// Backup-status "on this device" row subtitle.
     static var multiDeviceBackupSubtitle: String {
         isEnabled
-        ? "With iCloud Sync on, your inspections sync across your own devices through your private iCloud account. With it off, each device holds its own independent set — use the Files-app export to move records between your devices."
+        ? "With iCloud Sync on, your inspections — records, report PDFs, thumbnails, and LiDAR floor plans — sync across your own devices through your private iCloud account. Full-resolution photos, videos, and 3D scans stay on the device that captured them. With sync off, each device holds its own independent set — use the Files-app export to move records between your devices."
         : "Inspections do NOT sync between devices. Each iPad you use holds its own independent set. Use the Files-app export inside an inspection to move records between your own devices."
     }
 
@@ -79,7 +79,7 @@ enum SyncFeature {
     /// clause above; gated in lockstep so the two screens never contradict.
     static var multiDeviceTermsClause: String {
         isEnabled
-        ? "Multi-device note. With iCloud Sync on, your inspections sync across your own devices through your private iCloud account; NexGenSpec never receives or stores them. With sync off or in Local-Only mode, inspections stay on the device they were created on — use the export-to-Files feature to move records intentionally."
+        ? "Multi-device note. With iCloud Sync on, your inspections — the record, report PDFs, thumbnails, and LiDAR floor plans — sync across your own devices through your private iCloud account; NexGenSpec never receives or stores them. Full-resolution photos, videos, and 3D scan files, plus archive and invoice status, stay on the device where they were created. With sync off or in Local-Only mode, use the export-to-Files feature to move records intentionally."
         : "Multi-device note. NexGenSpec inspections live on the device they were created on and do NOT sync between devices. Treat each device as an independent silo. Use the export-to-Files feature to move records intentionally."
     }
 
@@ -88,7 +88,7 @@ enum SyncFeature {
     /// flat "device only / cannot recover" claim no longer holds.
     static var localFirstBannerText: String {
         isEnabled
-        ? "Your inspections, photos, signatures, and reports stay under your control. With iCloud Sync on, they sync across your own devices through your private iCloud account; NexGenSpec never keeps server-side copies. Sync is not a backup — keep your own backups, as deletions sync between your devices."
+        ? "Your inspections stay under your control. With iCloud Sync on, the record, report PDFs, thumbnails, and LiDAR floor plans sync across your own devices through your private iCloud account; NexGenSpec never keeps server-side copies. Full-resolution photos, videos, and 3D scan files stay on the device that captured them. Sync is not a backup — keep your own backups, as deletions sync between your devices."
         : "All inspections, photos, signatures, and reports are stored on this device only. NexGenSpec does NOT keep server-side copies and cannot recover lost data."
     }
 
@@ -97,7 +97,7 @@ enum SyncFeature {
     /// attorney track; this is the in-app mirror.)
     static var dataLocationClause: String {
         isEnabled
-        ? "NexGenSpec syncs your inspections across your own Apple devices through your private iCloud account; NexGenSpec keeps no server-side copy. Turn on Local-Only mode to keep inspections on the device that created them."
+        ? "NexGenSpec syncs your inspections — the inspection record, report PDFs, thumbnails, and LiDAR floor plans — across your own Apple devices through your private iCloud account; NexGenSpec keeps no server-side copy. Full-resolution photos, videos, and 3D scan files stay on the device that captured them. Turn on Local-Only mode to keep everything on a single device."
         : "NexGenSpec is a local-first application. Inspection data lives ONLY on the device that created it. NexGenSpec does not maintain server-side copies of any inspection content."
     }
 }
