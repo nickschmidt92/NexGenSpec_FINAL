@@ -36,10 +36,29 @@ enum WholeHomeFloorplanService {
         return try? Data(contentsOf: url)
     }
 
+    /// Serializes regenerateIfNeeded per inspection so removeAllCaches + write is
+    /// never interleaved with another regen for the same jobId, and concurrent
+    /// export pipelines coalesce onto one run instead of racing.
+    private actor RegenGate {
+        static let shared = RegenGate()
+        private var inFlight: [UUID: Task<Void, Never>] = [:]
+        func run(_ jobId: UUID, _ work: @escaping @Sendable () async -> Void) async {
+            if let existing = inFlight[jobId] { await existing.value; return }
+            let task = Task { await work() }
+            inFlight[jobId] = task
+            await task.value
+            inFlight[jobId] = nil
+        }
+    }
+
     /// Regenerate the merged plan if the scan set changed. Degrades silently:
     /// any failure (decode, merge, render, write) logs and leaves no cache,
     /// so the report simply skips the page. Call before rendering a report.
     static func regenerateIfNeeded(jobId: UUID) async {
+        await RegenGate.shared.run(jobId) { await performRegenerate(jobId: jobId) }
+    }
+
+    private static func performRegenerate(jobId: UUID) async {
         #if canImport(RoomPlan)
         guard #available(iOS 17.0, *) else { return }
         let scans = LiDARScanStore.loadScans(jobId: jobId)

@@ -32,6 +32,10 @@ enum LiDARScanStore {
         guard let contents = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil, options: .skipsHiddenFiles) else { return [] }
         return contents
             .filter { $0.pathExtension == "json" }
+            // A scan record is exactly "<UUID>.json". Sidecar files that live in the
+            // same folder (e.g. "<scanId>_room.json", future sync sidecars) have a
+            // non-UUID basename and are skipped without an allocating decode attempt.
+            .filter { UUID(uuidString: $0.deletingPathExtension().lastPathComponent) != nil }
             .compactMap { url -> LiDARScan? in
                 guard let data = try? Data(contentsOf: url) else { return nil }
                 return try? JSONDecoder().decode(LiDARScan.self, from: data)

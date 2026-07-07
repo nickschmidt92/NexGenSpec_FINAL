@@ -8,6 +8,7 @@ import PDFKit
 import UIKit
 import Combine
 import CoreImage
+import Security
 @testable import NexGenSpec
 
 final class FilePathsTests: XCTestCase {
@@ -1776,6 +1777,31 @@ final class SubscriptionManagerBetaUnlockTests: XCTestCase {
 /// access, and both branches prove an entitled (isPro) user is always unlocked.
 @MainActor
 final class SubscriptionMonetizationGateTests: XCTestCase {
+
+    /// Deletes the Keychain entitlement-cache item (mirrors the private
+    /// constants at SubscriptionManager.swift:224-225). A stale
+    /// EntitlementCache(isPro:false) left by a prior run's async
+    /// updateEntitlements() would skip legacy UserDefaults migration and rot
+    /// these fixtures; clearing it in setUp AND tearDown makes both tests
+    /// deterministic regardless of prior Keychain state.
+    private func clearKeychainEntitlementCache() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.nexgenspec.entitlement.cache",
+            kSecAttrAccount as String: "current"
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    override func setUp() {
+        super.setUp()
+        clearKeychainEntitlementCache()
+    }
+
+    override func tearDown() {
+        clearKeychainEntitlementCache()
+        super.tearDown()
+    }
 
     private func makeManager(trialUsed: Int) -> SubscriptionManager {
         UserDefaults.standard.set(trialUsed, forKey: "nexgenspec.trial.inspectionsCreated")

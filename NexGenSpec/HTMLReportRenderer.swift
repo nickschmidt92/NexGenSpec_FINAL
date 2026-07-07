@@ -290,7 +290,15 @@ enum HTMLReportRenderer {
         for section in inspection.sections {
             let reportItems = section.items.filter { $0.isDefect && $0.includeInReport }
             let sectionScans = lidarScans.filter { $0.sectionId == section.id }
-            guard !reportItems.isEmpty || !sectionScans.isEmpty else { continue }
+            // Resolve only the scans that actually have a readable floor-plan PNG. A
+            // section whose sole content is a scan with a missing/unreadable PNG must
+            // NOT emit a bare heading (W6 report-integrity guard).
+            let renderableSectionScans: [(scan: LiDARScan, b64: String)] = sectionScans.compactMap { scan in
+                guard let pngName = scan.floorplanPNGFileName,
+                      let pngData = try? Data(contentsOf: lidarDir.appendingPathComponent(pngName)) else { return nil }
+                return (scan, pngData.base64EncodedString())
+            }
+            guard !reportItems.isEmpty || !renderableSectionScans.isEmpty else { continue }
             html += "<h2 class=\"section-title\">\((section.title).htmlEscaped)</h2>"
             for item in reportItems {
                 guard let severity = item.defectSeverity else { continue }
@@ -332,13 +340,11 @@ enum HTMLReportRenderer {
             // Section-linked room scans render inline here and are EXCLUDED
             // from the end-of-report reference card (the base64 floorplans are
             // large — duplicating them bloats the PDF and reads redundantly).
-            for scan in sectionScans {
-                guard let pngName = scan.floorplanPNGFileName,
-                      let pngData = try? Data(contentsOf: lidarDir.appendingPathComponent(pngName)) else { continue }
-                let b64 = pngData.base64EncodedString()
+            for entry in renderableSectionScans {
+                let scan = entry.scan
                 html += "<div class=\"card\" style=\"page-break-inside:avoid;break-inside:avoid;\">"
                 html += "<h3>Room Scan — \((scan.displayName).htmlEscaped)</h3>"
-                html += "<img src=\"data:image/png;base64,\(b64)\" alt=\"Floor plan\" style=\"max-width:100%;max-height:7in;height:auto;object-fit:contain;border:1px solid #ccc;border-radius:6px;\" />"
+                html += "<img src=\"data:image/png;base64,\(entry.b64)\" alt=\"Floor plan\" style=\"max-width:100%;max-height:7in;height:auto;object-fit:contain;border:1px solid #ccc;border-radius:6px;\" />"
                 if let summary = scan.measurementsSummary {
                     html += "<p class=\"meta\">\(summary.htmlEscaped)</p>"
                 }
