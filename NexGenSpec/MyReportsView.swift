@@ -148,22 +148,26 @@ struct MyReportsView: View {
     // MARK: - Actions
 
     private func delete(_ d: Deliverable) {
-        try? FileManager.default.removeItem(at: d.deleteURL)
         // Propagate a report-PDF deletion to CloudKit (D-0203). Only report folders
-        // (under reportsFolder) sync — ZIP backups are not emitted. The folder name is
-        // a property address, so recover the inspection jobId by matching the same
-        // folder-naming the publisher used; if no inspection matches (already deleted),
-        // skip — the record is cleaned up by the eventual zone teardown.
+        // (under reportsFolder) sync — ZIP backups are not emitted. Recover the jobId
+        // from the folder's own sidecar (rename-proof), which lives INSIDE the folder,
+        // so read it BEFORE the removeItem below. Recomputing folderName from CURRENT
+        // metadata alone orphans the tombstone if the address / client changed after
+        // export (the on-disk folder keeps its export-time name) — the sidecar closes
+        // that gap; the name-match remains only as a legacy fallback (D-0203 review).
         let reportsPath = FilePaths.reportsFolder.standardizedFileURL.path
-        if d.deleteURL.standardizedFileURL.path.hasPrefix(reportsPath + "/") {
-            let folderName = d.deleteURL.lastPathComponent
-            if let meta = store.metadataList.first(where: {
-                FilesAppPublisher.folderName(propertyAddress: $0.propertyAddress, clientName: $0.clientName, jobId: $0.inspectionId) == folderName
-            }) {
-                SyncCoordinator.noteMediaDeleted(
-                    jobId: meta.inspectionId,
-                    relativePath: "Reports/\(folderName)/Inspection_Report.pdf")
-            }
+        let syncedReportJobId: UUID? = d.deleteURL.standardizedFileURL.path.hasPrefix(reportsPath + "/")
+            ? (FilesAppPublisher.publishedJobId(inFolder: d.deleteURL)
+               ?? store.metadataList.first(where: {
+                   FilesAppPublisher.folderName(propertyAddress: $0.propertyAddress, clientName: $0.clientName, jobId: $0.inspectionId) == d.deleteURL.lastPathComponent
+               })?.inspectionId)
+            : nil
+
+        try? FileManager.default.removeItem(at: d.deleteURL)
+        if let syncedReportJobId {
+            SyncCoordinator.noteMediaDeleted(
+                jobId: syncedReportJobId,
+                relativePath: "Reports/\(d.deleteURL.lastPathComponent)/Inspection_Report.pdf")
         }
         load()
     }

@@ -418,7 +418,16 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
               SyncAssetPaths.kind(forRelativePath: relPath) == kind,
               let asset = ck[CloudKitSchema.Field.payload] as? CKAsset, let fileURL = asset.fileURL,
               let payload = try? Data(contentsOf: fileURL) else { return nil }
-        let modifiedAt = (ck[CloudKitSchema.Field.assetModifiedAt] as? Date) ?? ck.modificationDate ?? .distantPast
+        // LWW clock (D-0203 review): prefer CloudKit's SERVER modificationDate over the
+        // pusher's client-supplied `assetModifiedAt` so last-writer-wins arbitrates on a
+        // single authoritative clock — skew between a user's OWN devices can no longer
+        // permanently drop an asset update (e.g. a scan rename) the way comparing the
+        // receiver's local mtime against the pushing device's client mtime could. Unlike
+        // a version — whose embedded model `updatedAt` travels with the content and is
+        // compared like-for-like — a synced asset is an opaque blob with no embedded
+        // logical clock, so the server date is the skew-minimal comparand. Falls back to
+        // the client field, then distantPast (any local copy wins) — never nil.
+        let modifiedAt = ck.modificationDate ?? (ck[CloudKitSchema.Field.assetModifiedAt] as? Date) ?? .distantPast
         return SyncAssetRecord(recordName: ck.recordID.recordName, jobId: jobId, relativePath: relPath,
                                kind: kind, modifiedAt: modifiedAt,
                                schemaVersion: (ck[CloudKitSchema.Field.schemaVersion] as? Int) ?? 1, payload: payload)

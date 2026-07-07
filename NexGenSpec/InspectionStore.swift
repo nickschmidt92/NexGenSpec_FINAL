@@ -424,6 +424,40 @@ public final class InspectionStore: ObservableObject {
         }
     }
 
+    /// The CloudKit asset tombstones (jobId + root-relative path) to emit when an
+    /// inspection is deleted, so its synced MediaAsset / ReportPDF records don't
+    /// outlive it and RESURRECT on a fresh device (D-0203 review) — a
+    /// fetchChanges(since:nil) on a new device would otherwise receive the orphaned
+    /// records and rewrite the deleted scans/plans/PDFs to disk. Enumerates the same
+    /// on-disk assets the push/seed path syncs — thumbnails, LiDAR floor plans and
+    /// scan/room JSON, and the report PDF — through the shared `SyncAssetPaths`
+    /// allowlist, so photos, videos, USDZ, and the whole-home cache are never
+    /// included. Assets are keyed by inspectionId; call BEFORE the folders are wiped.
+    private func syncedAssetTombstones(inspectionId: UUID, inspection: Inspection?) -> [(jobId: UUID, relativePath: String)] {
+        let fm = FileManager.default
+        let jobStr = inspectionId.uuidString
+        var out: [(jobId: UUID, relativePath: String)] = []
+
+        func addFiles(inDir dir: URL, relativeDir: String) {
+            guard let entries = try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ) else { return }   // directory absent → nothing to tombstone
+            for url in entries {
+                let rel = "\(relativeDir)/\(url.lastPathComponent)"
+                if SyncAssetPaths.kind(forRelativePath: rel) != nil { out.append((inspectionId, rel)) }
+            }
+        }
+        addFiles(inDir: FilePaths.thumbnailsFolder(jobId: inspectionId),
+                 relativeDir: "Inspections/\(jobStr)/thumbnails")
+        addFiles(inDir: FilePaths.lidarFolder(jobId: inspectionId),
+                 relativeDir: "Inspections/\(jobStr)/lidar")
+        if let pdfRel = FilesAppPublisher.publishedReportRelativePath(forJobId: inspectionId, inspection: inspection),
+           SyncAssetPaths.kind(forRelativePath: pdfRel) != nil {
+            out.append((inspectionId, pdfRel))
+        }
+        return out
+    }
+
     /// Loads full version from disk. Returns nil if not found or decode fails.
     /// Synchronous: retained for callers that need the value inline (delete /
     /// revision / purge / finalize). For the inspection-OPEN path use
@@ -1068,6 +1102,16 @@ public extension InspectionStore {
             try? CalendarService.shared.deleteEvent(eventIdentifier: eventIdentifier)
         }
 
+        // Enumerate the inspection's synced assets BEFORE the folders are wiped, so we
+        // can tombstone their CloudKit records (D-0203 review). Same gate as the
+        // Files-app removal below: ONLY on a genuine local delete (a remote-tombstone
+        // apply must not echo a push — F4) of the LAST version referencing the
+        // inspection (a surviving revision still owns the shared inspectionId assets).
+        let assetTombstones: [(jobId: UUID, relativePath: String)] =
+            (!isApplyingRemote && !hasRemainingInspectionReferences)
+            ? syncedAssetTombstones(inspectionId: metadata.inspectionId, inspection: full?.inspection)
+            : []
+
         do {
             try removeInspectionArtifacts(
                 versionId: metadata.id,
@@ -1094,6 +1138,12 @@ public extension InspectionStore {
         // back to CloudKit. Genuine local deletes still propagate.
         if !isApplyingRemote {
             syncCoordinator?.recordLocalChange(.versionDeleted(versionId: id))
+            // Tombstone the inspection's synced assets so their CK records are deleted
+            // and never resurrect on a fresh device (D-0203 review). Mirrors how the
+            // version delete above tombstones its own record.
+            for (jobId, relativePath) in assetTombstones {
+                syncCoordinator?.recordLocalChange(.mediaDeleted(jobId: jobId, relativePath: relativePath))
+            }
         }
         return true
     }

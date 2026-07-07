@@ -80,6 +80,12 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
         let fm = FileManager.default
         // LWW: if a local file exists and is newer-or-equal, keep it (a local
         // re-export/regeneration wins over an older remote copy — no clobber/flicker).
+        // `record.modifiedAt` is the CloudKit SERVER modificationDate on the pull path
+        // (D-0203 review), so the remote comparand is a single authoritative clock
+        // rather than the pushing device's skewed client mtime. (The receiver's own
+        // local file mtime remains device-local; fully server-domain comparison would
+        // require restamping received files to the server date — deferred as it would
+        // shift mtime-derived UI such as My Reports' report dates.)
         if let attrs = try? fm.attributesOfItem(atPath: dest.path),
            let localMtime = attrs[.modificationDate] as? Date,
            localMtime >= record.modifiedAt {

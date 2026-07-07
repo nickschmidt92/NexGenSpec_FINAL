@@ -29,7 +29,10 @@ struct SyncAssetRecord {
     let jobId: UUID
     let relativePath: String   // root-relative
     let kind: SyncAssetKind
-    let modifiedAt: Date       // LWW clock = source file mtime
+    // LWW clock. On PUSH it carries the source-file mtime; on PULL the receiver fills
+    // it from CloudKit's SERVER modificationDate so last-writer-wins arbitrates on one
+    // authoritative clock instead of a skewed cross-device client mtime (D-0203 review).
+    let modifiedAt: Date
     let schemaVersion: Int
     let payload: Data
 }

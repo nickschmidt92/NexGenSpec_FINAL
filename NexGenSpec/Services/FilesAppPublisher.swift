@@ -81,6 +81,15 @@ enum FilesAppPublisher {
             if let pdfURL, fm.fileExists(atPath: pdfURL.path) {
                 let pdfDest = destFolder.appendingPathComponent("Inspection_Report.pdf")
                 try FileSecurity.copyProtectedItem(from: pdfURL, to: pdfDest)
+                // Record the jobId in a hidden sidecar so a later delete can recover it
+                // to emit the matching CloudKit asset tombstone even if the address /
+                // client name (and thus this folder name) changed after export — without
+                // it, recomputing folderName from current metadata orphans the tombstone
+                // and the stale PDF persists on other devices (D-0203 review). Best-
+                // effort: it must never break an export the inspector already completed.
+                try? FileSecurity.writeProtected(
+                    Data(jobId.uuidString.utf8),
+                    to: destFolder.appendingPathComponent(jobIdSidecarName, isDirectory: false))
                 // Mirror the finalized report PDF to CloudKit (D-0203). This is the
                 // only persistent PDF (temp export folders are never published); a
                 // same-address re-export overwrites the same recordName.
@@ -102,6 +111,56 @@ enum FilesAppPublisher {
             folderName(for: inspection, jobId: jobId),
             isDirectory: true
         )
+    }
+
+    // MARK: - jobId sidecar (D-0203 delete propagation)
+
+    /// Hidden per-folder sidecar recording the inspection jobId a published report
+    /// belongs to. Dot-prefixed so it never surfaces in the Files app or the
+    /// `scanReports` folder listing (which enumerates the reports root, not each
+    /// folder's contents, and skips hidden entries). Lets a delete recover the jobId
+    /// without recomputing folderName from possibly-renamed current metadata.
+    static let jobIdSidecarName = ".report-jobid"
+
+    /// The inspection jobId recorded in a published report folder's sidecar, or nil
+    /// for a legacy folder published before the sidecar existed (the caller then
+    /// falls back to name-matching current metadata).
+    static func publishedJobId(inFolder folder: URL) -> UUID? {
+        let sidecar = folder.appendingPathComponent(jobIdSidecarName, isDirectory: false)
+        guard let raw = try? String(contentsOf: sidecar, encoding: .utf8) else { return nil }
+        return UUID(uuidString: raw.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// The published report folder that belongs to `jobId`, located by its sidecar
+    /// (rename-proof) rather than by recomputing a possibly-stale folder name. nil if
+    /// no published folder currently maps to the jobId.
+    static func publishedFolder(forJobId jobId: UUID) -> URL? {
+        let fm = FileManager.default
+        guard let folders = try? fm.contentsOfDirectory(
+            at: publishRoot, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return nil }
+        return folders.first { publishedJobId(inFolder: $0) == jobId }
+    }
+
+    /// The root-relative path of the published report PDF for `jobId`, if one exists
+    /// on disk — located by the folder's jobId sidecar (rename-proof), falling back to
+    /// the folder computed from `inspection`'s current metadata for legacy exports.
+    /// Used to emit the CloudKit asset tombstone when an inspection is deleted so its
+    /// ReportPDF record doesn't outlive it and resurrect on a fresh device (D-0203
+    /// review). nil when no published PDF exists.
+    static func publishedReportRelativePath(forJobId jobId: UUID, inspection: Inspection?) -> String? {
+        let fm = FileManager.default
+        if let folder = publishedFolder(forJobId: jobId),
+           fm.fileExists(atPath: folder.appendingPathComponent("Inspection_Report.pdf").path) {
+            return "Reports/\(folder.lastPathComponent)/Inspection_Report.pdf"
+        }
+        if let inspection {
+            let folder = publishedFolderURL(for: inspection, jobId: jobId)
+            if fm.fileExists(atPath: folder.appendingPathComponent("Inspection_Report.pdf").path) {
+                return "Reports/\(folder.lastPathComponent)/Inspection_Report.pdf"
+            }
+        }
+        return nil
     }
 
     /// Removes the published Files-app folder for an inspection, if present.
