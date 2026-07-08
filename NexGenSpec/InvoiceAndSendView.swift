@@ -194,10 +194,18 @@ struct InvoiceAndSendView: View {
         .onChange(of: exportService.isExporting) { _, isExporting in
             if !isExporting {
                 if case .success(_, let pdf?) = exportService.result {
-                    exportedPDFURL = pdf
                     // Mirror into the Files-app folder organized by address so
                     // the inspector has one-tap PDF access outside the app.
                     FilesAppPublisher.publish(version: version, pdfURL: pdf)
+                    // The mail composer and the share-sheet fallback both name the
+                    // attachment from the URL's lastPathComponent, so hand them a
+                    // descriptively-named COPY ("<Client> - <Address> - Inspection
+                    // Report.pdf"). A copy (never a rename) keeps the synced mirror's
+                    // CloudKit asset key intact (T-01624).
+                    exportedPDFURL = FilesAppPublisher.makeShareCopy(
+                        of: pdf,
+                        clientName: version.inspection.clientName,
+                        propertyAddress: version.inspection.propertyAddress)
                     // Warn if PDF exceeds 20 MB — email providers may reject large attachments
                     if let attrs = try? FileManager.default.attributesOfItem(atPath: pdf.path),
                        let fileSize = attrs[.size] as? UInt64,
@@ -457,7 +465,13 @@ struct InvoiceAndSendView: View {
         Task { @MainActor in
             await exportService.export(version: version, watermark: !subscriptions.hasFeatureAccess)
             if case .success(_, let pdf?) = exportService.result {
-                exportedPDFURL = pdf
+                // Deliver a descriptively-named COPY (see runExport's onChange
+                // handler); a copy keeps the synced mirror's CloudKit key intact
+                // (T-01624).
+                exportedPDFURL = FilesAppPublisher.makeShareCopy(
+                    of: pdf,
+                    clientName: version.inspection.clientName,
+                    propertyAddress: version.inspection.propertyAddress)
                 presentInvoiceDelivery()
             }
             // Export failure surfaces via the existing showExportError path

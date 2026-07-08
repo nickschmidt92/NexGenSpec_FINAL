@@ -25,6 +25,10 @@ struct MyReportsView: View {
         let subtitle: String
         let systemImage: String
         let date: Date
+        /// True for report PDFs (which share the synced mirror and get a
+        /// descriptively-renamed copy at share time), false for ZIP backups
+        /// (which keep their own bundle name).
+        let isReport: Bool
     }
 
     private struct ShareItem: Identifiable {
@@ -93,7 +97,7 @@ struct MyReportsView: View {
 
     private func deliverableRow(_ d: Deliverable) -> some View {
         Button {
-            shareItem = ShareItem(url: d.shareURL)
+            shareItem = ShareItem(url: shareURL(for: d))
         } label: {
             HStack(spacing: Spacing.md) {
                 Image(systemName: d.systemImage)
@@ -146,6 +150,36 @@ struct MyReportsView: View {
     }
 
     // MARK: - Actions
+
+    /// The URL handed to the share sheet. Report PDFs share a descriptively-named
+    /// COPY ("<Client> - <Address> - Inspection Report.pdf") instead of the synced
+    /// mirror itself, so the client can tell whose report is whose and repeated
+    /// "Save to Files" no longer collide into "Inspection_Report 2.pdf" (T-01624).
+    /// It is a copy, never a rename, so the mirror's CloudKit asset key — hashed
+    /// over its on-disk relative path — stays intact (D-0203). ZIP backups keep
+    /// their own bundle name and are shared as-is.
+    private func shareURL(for d: Deliverable) -> URL {
+        guard d.isReport else { return d.shareURL }
+        // Recover the inspection's client + address to name the copy. Resolve the
+        // jobId from the folder's sidecar (rename-proof), falling back to matching
+        // the folder name against current metadata (same chain the delete path
+        // uses), then read client/address off that metadata.
+        let meta: VersionMetadata? = (FilesAppPublisher.publishedJobId(inFolder: d.deleteURL)
+            ?? store.metadataList.first(where: {
+                FilesAppPublisher.folderName(propertyAddress: $0.propertyAddress,
+                                             clientName: $0.clientName,
+                                             jobId: $0.inspectionId) == d.deleteURL.lastPathComponent
+            })?.inspectionId)
+            .flatMap { id in store.metadataList.first(where: { $0.inspectionId == id }) }
+        // Fall back to the folder name (which is the address, else client) as the
+        // address component when no metadata is on this device (e.g. a report
+        // pulled from another device whose inspection wasn't synced here).
+        let clientName = meta?.clientName ?? ""
+        let propertyAddress = meta?.propertyAddress ?? d.title
+        return FilesAppPublisher.makeShareCopy(of: d.shareURL,
+                                               clientName: clientName,
+                                               propertyAddress: propertyAddress)
+    }
 
     private func delete(_ d: Deliverable) {
         // Propagate a report-PDF deletion to CloudKit (D-0203). Only report folders
@@ -202,7 +236,8 @@ struct MyReportsView: View {
                 title: folder.lastPathComponent,
                 subtitle: DateFormatters.mediumDate.string(from: date),
                 systemImage: "doc.richtext",
-                date: date
+                date: date,
+                isReport: true
             ))
         }
         return out.sorted { $0.date > $1.date }
@@ -236,7 +271,8 @@ struct MyReportsView: View {
                 title: label,
                 subtitle: subtitle,
                 systemImage: "doc.zipper",
-                date: date
+                date: date,
+                isReport: false
             ))
         }
         return out.sorted { $0.date > $1.date }

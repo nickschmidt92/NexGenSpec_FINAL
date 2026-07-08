@@ -311,7 +311,16 @@ struct InspectionOverviewView: View {
                                     // Mirror into the Files-app folder organized
                                     // by address for one-tap access outside the app.
                                     FilesAppPublisher.publish(version: version, pdfURL: url)
-                                    shareContent = ShareContent(items: [url])
+                                    // Hand the client a descriptively-named copy
+                                    // ("<Client> - <Address> - Inspection Report.pdf")
+                                    // rather than the generic export temp name — a
+                                    // COPY, so the synced mirror's CloudKit key is
+                                    // untouched (T-01624).
+                                    let shareURL = FilesAppPublisher.makeShareCopy(
+                                        of: url,
+                                        clientName: version.inspection.clientName,
+                                        propertyAddress: version.inspection.propertyAddress)
+                                    shareContent = ShareContent(items: [shareURL])
                                 } else if case .failure = exportService.result {
                                     showExportError = true
                                 }

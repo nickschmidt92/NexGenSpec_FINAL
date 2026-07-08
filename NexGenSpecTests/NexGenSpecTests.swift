@@ -658,6 +658,94 @@ final class LegacyStorageCleanupTests: XCTestCase {
     }
 }
 
+/// T-01624 — the report PDF handed to the CLIENT at share/export time is named
+/// "<Client> - <Address> - Inspection Report.pdf" so repeated saves no longer
+/// collide into "Inspection_Report 2.pdf" and clients can tell whose report is
+/// whose. The name is applied to a COPY, so the synced mirror's on-disk relative
+/// path (and thus its CloudKit asset key) is never changed.
+final class FilesAppPublisherShareNameTests: XCTestCase {
+
+    func testShareFileNameClientAndAddressHappyPath() {
+        XCTAssertEqual(
+            FilesAppPublisher.shareFileName(clientName: "Smith", propertyAddress: "12147 Idalia St"),
+            "Smith - 12147 Idalia St - Inspection Report.pdf")
+    }
+
+    func testShareFileNameFallsBackToAddressWhenClientMissing() {
+        XCTAssertEqual(
+            FilesAppPublisher.shareFileName(clientName: "", propertyAddress: "12147 Idalia St"),
+            "12147 Idalia St - Inspection Report.pdf")
+        // Whitespace-only client is treated as missing.
+        XCTAssertEqual(
+            FilesAppPublisher.shareFileName(clientName: "   ", propertyAddress: "12147 Idalia St"),
+            "12147 Idalia St - Inspection Report.pdf")
+    }
+
+    func testShareFileNameFallsBackToClientWhenAddressMissing() {
+        XCTAssertEqual(
+            FilesAppPublisher.shareFileName(clientName: "Smith", propertyAddress: ""),
+            "Smith - Inspection Report.pdf")
+    }
+
+    func testShareFileNameDefaultWhenBothMissing() {
+        XCTAssertEqual(
+            FilesAppPublisher.shareFileName(clientName: "", propertyAddress: ""),
+            "Inspection Report.pdf")
+        // A value that sanitizes to nothing (only path-illegal chars) is also empty.
+        XCTAssertEqual(
+            FilesAppPublisher.shareFileName(clientName: "///", propertyAddress: "\\:*?"),
+            "Inspection Report.pdf")
+    }
+
+    func testShareFileNameSanitizesIllegalCharactersAndCollapsesWhitespace() {
+        let name = FilesAppPublisher.shareFileName(
+            clientName: "Smith/Jones",
+            propertyAddress: "12147 Idalia St:  Unit *2\n")
+        XCTAssertEqual(name, "Smith Jones - 12147 Idalia St Unit 2 - Inspection Report.pdf")
+        // No path-illegal / path-separator characters survive into the file name.
+        for illegal in ["/", "\\", ":", "*", "?", "\"", "<", ">", "|", "\n", "\r", "\t"] {
+            XCTAssertFalse(name.contains(illegal), "share file name leaked illegal char \(illegal)")
+        }
+    }
+
+    func testShareFileNameBoundsComponentLength() {
+        let longClient = String(repeating: "A", count: 200)
+        let name = FilesAppPublisher.shareFileName(clientName: longClient, propertyAddress: "1 Main St")
+        // Each component is bounded to 60 chars, so the whole name stays well under
+        // the 255-byte filesystem limit.
+        XCTAssertLessThan(name.count, 160)
+        XCTAssertTrue(name.hasSuffix(" - 1 Main St - Inspection Report.pdf"))
+    }
+
+    /// The client-facing rename is applied to a COPY: the source PDF (which may be
+    /// the synced mirror whose CloudKit key is derived from its on-disk path) is
+    /// left untouched, and the copy carries the descriptive name.
+    func testMakeShareCopyRenamesCopyAndLeavesSourceIntact() throws {
+        let fm = FileManager.default
+        // Stand in for the synced mirror at Reports/<folder>/Inspection_Report.pdf.
+        let srcDir = fm.temporaryDirectory
+            .appendingPathComponent("share-copy-src-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: srcDir, withIntermediateDirectories: true)
+        let source = srcDir.appendingPathComponent("Inspection_Report.pdf")
+        let pdf = PDFDocument()
+        pdf.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdf.write(to: source))
+        defer { try? fm.removeItem(at: srcDir) }
+
+        let copy = FilesAppPublisher.makeShareCopy(
+            of: source, clientName: "Smith", propertyAddress: "12147 Idalia St")
+        defer { try? fm.removeItem(at: copy.deletingLastPathComponent()) }
+
+        // Source is untouched — its name (and therefore the sync key path) is intact.
+        XCTAssertTrue(fm.fileExists(atPath: source.path), "source mirror must not be moved/renamed")
+        XCTAssertEqual(source.lastPathComponent, "Inspection_Report.pdf")
+        // The copy carries the descriptive client-facing name.
+        XCTAssertNotEqual(copy.path, source.path)
+        XCTAssertEqual(copy.lastPathComponent, "Smith - 12147 Idalia St - Inspection Report.pdf")
+        XCTAssertTrue(fm.fileExists(atPath: copy.path), "share copy must exist")
+    }
+}
+
 /// B-0047 — encrypted backup uses a real PBKDF2 KDF, enforces a passphrase
 /// minimum, and rejects legacy v1 backups. Isolated: stashes the real appRoot
 /// aside so create/restore run against a clean store.

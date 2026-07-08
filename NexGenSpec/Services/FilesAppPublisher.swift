@@ -244,4 +244,83 @@ enum FilesAppPublisher {
             .joined(separator: " ")
         return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    // MARK: - Shared / exported file naming (T-01624)
+
+    /// The client-facing file name for the report PDF handed to the RECIPIENT at
+    /// share / export time (Save to Files, email, AirDrop):
+    ///
+    ///     "<Client> - <Address> - Inspection Report.pdf"
+    ///     e.g. "Smith - 12147 Idalia St - Inspection Report.pdf"
+    ///
+    /// This is deliberately NOT the on-disk name of the synced mirror at
+    /// `Reports/<folder>/Inspection_Report.pdf`. That mirror's CloudKit asset key
+    /// is hashed over its exact root-relative path
+    /// (`CloudKitSchema.assetRecordName` + `CloudKitSyncPort.seedableAssetPaths`),
+    /// so renaming it on disk would change the key and drop it out of the sync
+    /// allowlist. Callers therefore COPY the mirror to a temp file under this name
+    /// (`makeShareCopy`) and share the copy, leaving the synced path untouched.
+    ///
+    /// Falls back gracefully: client-only or address-only when the other is empty,
+    /// and a plain "Inspection Report.pdf" when both are empty (never an empty or
+    /// ambiguous name). Each component is length-bounded so the assembled name
+    /// stays well under filesystem / share-sheet limits.
+    static func shareFileName(clientName: String, propertyAddress: String) -> String {
+        let client = sanitizedShareComponent(clientName)
+        let address = sanitizedShareComponent(propertyAddress)
+        let stem: String
+        switch (client.isEmpty, address.isEmpty) {
+        case (false, false): stem = "\(client) - \(address) - Inspection Report"
+        case (false, true):  stem = "\(client) - Inspection Report"
+        case (true, false):  stem = "\(address) - Inspection Report"
+        case (true, true):   stem = "Inspection Report"
+        }
+        return stem + ".pdf"
+    }
+
+    /// Copies `sourcePDF` to a fresh temp file named `shareFileName(...)` and
+    /// returns that URL for the share sheet / mail composer, so the client sees a
+    /// descriptive name instead of the generic on-disk "Inspection_Report.pdf"
+    /// (which otherwise collides into "Inspection_Report 2.pdf" on repeated saves).
+    ///
+    /// CRITICAL — this NEVER renames or moves `sourcePDF`. When the source is the
+    /// synced mirror (MyReportsView shares it directly), renaming it in place would
+    /// change the root-relative path the CloudKit asset key hashes over
+    /// (`CloudKitSchema.assetRecordName`) and drop it out of `seedableAssetPaths`,
+    /// breaking cross-device asset sync (D-0203). Copying leaves the mirror's path
+    /// and key intact.
+    ///
+    /// The copy lands in a `report-share-<uuid>` temp subfolder whose `report-`
+    /// prefix is in `ReportExportService.tempExportPrefixes`, so both the 24h temp
+    /// sweep and the Account-Deletion temp wipe reclaim it (the copy carries client
+    /// PII in its name and bytes). A unique subfolder also lets the file keep the
+    /// exact `shareFileName` even if two reports share the same name. Best effort:
+    /// returns `sourcePDF` unchanged if the copy fails, so sharing is never blocked.
+    static func makeShareCopy(of sourcePDF: URL, clientName: String, propertyAddress: String) -> URL {
+        let name = shareFileName(clientName: clientName, propertyAddress: propertyAddress)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("report-share-\(UUID().uuidString)", isDirectory: true)
+        let dest = dir.appendingPathComponent(name, isDirectory: false)
+        do {
+            try FileSecurity.copyProtectedItem(from: sourcePDF, to: dest)
+            return dest
+        } catch {
+            Diagnostics.logError(context: "FilesAppPublisher.makeShareCopy failed",
+                                 error: error, persistToDisk: false)
+            return sourcePDF
+        }
+    }
+
+    /// Sanitizes ONE component (client or address) for a shared FILE name: reuses
+    /// `sanitized` (replace path-illegal / awkward chars with spaces, collapse
+    /// whitespace, trim) and additionally bounds the length so the assembled name
+    /// stays reasonable. Unlike a folder component this needs no `isSafeComponent`
+    /// traversal guard: the result is only ever a file's lastPathComponent inside a
+    /// freshly-created unique temp subfolder, never a directory that gets
+    /// rebuilt/deleted (B-0117 concerns only the rebuilt reports folder).
+    static func sanitizedShareComponent(_ raw: String, maxLength: Int = 60) -> String {
+        let cleaned = sanitized(raw)
+        guard cleaned.count > maxLength else { return cleaned }
+        return String(cleaned.prefix(maxLength)).trimmingCharacters(in: .whitespaces)
+    }
 }
