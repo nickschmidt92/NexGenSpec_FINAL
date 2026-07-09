@@ -424,6 +424,13 @@ typealias AppScaled = ScaledMetric
 // MARK: - Phone Number Formatting
 
 /// Formats a raw digit string into (###) ###-#### as the user types.
+///
+/// Separators are emitted BEFORE the digit that follows them, never after the
+/// digit that precedes them, so the result never ends in a separator. This is
+/// load-bearing: the onChange rewrite reformats on every keystroke, and a
+/// trailing separator reformats to the identical string — backspace then
+/// re-inserts what was just deleted and the field hard-locks (found in the
+/// build-29 device smoke, 2026-07-09).
 func formatPhoneNumber(_ value: String) -> String {
     let digits = value.filter(\.isWholeNumber)
     let limited = String(digits.prefix(10))
@@ -431,13 +438,11 @@ func formatPhoneNumber(_ value: String) -> String {
     for (i, ch) in limited.enumerated() {
         switch i {
         case 0: result.append("(")
-            result.append(ch)
-        case 2: result.append(ch)
-            result.append(") ")
-        case 5: result.append(ch)
-            result.append("-")
-        default: result.append(ch)
+        case 3: result.append(") ")
+        case 6: result.append("-")
+        default: break
         }
+        result.append(ch)
     }
     return result
 }
