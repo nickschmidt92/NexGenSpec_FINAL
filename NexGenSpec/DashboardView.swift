@@ -14,6 +14,7 @@ struct DashboardView: View {
     @EnvironmentObject private var store: InspectionStore
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var subscriptions: SubscriptionManager
+    @EnvironmentObject private var syncCoordinator: SyncCoordinator
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
     // MARK: - Local state
@@ -100,7 +101,7 @@ struct DashboardView: View {
 
                     Section {
                         if visibleList.isEmpty {
-                            EmptyDashboardState {
+                            EmptyDashboardState(isSyncChecking: syncCoordinator.status == .syncing) {
                                 prepareForNewInspection()
                             }
                             .listRowInsets(EdgeInsets(top: 0, leading: Spacing.md, bottom: Spacing.md, trailing: Spacing.md))
@@ -774,6 +775,11 @@ private struct DashboardMetric: View {
 }
 
 private struct EmptyDashboardState: View {
+    /// True while iCloud Sync is actively pulling (fresh install / second
+    /// device still seeding) — the empty list may be about to fill, so don't
+    /// present "No inspections yet" as settled fact (reinstall/fresh-device
+    /// messaging, v1.0.1). Creating a new inspection stays available either way.
+    var isSyncChecking = false
     let createAction: () -> Void
 
     var body: some View {
@@ -784,15 +790,22 @@ private struct EmptyDashboardState: View {
                         .fill(AppColor.accent.opacity(0.12))
                         .frame(width: 52, height: 52)
 
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(AppColor.accent)
+                    if isSyncChecking {
+                        ProgressView()
+                            .tint(AppColor.accent)
+                    } else {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(AppColor.accent)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text("No inspections yet")
+                    Text(isSyncChecking ? "Checking iCloud for your inspections…" : "No inspections yet")
                         .font(AppFont.title3)
-                    Text("Create your first inspection to start capturing photos, notes, and finalized reports.")
+                    Text(isSyncChecking
+                         ? "Inspections from your other devices will appear here once sync finishes. You can start a new inspection any time."
+                         : "Create your first inspection to start capturing photos, notes, and finalized reports.")
                         .font(AppFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -901,6 +914,7 @@ struct DashboardView_Previews: PreviewProvider {
         DashboardView()
             .environmentObject(store)
             .environmentObject(auth)
+            .environmentObject(SyncCoordinator())
     }
 }
 #endif
