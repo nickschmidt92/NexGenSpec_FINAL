@@ -58,8 +58,12 @@ final class NexGenSpecAutosaveUITests: XCTestCase {
         // Edit the finding comment with the unique marker. Typing mutates the
         // bound model, which fires InspectionView's onChange → 2s debounce →
         // store.writeVersionFileOnlyForAutoSave (the off-main ioQueue.async path).
-        observed.tap()
-        observed.typeText(marker)
+        //
+        // Focus is acquired robustly (see focusAndType): the item-detail sheet's
+        // present animation / focus handoff isn't reliably settled when the
+        // editor first exists, so a bare tap+typeText raced and intermittently
+        // failed under full-suite runs.
+        focusAndType(observed, text: marker, in: app, phase: "initial launch")
 
         // Wait past the 2s autosave debounce AND let the async ioQueue write
         // complete. (3.5s gives margin; the write itself is sub-ms once queued.)
@@ -128,6 +132,97 @@ final class NexGenSpecAutosaveUITests: XCTestCase {
         return observed
     }
 
+    // MARK: - Focus / typing helpers
+
+    /// Robustly makes `element` first responder, then types `text`.
+    ///
+    /// Why this exists: a bare `element.tap(); element.typeText(...)` was flaky
+    /// on full-suite runs. The item-detail sheet's present animation / focus
+    /// handoff isn't always settled when the editor first exists, so the tap
+    /// didn't make the SwiftUI `TextEditor` first responder and `typeText`
+    /// failed with "Neither element nor any descendant has keyboard focus" (the
+    /// editor reported Disabled). This does NOT assume the first tap focuses it:
+    ///   1. waits for the editor to be enabled + hittable before touching it,
+    ///   2. taps, then VERIFIES focus was acquired before typing — the software
+    ///      keyboard appearing (plus the editor's `hasFocus`) is the precondition
+    ///      typeText requires. (This SDK, Xcode 26.5, does not expose
+    ///      `XCUIElement.hasKeyboardFocus`, so the on-screen keyboard is the
+    ///      deterministic focus signal.)
+    ///   3. re-taps (a coordinate tap on the element's centre) up to a bounded
+    ///      number of times if focus didn't land, failing with a clear message,
+    ///   4. after typing, CONFIRMS the marker actually landed in this editor —
+    ///      turning any residual focus miss into a clear, local failure rather
+    ///      than a confusing post-relaunch mismatch.
+    /// It never weakens the test: the marker is still typed into the real editor.
+    private func focusAndType(_ element: XCUIElement, text: String,
+                              in app: XCUIApplication, phase: String) {
+        // Don't touch the editor until the sheet has settled enough that the
+        // element is actually interactive — this is the race the bare
+        // tap+typeText lost.
+        XCTAssertTrue(
+            waitUntil(10) { element.isEnabled && element.isHittable },
+            "[\(phase)] observed editor never became enabled + hittable — cannot focus it"
+        )
+
+        // Acquire keyboard focus, RE-TAPPING up to a bounded number of times.
+        // The keyboard appearing after we tap this (now-interactive) element is
+        // our focus signal; `hasFocus` is an extra best-effort confirmation.
+        let keyboard = app.keyboards.firstMatch
+        let maxAttempts = 4
+        var focused = false
+        for attempt in 1...maxAttempts {
+            if attempt == 1 {
+                element.tap()
+            } else {
+                // A centre coordinate tap is more reliable than .tap() when a
+                // placeholder overlay or an in-flight animation intercepts the
+                // first hit.
+                element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
+            if waitUntil(3, { keyboard.exists && element.hasFocus }) {
+                focused = true
+                break
+            }
+            // Some SwiftUI/OS combos don't surface `hasFocus` on a TextEditor;
+            // fall back to the keyboard alone as the focus signal.
+            if waitUntil(1, { keyboard.exists }) {
+                focused = true
+                break
+            }
+        }
+
+        XCTAssertTrue(
+            focused,
+            "[\(phase)] keyboard never appeared after \(maxAttempts) taps on the observed editor "
+            + "(hasFocus=\(element.hasFocus), keyboardShown=\(keyboard.exists)). "
+            + "If the keyboard never appears, ensure the simulator software keyboard is enabled "
+            + "(ConnectHardwareKeyboard = 0)."
+        )
+
+        element.typeText(text)
+
+        // Confirm the marker actually landed in THIS editor before we depend on
+        // it (guards the rare case where focus went elsewhere or the tap missed).
+        XCTAssertTrue(
+            waitUntil(5, { ((element.value as? String) ?? "").contains(text) }),
+            "[\(phase)] typed marker did not appear in the observed editor "
+            + "(value=\"\((element.value as? String) ?? "")\")"
+        )
+    }
+
+    /// Polls `condition` at short intervals until it returns true or `timeout`
+    /// elapses; returns the final result. Deterministic bounded wait — used for
+    /// focus acquisition instead of a single arbitrary long sleep.
+    @discardableResult
+    private func waitUntil(_ timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if condition() { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        return condition()
+    }
+
     /// Best-effort extraction of the app-under-test's PID. XCUIApplication has
     /// no public PID accessor, but its `debugDescription` includes a
     /// "pid: <n>" fragment we can parse so we can send a real SIGKILL.
@@ -157,9 +252,16 @@ final class NexGenSpecAutosaveUITests: XCTestCase {
 // best-effort path above:
 //
 //  1. SwiftUI `TextEditor` (UITextView) targeting: `app.textViews["observedEditor"]`
-//     relies on the accessibilityIdentifier added in ItemDetailView. If the
-//     editor isn't hittable (e.g. covered by the placeholder overlay or
-//     keyboard), the tap/typeText may need a coordinate tap or a scroll first.
+//     relies on the accessibilityIdentifier added in ItemDetailView. Focus is
+//     no longer assumed from a single tap: `focusAndType` waits for the editor
+//     to be enabled + hittable, then taps and VERIFIES focus (the software
+//     keyboard appearing, plus the editor's `hasFocus`) before typing, re-tapping
+//     via a coordinate tap up to a bounded number of times, and finally confirms
+//     the marker landed in the editor. This SDK (Xcode 26.5) does not expose
+//     `XCUIElement.hasKeyboardFocus`, so the on-screen keyboard is the focus
+//     signal. This resolved the intermittent full-suite failure where the editor
+//     was reported Disabled with "Neither element nor any descendant has
+//     keyboard focus".
 //  2. `typeText` requires the simulator's *software* keyboard
 //     (Simulator ▸ I/O ▸ Keyboard ▸ Connect Hardware Keyboard = OFF, or
 //     `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard 0`).
