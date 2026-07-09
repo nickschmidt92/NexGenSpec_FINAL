@@ -52,11 +52,11 @@ struct AppSettingsView: View {
                      : "Inspections sync across your own devices through your private iCloud.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                // Release-visible sync status. Reflects the coordinator's
-                // last-published status, which updates at bind outcomes
-                // (off / localOnly / idle-after-bind / paused) — the reliably
-                // published states. Live .syncing/.error flush transitions are
-                // NOT forwarded this wave; a live-status publisher is a follow-up.
+                // Release-visible sync status. Reflects the coordinator's published
+                // status: bind outcomes (off / localOnly / idle-after-bind / paused)
+                // plus live flush/pull outcomes — a failed live flush now propagates
+                // to `.error` (and back to `.idle` on a clean flush) via the
+                // coordinator refreshing from the port after each flush/pull.
                 Text(releaseSyncStatusText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

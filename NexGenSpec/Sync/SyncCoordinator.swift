@@ -150,7 +150,27 @@ final class SyncCoordinator: ObservableObject {
 
     /// Forward a local mutation to the active port (no-op when not bound).
     func recordLocalChange(_ change: SyncChange) {
-        port.recordLocalChange(change)
+        let active = port
+        active.recordLocalChange(change)
+        // `recordLocalChange` kicks its own background flush; that flush can set the
+        // port's status to `.error` when an upload fails, but nothing published that
+        // back to the @Published `status` the settings UI observes. Await a
+        // (serialized, idempotent) flush purely to learn its settled status and
+        // reflect it — the port coalesces, so this never double-pushes. Guard on the
+        // port identity so a detached port can't clobber a freshly-rebound one's status.
+        Task { @MainActor [weak self] in
+            await active.flushPending()
+            self?.reflectStatus(of: active)
+        }
+    }
+
+    /// Publish `port`'s current status into the @Published `status`, but only while
+    /// `port` is still the active port — so a stale/detached port whose async work
+    /// lands after a rebind can't overwrite the new port's status (mirrors the
+    /// `port === active` guard in `rebind()`).
+    private func reflectStatus(of active: SyncPort) {
+        guard port === active else { return }
+        status = active.status
     }
 
     /// Record that a synced media file was written. Main-actor-hopping so services on
@@ -184,6 +204,10 @@ final class SyncCoordinator: ObservableObject {
             // Also re-drive any outbound changes queued during a transient unbind
             // window (fix F). Inert on a NoopSyncPort (flag off).
             await active.flushPending()
+            // Reflect the pull/flush outcome (e.g. a flush that set `.error`) into the
+            // @Published status the settings UI observes — otherwise a live-flush error
+            // never reaches the coordinator's status after the one-shot bind publish.
+            self?.reflectStatus(of: active)
         }
     }
 

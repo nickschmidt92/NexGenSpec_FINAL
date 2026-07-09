@@ -17,7 +17,19 @@ private final class FakePort: SyncPort, @unchecked Sendable {
     private(set) var boundUIDs: [String] = []
     private(set) var changes: [SyncChange] = []
     private(set) var pullCount = 0
-    var status: SyncStatus = .idle
+    private var _status: SyncStatus = .idle
+    var status: SyncStatus {
+        get { lock.withLock { _status } }
+        set { lock.withLock { _status = newValue } }
+    }
+    /// When set, `flushPending()` transitions `status` to this value — models a live
+    /// flush that fails (`.error`) or recovers (`.idle`) so the coordinator's status
+    /// propagation (Task B) can be asserted with no CloudKit.
+    private var _statusAfterFlush: SyncStatus?
+    var statusAfterFlush: SyncStatus? {
+        get { lock.withLock { _statusAfterFlush } }
+        set { lock.withLock { _statusAfterFlush = newValue } }
+    }
 
     private(set) var flushCount = 0
     func bind(firebaseUID: String) async { lock.withLock { boundUIDs.append(firebaseUID) } }
@@ -25,7 +37,7 @@ private final class FakePort: SyncPort, @unchecked Sendable {
     func recordLocalChange(_ change: SyncChange) { lock.withLock { changes.append(change) } }
     func seedIfNeeded(firebaseUID: String) async {}
     func pull() async { lock.withLock { pullCount += 1 } }
-    func flushPending() async { lock.withLock { flushCount += 1 } }
+    func flushPending() async { lock.withLock { flushCount += 1; if let _statusAfterFlush { _status = _statusAfterFlush } } }
 
     var changeCount: Int { lock.withLock { changes.count } }
     var bindCount: Int { lock.withLock { boundUIDs.count } }
@@ -144,5 +156,54 @@ final class SyncCoordinatorTests: XCTestCase {
         account.token = "tokB"
         await coord.handleAccountChange()
         XCTAssertEqual(buildCount, 2, "A real iCloud account switch rebuilds the port (cross-account isolation).")
+    }
+
+    // MARK: - Live flush-status propagation (Task B)
+
+    /// Poll `condition` on the main actor until it holds or the timeout elapses, so a
+    /// status published from a background flush Task is observed deterministically
+    /// without a fixed sleep.
+    private func waitUntil(timeout: TimeInterval = 2.0, _ condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+
+    /// A flush that fails AFTER the one-shot bind publish sets the port's status to
+    /// `.error`; recording a local change drives a flush and that `.error` must now
+    /// reach the @Published `SyncCoordinator.status` (it previously never did). A later
+    /// clean flush returns it to `.idle`.
+    func testLiveFlushErrorPropagatesToStatusAndClearsOnCleanFlush() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(isEnabled: { true }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
+        coord.userDidChange(uid: "u")   // binds the fake cloud port
+
+        fake.statusAfterFlush = .error("upload failed")
+        coord.recordLocalChange(.versionUpserted(meta()))
+        await waitUntil { coord.status == .error("upload failed") }
+        XCTAssertEqual(coord.status, .error("upload failed"),
+                       "a failed live flush propagates .error to SyncCoordinator.status")
+
+        fake.statusAfterFlush = .idle
+        coord.recordLocalChange(.versionUpserted(meta()))
+        await waitUntil { coord.status == .idle }
+        XCTAssertEqual(coord.status, .idle,
+                       "a subsequent clean flush returns SyncCoordinator.status to .idle")
+    }
+
+    /// The other refreshed path: a foreground `pullNow()` also reflects the port's
+    /// post-flush status (e.g. `.error`) into the coordinator status.
+    func testPullNowPropagatesFlushErrorToStatus() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(isEnabled: { true }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
+        coord.userDidChange(uid: "u")
+
+        fake.statusAfterFlush = .error("upload failed")
+        coord.pullNow()
+        await waitUntil { coord.status == .error("upload failed") }
+        XCTAssertEqual(coord.status, .error("upload failed"),
+                       "pullNow reflects a flush .error into SyncCoordinator.status")
     }
 }

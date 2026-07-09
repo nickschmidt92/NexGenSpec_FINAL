@@ -45,7 +45,7 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
         }
     }
     func delete(recordName: String, inZone zoneName: String) async throws {
-        lock.withLock { deleted.append((recordName, zoneName)); stored[recordName] = nil }
+        lock.withLock { deleted.append((recordName, zoneName)); stored[recordName] = nil; opLog.append("delete:\(recordName)") }
     }
     func deleteZone(_ zoneName: String) async throws {
         if failDeleteZone { throw NSError(domain: "test", code: 3) }
@@ -71,15 +71,20 @@ private final class FakeDatabase: CloudDatabase, @unchecked Sendable {
     private(set) var deletedAssetKeys: [String] = []
     private(set) var clearedAssetKeys: [String] = []
     private var assetTombstones: Set<String> = []
+    /// Cross-operation ordering log ("clearAsset:<key>", "saveAsset:<recordName>",
+    /// "recordAssetTombstone:<key>", "delete:<recordName>"), so push-side tests can
+    /// assert clear-then-save and tombstone-then-delete ORDER, not just presence.
+    private(set) var opLog: [String] = []
+    var opLogSnapshot: [String] { lock.withLock { opLog } }
     func saveAsset(_ record: SyncAssetRecord, inZone zoneName: String) async throws {
         if failSave { throw NSError(domain: "test", code: 4) }
-        lock.withLock { savedAssets.append((record, zoneName)) }
+        lock.withLock { savedAssets.append((record, zoneName)); opLog.append("saveAsset:\(record.recordName)") }
     }
     func recordAssetTombstone(key: String, inZone zoneName: String) async throws {
-        lock.withLock { assetTombstones.insert(key); deletedAssetKeys.append(key) }
+        lock.withLock { assetTombstones.insert(key); deletedAssetKeys.append(key); opLog.append("recordAssetTombstone:\(key)") }
     }
     func clearAssetTombstone(key: String, inZone zoneName: String) async throws {
-        lock.withLock { assetTombstones.remove(key); clearedAssetKeys.append(key) }
+        lock.withLock { assetTombstones.remove(key); clearedAssetKeys.append(key); opLog.append("clearAsset:\(key)") }
     }
     func tombstonedAssetKeys(inZone zoneName: String) async throws -> Set<String> {
         lock.withLock { assetTombstones }
@@ -877,5 +882,183 @@ final class CloudKitSyncPortTests: XCTestCase {
         let p2 = makePort(token: "t1", bindings: FakeBindings(), db: FakeDatabase(), reader: rFinal, fetcher: FakeFetcher(changes: finalChanges), writer: w2)
         await p2.bind(firebaseUID: "uidB")
         XCTAssertEqual(w2.deletedCount, 0, "A finalized report is never deleted via a remote tombstone.")
+    }
+
+    // MARK: - Asset PUSH (D-0203) — outbound mirror regression
+    //
+    // Coverage for the local→cloud asset push (`apply(.mediaUpserted/.mediaDeleted)`),
+    // the mirror image of the "Asset pull (D-0203 / W2)" section above. `.mediaUpserted`
+    // reads real bytes from the pinned bound-UID root on disk (mirrors the live emit
+    // path), so these write a temp file under `FilePaths.userRoot(uid:)` and clean it up.
+    // `await flushPending()` is not a strict barrier (a `_flushAgain` re-run can hold the
+    // flush lock — see the finalize test), so each asserts by pumping to a settled state.
+
+    /// A unique per-test UID so on-disk files never collide with other tests / the
+    /// real store, and are torn down in a `defer`.
+    private func pushTestUID(_ label: String) -> String { "assetPush-\(label)-\(UUID().uuidString)" }
+
+    /// Drive flushes until `condition` holds (bounded) and report whether it did.
+    /// `flushPending()` is not a strict barrier — the `_flushAgain` re-run can leave a
+    /// trailing flush mid-flight (status transiently `.syncing`) — so status/queue
+    /// assertions must pump to a SETTLED state rather than read once after a single flush.
+    @discardableResult
+    private func pumpFlush(_ port: CloudKitSyncPort, iterations: Int = 200, until condition: () -> Bool) async -> Bool {
+        for _ in 0..<iterations {
+            if condition() { return true }
+            await port.flushPending()
+            await Task.yield()
+        }
+        return condition()
+    }
+
+    /// Test 1: `.mediaUpserted` for an allowlisted asset pushes a `SyncAssetRecord`
+    /// via `saveAsset` with the canonical `assetRecordName`, and CLEARS a stale asset
+    /// tombstone BEFORE saving (clear-then-save, §1.6) so a later pull can't re-delete
+    /// the freshly recreated copy.
+    func testMediaUpsertedPushesAssetAndClearsTombstoneFirst() async throws {
+        let uid = pushTestUID("upsert")
+        let root = FilePaths.userRoot(uid: uid)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let jobId = UUID(); let scanId = UUID()
+        let relativePath = "Inspections/\(jobId.uuidString)/lidar/\(scanId.uuidString)_floorplan.png"
+        let key = "\(jobId.uuidString)/\(relativePath)"
+        let payload = Data("floorplan-bytes".utf8)
+        try FileSecurity.writeProtected(payload, to: root.appendingPathComponent(relativePath))
+
+        let db = FakeDatabase()
+        db.seedAssetTombstones([key])   // deleted-then-recreated: a stale tombstone exists
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db)
+        await port.bind(firebaseUID: uid)
+
+        port.recordLocalChange(.mediaUpserted(jobId: jobId, relativePath: relativePath))
+        await pumpFlush(port) { !db.savedAssets.isEmpty }
+
+        XCTAssertEqual(db.savedAssets.count, 1, "an allowlisted media upsert pushes exactly one SyncAssetRecord")
+        let saved = db.savedAssets.first
+        let expectedName = CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath)
+        XCTAssertEqual(saved?.record.recordName, expectedName, "the pushed record uses the canonical assetRecordName")
+        XCTAssertEqual(saved?.record.jobId, jobId)
+        XCTAssertEqual(saved?.record.relativePath, relativePath)
+        XCTAssertEqual(saved?.record.kind, .lidarFloorplan)
+        XCTAssertEqual(saved?.record.payload, payload, "the on-disk bytes are pushed as the payload")
+        XCTAssertEqual(saved?.zone, CloudKitSchema.zoneName(forFirebaseUID: uid))
+
+        XCTAssertFalse(db.assetTombstoneSnapshot.contains(key), "the stale asset tombstone is cleared on push")
+        let log = db.opLogSnapshot
+        let clearIdx = log.firstIndex(of: "clearAsset:\(key)")
+        let saveIdx = log.firstIndex(of: "saveAsset:\(expectedName)")
+        XCTAssertNotNil(clearIdx, "the tombstone clear was issued")
+        XCTAssertNotNil(saveIdx, "the asset save was issued")
+        if let clearIdx, let saveIdx {
+            XCTAssertLessThan(clearIdx, saveIdx, "clear-then-save: the tombstone is cleared BEFORE the save")
+        }
+    }
+
+    /// Test 2: `.mediaDeleted` records the asset tombstone BEFORE deleting the record
+    /// (record-then-delete, mirrors `versionDeleted`) — the tombstone is what stops a
+    /// stale device from resurrecting the asset.
+    func testMediaDeletedRecordsAssetTombstoneThenDeletes() async {
+        let uid = pushTestUID("delete")
+        let jobId = UUID()
+        let relativePath = "Reports/123-Main-St/Inspection_Report.pdf"
+        let key = "\(jobId.uuidString)/\(relativePath)"
+        let recordName = CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath)
+
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db)
+        await port.bind(firebaseUID: uid)
+
+        port.recordLocalChange(.mediaDeleted(jobId: jobId, relativePath: relativePath))
+        await pumpFlush(port) { db.assetTombstoneSnapshot.contains(key) }
+
+        XCTAssertTrue(db.assetTombstoneSnapshot.contains(key), "a media delete records an asset tombstone")
+        XCTAssertTrue(db.deleted.contains(where: { $0.name == recordName }), "the asset record is deleted from the zone")
+        let log = db.opLogSnapshot
+        let tombIdx = log.firstIndex(of: "recordAssetTombstone:\(key)")
+        let delIdx = log.firstIndex(of: "delete:\(recordName)")
+        XCTAssertNotNil(tombIdx, "the asset tombstone was recorded")
+        XCTAssertNotNil(delIdx, "the asset record was deleted")
+        if let tombIdx, let delIdx {
+            XCTAssertLessThan(tombIdx, delIdx, "record-then-delete: the tombstone is recorded BEFORE the delete")
+        }
+    }
+
+    /// Test 3: foreign / excluded paths (full-res photo, video, USDZ, whole-home cache)
+    /// are IGNORED by the `SyncAssetPaths` allowlist — no `saveAsset`, no tombstone
+    /// clear, and a clean (non-error) skip.
+    func testMediaUpsertedIgnoresForeignAndExcludedPaths() async {
+        let uid = pushTestUID("foreign")
+        let jobId = UUID(); let scanId = UUID()
+        let db = FakeDatabase(); let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db)
+        await port.bind(firebaseUID: uid)
+
+        // None of these are allowlisted synced assets — they must never push.
+        let excluded = [
+            "Inspections/\(jobId.uuidString)/photos/\(UUID().uuidString).jpg",             // full-res photo
+            "Inspections/\(jobId.uuidString)/videos/\(UUID().uuidString).mov",             // video
+            "Inspections/\(jobId.uuidString)/lidar/\(scanId.uuidString).usdz",             // USDZ 3D scan
+            "Inspections/\(jobId.uuidString)/lidar/whole_home_\(jobId.uuidString).png"     // derived whole-home cache
+        ]
+        for path in excluded { port.recordLocalChange(.mediaUpserted(jobId: jobId, relativePath: path)) }
+        // No on-disk file is even created: an excluded path returns before file access.
+        // Pump so any spawned flush has ample opportunity to (wrongly) push.
+        for _ in 0..<50 { await port.flushPending(); await Task.yield() }
+
+        XCTAssertTrue(db.savedAssets.isEmpty, "foreign/excluded paths are never pushed as assets (SyncAssetPaths allowlist)")
+        XCTAssertTrue(db.clearedAssetKeys.isEmpty, "an ignored path never even clears a tombstone")
+        // A clean skip is never an upload failure: an excluded path returns from apply()
+        // without throwing, so the port never enters `.error` at any point (this holds
+        // regardless of flush timing — unlike a settled `.idle`, which can be masked by
+        // a transient `.syncing` from a trailing re-run).
+        if case .error = port.status {
+            XCTFail("ignoring a foreign path is a clean skip, not an error, got \(port.status)")
+        }
+    }
+
+    /// Test 4: a transient `saveAsset` failure keeps the change QUEUED (not dropped),
+    /// so a later flush retries and the asset eventually pushes.
+    func testTransientAssetSaveFailureKeepsChangeQueuedForRetry() async throws {
+        let uid = pushTestUID("retry")
+        let root = FilePaths.userRoot(uid: uid)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let jobId = UUID()
+        let relativePath = "Inspections/\(jobId.uuidString)/thumbnails/\(UUID().uuidString).jpg"
+        try FileSecurity.writeProtected(Data("thumb".utf8), to: root.appendingPathComponent(relativePath))
+
+        // DIAGNOSTIC: confirm the file is where the port will look for it, and readable.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: FilePaths.userRoot(uid: uid).appendingPathComponent(relativePath).path),
+                      "DIAG: the asset file exists at the port's expected path")
+        XCTAssertEqual(try? Data(contentsOf: FilePaths.userRoot(uid: uid).appendingPathComponent(relativePath)),
+                       Data("thumb".utf8), "DIAG: the asset file is byte-readable at userRoot(uid)")
+
+        let db = FakeDatabase(); db.failSave = true
+        let binds = FakeBindings()
+        let port = makePort(token: "t1", bindings: binds, db: db)
+        await port.bind(firebaseUID: uid)
+        XCTAssertEqual(port.status, .idle, "DIAG: bind succeeded and the port is bound")
+        XCTAssertNotNil(binds.current(uid), "DIAG: the persisted binding is keyed by uid (binding.firebaseUID == uid)")
+
+        port.recordLocalChange(.mediaUpserted(jobId: jobId, relativePath: relativePath))
+        // The save keeps failing: nothing is pushed and the failure settles to .error.
+        // (Pump until .error is OBSERVED — a running flush shows .syncing until it ends.)
+        let sawError = await pumpFlush(port) { if case .error = port.status { return true } else { return false } }
+        // DIAG: clearAssetTombstone runs AFTER the file read but BEFORE saveAsset, so a
+        // non-empty clearedAssetKeys proves apply reached the (failing) save.
+        XCTAssertFalse(db.clearedAssetKeys.isEmpty, "DIAG: apply reached clearAssetTombstone (file read OK, threw at saveAsset)")
+        XCTAssertTrue(sawError, "a transient push failure surfaces .error (queue preserved)")
+        XCTAssertTrue(db.savedAssets.isEmpty, "a failing saveAsset pushes nothing")
+
+        // Recovery: the still-queued change retries and pushes once the save succeeds.
+        db.failSave = false
+        await pumpFlush(port) { !db.savedAssets.isEmpty }
+        XCTAssertEqual(db.savedAssets.count, 1, "the queued asset upsert retries and pushes after recovery (not dropped)")
+        XCTAssertEqual(db.savedAssets.first?.record.recordName,
+                       CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath))
+        let backToIdle = await pumpFlush(port) { port.status == .idle }
+        XCTAssertTrue(backToIdle, "after a clean retry the port settles back to .idle")
     }
 }
