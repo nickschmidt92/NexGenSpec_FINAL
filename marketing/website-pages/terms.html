@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service - NexGenSpec</title>
+  <meta name="description" content="NexGenSpec Terms of Service. The full Terms are also presented in-app during onboarding.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.nexgenspec.com/terms.html">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #e2e8f0; background: #0a0e1a; line-height: 1.6;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    img { max-width: 100%; height: auto; display: block; }
+    a { color: #3b82f6; text-decoration: none; transition: color 0.2s; }
+    a:hover { color: #60a5fa; }
+
+    /* Background */
+    .bg-glow { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+    .bg-glow::before, .bg-glow::after {
+      content: ''; position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.12;
+      animation: float 20s ease-in-out infinite;
+    }
+    .bg-glow::before { width: 500px; height: 500px; background: #3b82f6; top: -200px; left: -100px; }
+    .bg-glow::after { width: 400px; height: 400px; background: #06b6d4; bottom: -150px; right: -100px; animation-delay: -10s; animation-direction: reverse; }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(100px, -50px) scale(1.1); }
+      66% { transform: translate(-50px, 80px) scale(0.9); }
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* Header */
+    #header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10, 14, 26, 0.8); backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; height: 80px;
+    }
+    .logo-link {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: #fff;
+      font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em;
+    }
+    .logo-icon { width: 42px; height: 42px; transition: transform 0.3s; }
+    .logo-link:hover .logo-icon { transform: scale(1.05); }
+    .back-link {
+      font-weight: 500; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .back-link:hover { color: #fff; }
+
+    @media (max-width: 768px) {
+      .header-inner { height: 70px; }
+      .logo-icon { width: 36px; height: 36px; }
+      .logo-link { font-size: 1rem; }
+    }
+
+    /* Content */
+    .content {
+      max-width: 780px; margin: 0 auto; padding: 4rem 1.5rem 6rem;
+    }
+    .content h1 {
+      font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; color: #fff;
+      letter-spacing: -0.03em; margin-bottom: 0.5rem;
+    }
+    .effective-date {
+      font-size: 0.9rem; color: #64748b; margin-bottom: 3rem;
+      padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .content h3 {
+      font-size: 1.2rem; font-weight: 700; color: #f1f5f9;
+      margin-top: 2.5rem; margin-bottom: 1rem;
+      padding-left: 1rem; border-left: 3px solid #3b82f6;
+    }
+    .content p {
+      color: #94a3b8; line-height: 1.8; margin-bottom: 1rem; font-size: 0.95rem;
+    }
+    .content ul {
+      list-style: none; margin-bottom: 1rem; padding-left: 0;
+    }
+    .content ul li {
+      color: #94a3b8; line-height: 1.8; font-size: 0.95rem;
+      padding: 0.4rem 0 0.4rem 1.5rem; position: relative;
+    }
+    .content ul li::before {
+      content: ''; position: absolute; left: 0; top: 0.9rem;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    }
+    .content strong { color: #e2e8f0; }
+
+    .callout {
+      background: rgba(59, 130, 246, 0.08); border-left: 3px solid #3b82f6;
+      padding: 1.25rem 1.5rem; border-radius: 0.5rem; margin: 1.5rem 0;
+    }
+    .callout p { margin: 0; color: #cbd5e1; }
+
+    .contact-card {
+      margin-top: 2rem; padding: 1.5rem 2rem;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 1rem;
+    }
+    .contact-card strong { display: block; color: #f1f5f9; font-size: 1rem; margin-bottom: 0.5rem; }
+    .contact-card a { color: #3b82f6; }
+
+    /* Footer */
+    #footer {
+      background: rgba(3,7,18,0.8); color: #64748b; padding: 1.5rem 0;
+      border-top: 1px solid rgba(255,255,255,0.04); font-size: 0.8rem;
+    }
+    .footer-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 600; color: #94a3b8; font-size: 0.9rem;
+    }
+    .footer-logo-icon { width: 28px; height: 28px; }
+    .footer-copy { font-size: 0.78rem; color: #64748b; }
+    @media (max-width: 600px) {
+      .footer-inner { justify-content: center; text-align: center; }
+    }
+
+    @media print {
+      #header, .bg-glow { display: none; }
+      body { color: #000; background: #fff; }
+      .content h1, .content h3 { color: #000; }
+      .content p, .content ul li { color: #333; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header id="header">
+    <div class="header-inner">
+      <a href="/" class="logo-link" aria-label="NexGenSpec Home">
+        <picture>
+          <source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x">
+          <img src="icon-hex.png?v=3" alt="NexGenSpec" class="logo-icon" width="42" height="42" decoding="async">
+        </picture>
+        NexGenSpec
+      </a>
+      <a href="/" class="back-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to Home
+      </a>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>Terms of Service</h1>
+    <p class="effective-date">Effective Date: July 9, 2026</p>
+
+    <div class="callout">
+      <p><strong>The complete Terms of Service is also presented inside the NexGenSpec iOS app</strong> during onboarding and again under <em>Settings → Terms &amp; Privacy</em>. Acceptance is recorded with a timestamp on first use.</p>
+    </div>
+
+    <h3>1. About NexGenSpec</h3>
+    <p>NexGenSpec is a professional home inspection app for licensed property inspectors, available on the Apple App Store for iPhone and iPad. The app is provided by NexGenSpec ("we", "us", "the developer") to inspectors ("you", "the user") who have downloaded the app and accepted these Terms.</p>
+
+    <h3>2. Account &amp; Subscription</h3>
+    <ul>
+      <li>An account is required to protect inspection data (client personal information, property photos, defect findings).</li>
+      <li>The app is free to download. Free users may create up to 3 complete inspections with full PDF export; free-tier reports carry a small NexGenSpec watermark. After 3 inspections, a Pro subscription is required to create additional inspections.</li>
+      <li>Pro subscription: <strong>$49/month or $449/year</strong>. Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in iOS Settings → Apple ID → Subscriptions.</li>
+      <li>Payment is processed by Apple. NexGenSpec does not collect payment information directly.</li>
+      <li><strong>Communications.</strong> NexGenSpec may email you in connection with your account (e.g. authentication, password resets, subscription receipts, important service or security notices) and, from time to time, regarding new features, updates, deals, or upgrade offers. You may opt out of marketing emails at any time by emailing <a href="mailto:contact@nexgenspec.com?subject=unsubscribe">contact@nexgenspec.com</a> with the word "unsubscribe" in the subject line. Transactional and account-related emails will continue regardless of marketing preferences.</li>
+    </ul>
+
+    <h3>3. Inspector Responsibility</h3>
+    <p>NexGenSpec is a tool for documenting inspections. The accuracy and completeness of every inspection report is the responsibility of the licensed inspector who creates it. The developer is not responsible for inspection findings, omissions, or any decisions made by the inspector or their clients based on app-generated reports.</p>
+    <p><strong>Professional licensing &amp; insurance.</strong> The inspector is solely responsible for maintaining all professional licenses and certifications required by their state, province, or licensing board, and for the type and amount of insurance coverage required to perform inspections legally and responsibly &mdash; including, where applicable, Errors &amp; Omissions (E&amp;O) coverage and general liability insurance. As recommended by most home-inspector licensing bodies, NexGenSpec strongly encourages inspectors to maintain professional E&amp;O and general liability coverage at all times. Coverage decisions are entirely at the inspector's discretion and responsibility; NexGenSpec does not provide, recommend specific carriers for, or assume responsibility for any insurance arrangements.</p>
+
+    <h3>4. Invoice &amp; Payment Collection</h3>
+    <p>NexGenSpec includes invoice formatting and email-delivery features as a convenience. <strong>NexGenSpec does not process payments.</strong> Any payment between the inspector and their client is collected directly by the inspector (check, card, Zelle, cash, or other method) outside the app. The "Mark Invoice as Paid" toggle inside the app is a record-keeping aid only.</p>
+
+    <h3>5. Data &amp; Privacy</h3>
+    <p>Inspection data, including photos, defect findings, client information, and signatures, is stored on your device using iOS Data Protection. With iCloud Sync on (the default), your inspections &mdash; the inspection record, report PDFs, thumbnails, and LiDAR floor plans &mdash; also sync across the Apple devices signed in to your iCloud account, through your <strong>private</strong> iCloud (Apple CloudKit): only to your iCloud, never to a NexGenSpec server. Beyond that, the only data sent off-device is (a) authentication tokens for sign-in, (b) anonymized crash reports, and (c) if you use weather logging, your approximate location sent to Open-Meteo (a third-party weather API) to retrieve the inspection-day weather conditions stamped onto your report. Full-resolution photos, videos, and 3D scan files stay on the device where they were captured unless you choose to export or email them. See our <a href="privacy.html">Privacy Policy</a> for full details.</p>
+
+    <h3>6. Acceptable Use</h3>
+    <ul>
+      <li>You agree to use the app for lawful, professional inspection purposes only.</li>
+      <li>You will not attempt to reverse-engineer, decompile, or extract source code from the app.</li>
+      <li>You will not use the app to harass, defame, or harm any third party.</li>
+      <li>You are responsible for maintaining the confidentiality of your account credentials.</li>
+    </ul>
+
+    <h3>7. Termination &amp; Account Deletion</h3>
+    <p>You may sign out at any time from inside the app (Settings → Log Out). Signing out preserves all locally stored inspections on the device; signing back in restores access.</p>
+    <p>You may delete your account at any time from inside the app (Settings → Delete Account). <strong>Account deletion is permanent and cannot be undone.</strong> When you delete your account:</p>
+    <ul>
+      <li>Your authentication record is removed from Firebase Authentication.</li>
+      <li>All locally stored inspections, photos, signatures, audit logs, and PDF reports on the device are erased.</li>
+      <li>The app generates a deletion-receipt PDF (a timestamped record of the deletion) that you can share via the iOS share sheet (email, Files app, AirDrop, Messages, etc.). A copy is also saved on the device at <em>Files → On My iPad → NexGenSpecReceipts</em>. NexGenSpec does not automatically email this receipt and does not retain a server-side copy.</li>
+      <li>NexGenSpec retains no copy of your inspection data and cannot recover it after deletion.</li>
+    </ul>
+    <p>We may suspend or terminate accounts that violate these Terms.</p>
+
+    <h3>8. Data Retention &amp; Backup Responsibility</h3>
+    <div class="callout">
+      <p><strong>Important &mdash; please read carefully.</strong> NexGenSpec does not maintain server-side copies of any inspection content (photos, videos, signatures, PDFs, defect findings, or client information). Your inspection data lives on your devices and, with iCloud Sync on (the default), in your own private iCloud &mdash; never on a NexGenSpec server. <strong>Sync is not a backup:</strong> deletions propagate across your devices.</p>
+    </div>
+    <p>With iCloud Sync on, your inspection records, report PDFs, thumbnails, and LiDAR floor plans are replicated to your other signed-in Apple devices through your private iCloud &mdash; but <strong>full-resolution photos, videos, and 3D scan files exist only on the device that captured them</strong>, and sync is not a backup. <strong>Data &mdash; including all full-resolution media &mdash; can be permanently and irrecoverably lost in the following events:</strong></p>
+    <ul>
+      <li>You uninstall the app from the device's home screen.</li>
+      <li>You tap "Delete Account" inside the app.</li>
+      <li>The device is factory-reset, restored from blank, or sold/given to a new owner without an iCloud Backup having been created.</li>
+      <li>The device experiences hardware failure, is lost, or is stolen, without an iCloud Backup having been created.</li>
+      <li>A bug in the app or in iOS results in data corruption (rare, but possible).</li>
+    </ul>
+    <p><strong>NexGenSpec cannot recover lost inspection data under any circumstance, for any user, for any reason.</strong></p>
+    <p><strong>Inspector backup obligations.</strong> Inspectors are strongly advised to:</p>
+    <ul>
+      <li>Enable iCloud Backup on the device used for NexGenSpec (iOS Settings → [your name] → iCloud → iCloud Backup → On).</li>
+      <li>Export every finalized inspection to a long-term backup location (iCloud Drive, an external drive, a NAS, or another system) immediately after finalization. NexGenSpec provides a one-tap export to the Files app for this purpose.</li>
+      <li>Retain encrypted copies for the duration of any applicable retention obligations. The industry-standard window is five (5) years; consult your professional liability insurance carrier and licensing board for the specific obligations that apply in your jurisdiction.</li>
+      <li>Manage device storage proactively. iPad storage is finite; large inspections (many photos, video, LiDAR scans) accumulate. The inspector is solely responsible for managing the device's available storage and for archiving older inspections to long-term backup before storage runs out.</li>
+    </ul>
+    <p><strong>Multi-device note.</strong> With iCloud Sync on (the default), your inspections sync across your own devices through your private iCloud account; NexGenSpec never receives or stores them and cannot access them. With Local-Only mode on, inspections stay on the device they were created on. You are responsible for the client information and e-signatures contained in your inspections, including as they replicate into your iCloud. Use the export-to-Files feature to move complete inspection packages (including full-resolution media) between devices intentionally.</p>
+    <p><strong>Email delivery and retention.</strong> When the inspector emails a PDF report to a client, agent, or any other recipient, the report is transmitted by the inspector's email provider and received by the recipient's email provider. <strong>Once the email leaves the device, retention of the delivered copy is governed entirely by the sending and receiving email providers and the recipient's own storage choices &mdash; not by NexGenSpec.</strong> Inspectors should not rely on a sent email as the sole long-term archive of an inspection. Always retain a separate backup copy.</p>
+
+    <h3>9. Disclaimer of Warranties</h3>
+    <p>The app is provided "as is" and "as available" without warranties of any kind, express or implied, including but not limited to merchantability, fitness for a particular purpose, non-infringement, or uninterrupted operation. We don't guarantee NexGenSpec will be uninterrupted, error-free, free of viruses or other harmful components, or compatible with every iOS version or device.</p>
+
+    <h3>10. Limitation of Liability</h3>
+    <p>NexGenSpec is software. Our liability is limited to the operation of that software &mdash; specifically: app availability, app bugs that cause data loss inside the app, and similar app-level issues.</p>
+    <p><strong>Maximum remedy.</strong> To the maximum extent permitted by law, our total liability to you for any claim arising out of or relating to your use of NexGenSpec is limited to a refund of the subscription fee you paid for the calendar month in which the issue occurred, contingent on (a) you reporting the issue to NexGenSpec in writing within that same calendar month, and (b) you providing reasonable supporting documentation evidencing the issue. No other remedy is available.</p>
+    <p><strong>What NexGenSpec does not cover:</strong></p>
+    <ul>
+      <li>The accuracy, completeness, or quality of any inspection report you create. Those are the licensed inspector's professional work product and professional liability.</li>
+      <li>Defects, damages, or losses at a property &mdash; whether identified, missed, or misclassified during an inspection.</li>
+      <li>Decisions made by buyers, sellers, agents, lenders, or any other party based on a NexGenSpec-generated report.</li>
+      <li>Third-party services the app integrates with (Apple's iOS, Open-Meteo, Apple's StoreKit, Firebase, your email provider, Apple Pay, etc.). Each is governed by its own terms. Weather data provided by Open-Meteo.com (https://open-meteo.com/).</li>
+      <li>Any payment dispute between an inspector and a client. NexGenSpec does not process payments.</li>
+      <li>Loss of inspection data caused by any of the events listed in Section 8 (uninstall, account deletion, factory reset without backup, hardware failure without backup, OS or app bugs). NexGenSpec does not maintain server-side copies and cannot recover it.</li>
+      <li>Retention of email-delivered reports once the email has left the inspector's device.</li>
+      <li>Indirect, consequential, incidental, special, or punitive damages, including lost revenue, lost profits, lost business opportunities, loss of goodwill, professional reputation harm, or claims by clients of the inspector.</li>
+    </ul>
+    <p><strong>Outage refund.</strong> If NexGenSpec experiences an extended outage caused by NexGenSpec (and not by Apple, Firebase, your network, your device, or other services outside our control), our maximum responsibility is a pro-rated refund of subscription fees for the duration of the outage. Outages must be reported in writing within the calendar month they occur to qualify.</p>
+
+    <h3>11. Changes to These Terms</h3>
+    <p>We may update these Terms from time to time. Material changes will be communicated through the app and require fresh acceptance before continued use.</p>
+
+    <h3>12. Governing Law &amp; Venue</h3>
+    <p>These Terms are governed by the laws of the State of Colorado, USA, without regard to its conflict-of-laws principles. You and NexGenSpec agree that any dispute arising out of or relating to these Terms or the app shall be brought exclusively in the state or federal courts located in Denver, Colorado, and you consent to personal jurisdiction in those courts.</p>
+    <p><strong>Canadian users:</strong> If you are a resident of Canada, the foregoing does not deprive you of any non-waivable consumer-protection rights granted by your province or territory of residence. Where such rights apply, they remain in effect notwithstanding the choice of Colorado law.</p>
+    <p>You and NexGenSpec agree that any dispute will be resolved on an individual basis only. Class actions, class arbitrations, and consolidated proceedings are not permitted.</p>
+
+    <h3>13. Contact</h3>
+    <p>Questions about these Terms? Reach us at:</p>
+    <div class="contact-card">
+      <strong>NexGenSpec</strong>
+      <p>Email: <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a></p>
+    </div>
+  </main>
+
+  <footer id="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <picture>
+          <source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x">
+          <img src="icon-hex.png?v=3" alt="NexGenSpec" class="footer-logo-icon" loading="lazy" decoding="async" width="28" height="28">
+        </picture>
+        NexGenSpec
+      </div>
+      <p class="footer-copy">&copy; 2026 NexGenSpec. All rights reserved.</p>
+    </div>
+  </footer>
+
+</body>
+</html>

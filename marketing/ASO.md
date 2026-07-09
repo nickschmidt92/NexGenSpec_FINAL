@@ -76,10 +76,10 @@ Built for working inspectors:
   Inspector and client sign on the iPad. Signed inspections lock automatically, with a full audit trail for legal compliance.
 
 • ENCRYPTED BACKUPS
-  Admins can create passphrase-encrypted backups of every inspection, ready to restore on a new iPad.
+  Create passphrase-encrypted backups of every inspection, ready to restore on a new device.
 
-• PRIVACY-FIRST
-  Your inspection data lives on your device. Calendar access is optional. No photos, notes, or reports leave your iPad unless you explicitly export them.
+• PRIVATE BY DESIGN
+  Your inspections — records, reports, and floor plans — sync across your own Apple devices through your private iCloud account: only to your iCloud, never to a NexGenSpec server. Full-resolution photos stay on the device that captured them. Prefer one device? Turn on Local-Only mode. Calendar access is optional.
 
 WHO IT'S FOR
 
@@ -88,12 +88,12 @@ Home inspectors, property managers, contractors documenting jobs, and real-estat
 REQUIREMENTS
 
 • iPad running iPadOS 17 or later
-• iPhone compatible (report creation is iPad-optimized but syncing in and viewing reports works on iPhone)
+• iPhone compatible — report creation is iPad-optimized, and your inspections sync to iPhone through your private iCloud for viewing
 • LiDAR scanning requires iPad Pro with LiDAR sensor (iPad Pro 2020 and newer)
 
 SUBSCRIPTION
 
-Create up to 3 inspections free. NexGenSpec Pro unlocks unlimited inspections, LiDAR scanning, PDF export, photo annotations, and encrypted backups. Monthly or annual billing via your Apple ID. Cancel anytime in Settings > Subscriptions.
+Create up to 3 inspections free with every feature included; free-tier reports carry a small NexGenSpec watermark. NexGenSpec Pro unlocks unlimited inspections and clean, watermark-free reports. Monthly or annual billing via your Apple ID. Cancel anytime in Settings > Subscriptions.
 
 TERMS
 
