@@ -156,12 +156,24 @@ final class NexGenSpecAutosaveUITests: XCTestCase {
     /// It never weakens the test: the marker is still typed into the real editor.
     private func focusAndType(_ element: XCUIElement, text: String,
                               in app: XCUIApplication, phase: String) {
+        // Bring the editor into view first: on iPhone-height sheets the Observed
+        // section sits below the sheet's fold, and an off-screen element is NEVER
+        // hittable (XCUITest does not auto-scroll on tap) — observed as a clean
+        // 10s timeout here on the iPhone 17 Pro simulator. Bounded swipe-up until
+        // it is interactive; a harmless no-op when already visible (iPad).
+        var scrolls = 0
+        while !(element.isEnabled && element.isHittable) && scrolls < 6 {
+            app.swipeUp()
+            scrolls += 1
+            _ = waitUntil(1) { element.isEnabled && element.isHittable }
+        }
+
         // Don't touch the editor until the sheet has settled enough that the
         // element is actually interactive — this is the race the bare
         // tap+typeText lost.
         XCTAssertTrue(
             waitUntil(10) { element.isEnabled && element.isHittable },
-            "[\(phase)] observed editor never became enabled + hittable — cannot focus it"
+            "[\(phase)] observed editor never became enabled + hittable after \(scrolls) scroll(s) — cannot focus it"
         )
 
         // Acquire keyboard focus, RE-TAPPING up to a bounded number of times.
