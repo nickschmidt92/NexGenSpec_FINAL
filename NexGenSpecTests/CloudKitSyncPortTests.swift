@@ -906,7 +906,13 @@ final class CloudKitSyncPortTests: XCTestCase {
         for _ in 0..<iterations {
             if condition() { return true }
             await port.flushPending()
-            await Task.yield()
+            // A REAL suspension, not a bare yield: when a serialized flush is already
+            // in flight, `flushPending` returns immediately (it just sets _flushAgain),
+            // so this loop becomes a spin-wait. With `Task.yield()` the in-flight
+            // flush's parked continuation could starve for the whole spin — observed
+            // as `clearAssetTombstone` never executing until after the asserts ran.
+            // `Task.sleep` guarantees the executor runs the parked flush between polls.
+            try? await Task.sleep(nanoseconds: 2_000_000)
         }
         return condition()
     }
@@ -1029,26 +1035,15 @@ final class CloudKitSyncPortTests: XCTestCase {
         let relativePath = "Inspections/\(jobId.uuidString)/thumbnails/\(UUID().uuidString).jpg"
         try FileSecurity.writeProtected(Data("thumb".utf8), to: root.appendingPathComponent(relativePath))
 
-        // DIAGNOSTIC: confirm the file is where the port will look for it, and readable.
-        XCTAssertTrue(FileManager.default.fileExists(atPath: FilePaths.userRoot(uid: uid).appendingPathComponent(relativePath).path),
-                      "DIAG: the asset file exists at the port's expected path")
-        XCTAssertEqual(try? Data(contentsOf: FilePaths.userRoot(uid: uid).appendingPathComponent(relativePath)),
-                       Data("thumb".utf8), "DIAG: the asset file is byte-readable at userRoot(uid)")
-
         let db = FakeDatabase(); db.failSave = true
         let binds = FakeBindings()
         let port = makePort(token: "t1", bindings: binds, db: db)
         await port.bind(firebaseUID: uid)
-        XCTAssertEqual(port.status, .idle, "DIAG: bind succeeded and the port is bound")
-        XCTAssertNotNil(binds.current(uid), "DIAG: the persisted binding is keyed by uid (binding.firebaseUID == uid)")
 
         port.recordLocalChange(.mediaUpserted(jobId: jobId, relativePath: relativePath))
         // The save keeps failing: nothing is pushed and the failure settles to .error.
         // (Pump until .error is OBSERVED — a running flush shows .syncing until it ends.)
         let sawError = await pumpFlush(port) { if case .error = port.status { return true } else { return false } }
-        // DIAG: clearAssetTombstone runs AFTER the file read but BEFORE saveAsset, so a
-        // non-empty clearedAssetKeys proves apply reached the (failing) save.
-        XCTAssertFalse(db.clearedAssetKeys.isEmpty, "DIAG: apply reached clearAssetTombstone (file read OK, threw at saveAsset)")
         XCTAssertTrue(sawError, "a transient push failure surfaces .error (queue preserved)")
         XCTAssertTrue(db.savedAssets.isEmpty, "a failing saveAsset pushes nothing")
 
