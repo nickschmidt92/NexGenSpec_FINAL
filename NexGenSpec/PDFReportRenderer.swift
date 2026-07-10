@@ -81,15 +81,16 @@ public enum PDFReportRenderer {
         // body.wm (HTMLReportRenderer) plus the flow-element upgrade banner. Both
         // survive WKWebView.pdf() pagination, so no post-processing is needed here.
         // (Build 15's position:absolute overlay was what WKWebView dropped — B-0067.)
-        return try await generatePDF(fromHTMLFile: indexURL, baseURL: reportDir, clientName: version.inspection.clientName)
+        return try await generatePDF(fromHTMLFile: indexURL, baseURL: reportDir, outputBaseName: ExportNaming.baseStem(for: version.inspection))
     }
 
     /// Low-level: render an existing HTML file (with sibling asset folder) to a PDF.
     /// Paginates via UIPrintPageRenderer + the web view's print formatter — real
     /// multi-page US-Letter output, rendered page-by-page to bound peak memory.
-    /// `clientName` is used for the output filename; pass nil to fall back to a UUID-based name.
+    /// `outputBaseName` is the output file stem (already sanitized by the caller,
+    /// e.g. `ExportNaming.baseStem`); pass nil to fall back to a date-based name.
     @MainActor
-    public static func generatePDF(fromHTMLFile htmlFileURL: URL, baseURL: URL, clientName: String? = nil) async throws -> URL {
+    public static func generatePDF(fromHTMLFile htmlFileURL: URL, baseURL: URL, outputBaseName: String? = nil) async throws -> URL {
         // Pre-flight: refuse to spin up WebKit only if memory is genuinely
         // starved. The renderer paginates page-by-page (see below), so peak
         // memory is already bounded — a high threshold (was 120 MB) needlessly
@@ -177,16 +178,17 @@ public enum PDFReportRenderer {
             throw PDFRenderError.pdfCreationFailed(error)
         }
 
-        let sanitizedClient = Self.sanitizeFilenameComponent(clientName ?? "")
-        let dateStamp = Self.filenameDateFormatter.string(from: Date())
         let filenameStem: String
-        if sanitizedClient.isEmpty {
-            filenameStem = "InspectionReport_\(dateStamp)"
+        if let outputBaseName, !outputBaseName.isEmpty {
+            filenameStem = outputBaseName
         } else {
-            filenameStem = "InspectionReport_\(sanitizedClient)_\(dateStamp)"
+            filenameStem = "InspectionReport_\(Self.filenameDateFormatter.string(from: Date()))"
         }
-        let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(filenameStem).pdf")
+        // Land the shared PDF in a fresh, reap-tagged temp dir (ngs-export-*) so it
+        // carries the clean stem AND is swept by the temp / account-deletion wipes.
+        // `try?` keeps a share working even if the tagged dir can't be created.
+        let shareDir = (try? ExportNaming.freshShareDirectory()) ?? FileManager.default.temporaryDirectory
+        let outURL = shareDir.appendingPathComponent("\(filenameStem).pdf")
         do {
             try FileSecurity.writeProtected(pdfData, to: outURL)
         } catch {
@@ -204,18 +206,6 @@ public enum PDFReportRenderer {
         fmt.locale = Locale(identifier: "en_US_POSIX")
         return fmt
     }()
-
-    /// Replaces spaces and non-alphanumeric characters with underscores, then collapses runs.
-    private static func sanitizeFilenameComponent(_ raw: String) -> String {
-        let allowed = CharacterSet.alphanumerics
-        let cleaned = raw.unicodeScalars
-            .map { allowed.contains($0) ? String($0) : "_" }
-            .joined()
-        // Collapse consecutive underscores and trim leading/trailing underscores
-        return cleaned
-            .replacingOccurrences(of: "_+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-    }
 
     // MARK: - Memory
 

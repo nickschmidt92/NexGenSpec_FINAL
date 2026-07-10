@@ -96,7 +96,7 @@ public final class ReportExportService: ObservableObject {
                 pdfURL = try await PDFReportRenderer.generatePDF(
                     fromHTMLFile: htmlResult.htmlURL,
                     baseURL: htmlResult.reportDir,
-                    clientName: versionCopy.inspection.clientName
+                    outputBaseName: ExportNaming.baseStem(for: versionCopy.inspection)
                 )
             } catch {
                 Diagnostics.logError(context: "PDF generation failed; returning HTML-only export", error: error)
@@ -172,9 +172,11 @@ public final class ReportExportService: ObservableObject {
 
     /// Every temp-directory prefix under which a report/PDF/ZIP staging artifact
     /// (all carrying client PII) is written: `report-*` (ReportExportService),
-    /// `pdf-*` + `InspectionReport_*.pdf` (PDFReportRenderer), `zip-staging-*`
-    /// (InspectionZIPExportService), `InspectionReport-*.txt` (Overview share).
-    nonisolated static let tempExportPrefixes = ["report-", "pdf-", "zip-staging-", "InspectionReport-", "InspectionReport_"]
+    /// `pdf-*` (PDFReportRenderer), `zip-staging-*` (InspectionZIPExportService),
+    /// and the reap-tagged `ngs-export-*` share dirs (ExportNaming.freshShareDirectory:
+    /// shared PDFs + text summaries). Legacy `InspectionReport-*` / `InspectionReport_*`
+    /// names are kept so artifacts written before the export-naming change are still swept.
+    nonisolated static let tempExportPrefixes = ["report-", "pdf-", "zip-staging-", "ngs-export-", "InspectionReport-", "InspectionReport_"]
 
     /// Removes ALL temp-directory report/PDF/ZIP staging artifacts regardless of
     /// age. Called from the Account-Deletion wipe (`InspectionStore.wipeAppRoot`):

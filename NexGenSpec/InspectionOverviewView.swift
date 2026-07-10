@@ -1520,7 +1520,8 @@ enum ReportExporter {
             report += "\n"
         }
         do {
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("InspectionReport-\(UUID().uuidString).txt")
+            let dir = (try? ExportNaming.freshShareDirectory()) ?? FileManager.default.temporaryDirectory
+            let url = dir.appendingPathComponent("\(ExportNaming.baseStem(for: inspection))_Summary.txt")
             if let data = report.data(using: .utf8) {
                 try FileSecurity.writeProtected(data, to: url)
             }
