@@ -56,6 +56,24 @@ and ready for sandbox purchase.
 
 ---
 
+## Marquee Features — where to find them
+
+**LiDAR room capture.** Requires a LiDAR-equipped device (iPad Pro or a Pro
+iPhone). The "Scan Room (LiDAR)" control is intentionally HIDDEN on
+non-LiDAR devices and on Mac. On a supported device: open an inspection →
+tap into a section → the "Scan Room (LiDAR)" button is at the bottom of that
+section's item list. A scan generates a top-down floor plan (spatial
+reference, not a measured architectural drawing) that renders in the report;
+scanning two or more rooms produces a merged whole-home floor plan.
+
+**AI photo tagging (labeled "AI defect detection").** On-device photo
+analysis that SUGGESTS tags as you add photos to an item (shown below the
+Photos section). It is best-effort and on-device — for some images it may
+suggest nothing, which is expected, not a bug. Accepted suggestions carry
+through to the report; the inspector always writes the actual findings.
+
+---
+
 ## Notes on Implementation Choices
 
 A few design decisions that reviewers occasionally flag — pre-clarifying

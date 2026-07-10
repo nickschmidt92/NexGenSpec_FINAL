@@ -1,4 +1,4 @@
-# NexGenSpec — App Store Listing Copy (build 1.0.0(26))
+# NexGenSpec — App Store Listing Copy (1.0.0, build 32 — canonical ASC source)
 
 Final, verified listing fields for the App Store submission. Source of truth for copy.
 Status + remaining ASC steps live in NickOS **T-01582**. Monetization model: `~/.claude/projects/-Users-nicholasschmidt/memory/nexgenspec-monetization-model.md`. Review notes: `AppStore/REVIEW_NOTES.md`.
