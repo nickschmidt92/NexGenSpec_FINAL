@@ -3,6 +3,14 @@
   Last updated: 2026-06-25 (1.0.0 build 26, App Store submission)
 ═══════════════════════════════════════════════════════════════
 
+  ⛔ SUPERSEDED — DO NOT PASTE ANY ASC FIELD FROM THIS FILE.
+  This file is stale (build 26). The CANONICAL source for every App
+  Store Connect field — name, subtitle, description, keywords, promo
+  text, privacy label, URLs — is AppStore/LISTING.md. This file is
+  kept only for historical diff reference. URLs below corrected to
+  .html so a stray paste can't 404, but still: use LISTING.md.
+═══════════════════════════════════════════════════════════════
+
 CATEGORY:          Business (Primary) / Utilities (Secondary)
 AGE RATING:        4+
 BUNDLE ID:         com.nexgenspec.app
@@ -67,8 +75,8 @@ Pro: $49/month or $449/year
 
 Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings > Apple ID > Subscriptions.
 
-Privacy Policy: https://nexgenspec.com/privacy
-Terms of Use: https://nexgenspec.com/terms
+Privacy Policy: https://nexgenspec.com/privacy.html
+Terms of Use: https://nexgenspec.com/terms.html
 
 ───────────────────────────────────────────────────────────────
 WHAT'S NEW (for version 1.0.0)

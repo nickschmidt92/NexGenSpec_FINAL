@@ -20,7 +20,7 @@ https://nexgenspec.com
 ## Copyright
 2026 NexGenSpec
 
-## Description (3,986 chars — verified accurate; includes legal footer)
+## Description (3,965 chars — VERIFIED; paste lines 24–54 ONLY, ending at the PLATFORM paragraph. ASC hard cap = 4,000. The Terms/Privacy URLs are NOT part of the Description — they go in ASC's own fields, see "## Store URLs" below.)
 Professional inspection reports for home AND commercial property, built on iPhone, iPad, and Apple Silicon Mac. NexGenSpec lets residential and building inspectors capture a job, document every defect with photos, and hand the client a signed, polished PDF before leaving the site. One workflow for single-family homes, multi-unit buildings, and commercial assets.
 
 Start from a built-in inspection template or build your own. Walk the property, snap photos, mark up findings, tag defects by severity, and finalize a tamper-evident report your clients and their agents can trust.
@@ -53,8 +53,13 @@ Run 3 full inspections free with watermarked reports. Upgrade to Pro for unlimit
 PLATFORM
 Universal app for iPhone and iPad, and runs on Apple Silicon Mac. Apple Pencil supported for annotation on iPad. LiDAR scanning requires a compatible device. Photo and video capture need a device camera (on Mac, import from your photo library); current-location address auto-fill is available on iPhone and iPad.
 
-Terms of Use: https://nexgenspec.com/terms.html
-Privacy Policy: https://nexgenspec.com/privacy.html
+<!-- ↑ Description ENDS here (3,965 chars). Do NOT paste anything below into the ASC Description field. -->
+
+## Store URLs (paste into ASC's DEDICATED fields, NOT the Description)
+- **Privacy Policy URL** (ASC App Privacy page): https://nexgenspec.com/privacy.html
+- **EULA / Terms of Use** (ASC App Information → License Agreement, or leave Apple's standard EULA and link in Support): https://nexgenspec.com/terms.html
+- **Support URL**: https://nexgenspec.com
+- Use `.html` URLs — the bare `/privacy` and `/terms` routes 404.
 
 ## App Privacy (collect = YES; Tracking = NO)
 - Contact Info > Email Address — Linked, App Functionality
