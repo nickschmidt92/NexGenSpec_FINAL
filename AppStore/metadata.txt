@@ -59,12 +59,9 @@ BUILT FOR SECURITY
 - Delete account permanently removes all data
 
 SUBSCRIPTION
-NexGenSpec is free to download with 3 full-featured inspections. Upgrade to Pro for:
+NexGenSpec is free to download with 3 full-featured inspections (reports watermarked). Upgrade to Pro for:
 - Unlimited inspections
-- PDF reports with your company logo
-- LiDAR room scanning
-- Annotation pack
-- Invoicing & client delivery
+- Watermark-free PDF reports with your company logo
 
 Pro: $49/month or $449/year
 
@@ -88,7 +85,7 @@ After an extended TestFlight beta with active home inspectors, we're shipping th
 • Invoice & Send — branded invoice email with the PDF attached, optional CC to buyer's or listing agent.
 • Signed and locked — finalized reports include a Report ID and lock all defects, photos, and signatures from further edits.
 
-Free to try with 3 full inspections. Pro unlocks unlimited inspections, branded reports, LiDAR scanning, and the annotation pack.
+Free to try with 3 full inspections. Pro unlocks unlimited inspections and watermark-free, branded reports.
 
 Built by a licensed home inspector in Denver, Colorado.
 

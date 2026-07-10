@@ -163,6 +163,17 @@ enum FloorplanRenderer {
         var end: CGPoint
     }
 
+    /// Axis-aligned XZ bounding box of the room's wall segments, in the same
+    /// plane renderPNG draws. Nil when the room has no walls. Used by the
+    /// whole-home coherence gate to detect misregistered (overlapping) rooms.
+    static func wallFootprint(of room: CapturedRoom) -> CGRect? {
+        let pts = room.walls.map(lineSegment(from:)).flatMap { [$0.start, $0.end] }
+        guard let minX = pts.map(\.x).min(), let maxX = pts.map(\.x).max(),
+              let minY = pts.map(\.y).min(), let maxY = pts.map(\.y).max()
+        else { return nil }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
     /// Extract the two wall endpoints on the XZ plane from a Surface.
     private static func lineSegment(from surface: CapturedRoom.Surface) -> Segment {
         let m = surface.transform

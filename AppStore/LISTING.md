@@ -48,7 +48,7 @@ KEY FEATURES
 - Sign in with Apple or email, with a recovery email, secure account management, and account deletion with a receipt.
 
 START FREE
-Run 3 full inspections free, every feature included, with watermarked reports. Upgrade to Pro for unlimited inspections and clean, watermark-free reports. No credit card required to start.
+Run 3 full inspections free with watermarked reports. Upgrade to Pro for unlimited inspections and clean, watermark-free reports. No credit card required to start.
 
 PLATFORM
 Universal app for iPhone and iPad, and runs on Apple Silicon Mac. Apple Pencil supported for annotation on iPad. LiDAR scanning requires a compatible device. Photo and video capture need a device camera (on Mac, import from your photo library); current-location address auto-fill is available on iPhone and iPad.
