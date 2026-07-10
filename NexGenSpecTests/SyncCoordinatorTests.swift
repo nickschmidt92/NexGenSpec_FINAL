@@ -117,6 +117,66 @@ final class SyncCoordinatorTests: XCTestCase {
         XCTAssertEqual(fake.pulls, 0, "Flag OFF ⇒ pullNow never reaches a cloud port (Noop no-op).")
     }
 
+    // MARK: - Foreground live-pull poll (build 32)
+
+    func testForegroundPollingPullsWhileActiveThenStops() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(
+            isEnabled: { true }, account: StubAccount(token: "tok"),
+            makeCloudPort: { fake }, foregroundPollInterval: .milliseconds(20)
+        )
+        coord.userDidChange(uid: "u")   // bind cloud port synchronously
+
+        coord.startForegroundPolling()
+        try? await Task.sleep(nanoseconds: 150_000_000)   // ~7 intervals
+        coord.stopForegroundPolling()
+        let afterStop = fake.pulls
+        XCTAssertGreaterThan(afterStop, 1, "Polling repeatedly pulls while active.")
+
+        // No further pulls after stop.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(fake.pulls, afterStop, "stop() halts the poll — no pulls after stop.")
+    }
+
+    func testStartForegroundPollingIsIdempotent() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(
+            isEnabled: { true }, account: StubAccount(token: "tok"),
+            makeCloudPort: { fake }, foregroundPollInterval: .milliseconds(20)
+        )
+        coord.userDidChange(uid: "u")
+
+        coord.startForegroundPolling()
+        coord.startForegroundPolling()   // must NOT spawn a second poll task
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        coord.stopForegroundPolling()
+        let afterStop = fake.pulls
+
+        // A single stop() must fully halt polling; if a second task had leaked,
+        // pulls would keep climbing here.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(fake.pulls, afterStop, "A second start must not leak a task — stop fully halts.")
+    }
+
+    func testPullAndRefreshForwardsToActivePort() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(isEnabled: { true }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
+        coord.userDidChange(uid: "u")
+
+        await coord.pullAndRefresh()   // pull-to-refresh path
+        XCTAssertGreaterThanOrEqual(fake.pulls, 1, "pull-to-refresh forwards a real pull to the active port.")
+        XCTAssertGreaterThanOrEqual(fake.flushCount, 1, "pull-to-refresh also flushes pending outbound changes.")
+    }
+
+    func testPullAndRefreshIsInertWhenDisabled() async {
+        let fake = FakePort()
+        let coord = SyncCoordinator(isEnabled: { false }, account: StubAccount(token: "tok"), makeCloudPort: { fake })
+        coord.userDidChange(uid: "u")   // stays Noop
+
+        await coord.pullAndRefresh()
+        XCTAssertEqual(fake.pulls, 0, "Flag OFF ⇒ pull-to-refresh is a Noop pull.")
+    }
+
     // MARK: - .CKAccountChanged identity gate (NEW-1)
 
     func testSameAccountChangeKeepsPortButSwitchRebuilds() async {

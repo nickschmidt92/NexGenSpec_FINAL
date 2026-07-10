@@ -50,14 +50,20 @@ final class SyncCoordinator: ObservableObject {
     /// `buildCloudPort()` once `store` is wired.
     private let makeCloudPortOverride: (() -> SyncPort)?
 
+    /// Interval for the foreground live-pull poll (build 32). Injected so tests
+    /// can drive it fast; production default is 20 s.
+    private let foregroundPollInterval: Duration
+
     init(
         isEnabled: @escaping () -> Bool = { SyncFeature.effectiveSyncAllowed },
         account: CloudAccountProviding = CKAccountProvider(),
-        makeCloudPort: (() -> SyncPort)? = nil
+        makeCloudPort: (() -> SyncPort)? = nil,
+        foregroundPollInterval: Duration = .seconds(20)
     ) {
         self.isEnabled = isEnabled
         self.account = account
         self.makeCloudPortOverride = makeCloudPort
+        self.foregroundPollInterval = foregroundPollInterval
     }
 
     /// In-flight bind task for the active port, retained so a racing rebind can
@@ -185,6 +191,44 @@ final class SyncCoordinator: ObservableObject {
             // window (fix F). Inert on a NoopSyncPort (flag off).
             await active.flushPending()
         }
+    }
+
+    /// Awaitable pull+flush for pull-to-refresh, so the refresh spinner reflects the
+    /// real network fetch (build 32). Same work as `pullNow()` but structured so the
+    /// caller can `await` it. Deferred during a live LiDAR capture (see `pullNow`).
+    /// Inert with sync off (Noop pull).
+    func pullAndRefresh() async {
+        guard !LiDARCaptureActivity.shared.isActive else { return }
+        let active = port
+        await active.pull()
+        await active.flushPending()
+    }
+
+    // MARK: - Foreground live-pull poll (build 32)
+
+    /// The app has NO CloudKit push subscription, so a device that stays foregrounded
+    /// while another device edits would not converge until it is backgrounded or
+    /// relaunched (the receiver only pulls on bind / background→foreground). While the
+    /// app is active we poll `pullNow()` on a fixed interval so an already-open second
+    /// device catches up within one interval. Started on scenePhase `.active`, stopped
+    /// on background — no polling off-screen. Inert with sync off (`pullNow` → Noop).
+    /// A CKDatabaseSubscription + silent push is the durable fix (deferred to 1.0.1).
+    private var foregroundPollTask: Task<Void, Never>?
+
+    func startForegroundPolling() {
+        guard foregroundPollTask == nil else { return }   // idempotent: never leak a 2nd task
+        foregroundPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: self?.foregroundPollInterval ?? .seconds(20))
+                guard let self, !Task.isCancelled else { return }
+                self.pullNow()
+            }
+        }
+    }
+
+    func stopForegroundPolling() {
+        foregroundPollTask?.cancel()
+        foregroundPollTask = nil
     }
 
     /// Tear down a DELETED account's CloudKit footprint (edge G / 5.1.1(v)): drop

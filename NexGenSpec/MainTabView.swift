@@ -89,5 +89,6 @@ struct MainTabView: View {
         .environmentObject(InspectionStore())
         .environmentObject(AuthManager())
         .environmentObject(SubscriptionManager())
+        .environmentObject(SyncCoordinator())
 }
 #endif

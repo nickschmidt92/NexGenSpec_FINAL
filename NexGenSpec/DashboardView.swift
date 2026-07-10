@@ -14,6 +14,7 @@ struct DashboardView: View {
     @EnvironmentObject private var store: InspectionStore
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var subscriptions: SubscriptionManager
+    @EnvironmentObject private var syncCoordinator: SyncCoordinator
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
     // MARK: - Local state
@@ -176,6 +177,10 @@ struct DashboardView: View {
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
                 .refreshable {
+                    // Build 32: pull-to-refresh now fetches remote changes (not just a
+                    // local reload) so a foregrounded device can force cross-device
+                    // catch-up on demand. Inert with sync off (Noop pull).
+                    await syncCoordinator.pullAndRefresh()
                     store.reloadFromDisk()
                 }
                 // Reconcile any finalize that happened while an inspection was
@@ -901,6 +906,7 @@ struct DashboardView_Previews: PreviewProvider {
         DashboardView()
             .environmentObject(store)
             .environmentObject(auth)
+            .environmentObject(SyncCoordinator())
     }
 }
 #endif
