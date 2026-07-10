@@ -63,7 +63,8 @@ Verify before continuing:
 7. **Family Sharing:** disabled (Solo subscription — Family Sharing is for shared-household consumer apps, not professional tools).
 8. **Localizations (English U.S.):**
    - **Display Name:** `NexGenSpec Pro — Annual`
-   - **Description:** `Unlimited home inspections, branded PDF reports, LiDAR scanning, invoicing, and encrypted backups. Billed annually.`
+   - **Description:** `Unlimited inspections and watermark-free, branded PDF reports with your company logo, across iPhone, iPad, and Mac. Billed annually.`
+   - NOTE: Pro unlocks UNLIMITED inspections + WATERMARK-FREE branded reports ONLY. Do NOT list LiDAR / annotations / invoicing / backups as Pro — they are FREE-tier (3 free inspections are full-featured, just watermarked). Matches the monetization model + the corrected LISTING.md/metadata/ASO.
 9. **Review Information:**
    - **Screenshot:** upload one paywall screenshot showing this product (1280×1920 PNG, no transparency)
    - **Review Notes:** `Auto-renewing annual subscription. Unlocks unlimited inspection creation after the 3-free-inspection trial. Trial is enforced by Apple DeviceCheck (server-side), not StoreKit intro offers — no free-trial period is configured on this product.`
@@ -82,7 +83,7 @@ Repeat §4 with these substitutions:
 | Subscription Duration | `1 Month` |
 | Subscription Price | **USD $49.00** |
 | Display Name | `NexGenSpec Pro — Monthly` |
-| Description | `Unlimited home inspections, branded PDF reports, LiDAR scanning, invoicing, and encrypted backups. Billed monthly.` |
+| Description | `Unlimited inspections and watermark-free, branded PDF reports with your company logo, across iPhone, iPad, and Mac. Billed monthly.` |
 | Review Notes | Same as §4 step 9 |
 
 ---
