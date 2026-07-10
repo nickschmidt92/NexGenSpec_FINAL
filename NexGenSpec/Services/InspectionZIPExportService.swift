@@ -71,8 +71,15 @@ public enum InspectionZIPExportService {
     /// decision explicit.
     @MainActor
     public static func exportZIP(for version: InspectionVersion, watermark: Bool) async throws -> URL {
+        // Outer temp dir keeps the `zip-staging-` prefix so the routine temp sweep
+        // and the Account-Deletion wipe (ReportExportService.tempExportPrefixes)
+        // still reap it. The client-facing PAYLOAD folder nests INSIDE and carries
+        // the human-readable export name, so unzipping the delivered archive yields
+        // a clean "<Company>_<Address>_<Date>/" folder — never the internal temp name.
         let stagingRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("zip-staging-\(version.id.uuidString)", isDirectory: true)
+        let baseStem = ExportNaming.baseStem(for: version.inspection)
+        let payloadDir = stagingRoot.appendingPathComponent(baseStem, isDirectory: true)
 
         // Regenerate the cached whole-home floor plan (if the scan set changed)
         // BEFORE the synchronous HTML render, which only reads the cache.
@@ -90,10 +97,9 @@ public enum InspectionZIPExportService {
             if FileManager.default.fileExists(atPath: stagingRoot.path) {
                 try? FileManager.default.removeItem(at: stagingRoot)
             }
-            try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-
-            let imagesDir = stagingRoot.appendingPathComponent("images", isDirectory: true)
-            let videosDir = stagingRoot.appendingPathComponent("videos", isDirectory: true)
+            let imagesDir = payloadDir.appendingPathComponent("images", isDirectory: true)
+            let videosDir = payloadDir.appendingPathComponent("videos", isDirectory: true)
+            try FileSecurity.ensureProtectedDirectory(payloadDir)
             try FileSecurity.ensureProtectedDirectory(imagesDir)
             try FileSecurity.ensureProtectedDirectory(videosDir)
 
@@ -105,18 +111,20 @@ public enum InspectionZIPExportService {
                 absoluteAssetFileURLs: false,
                 watermark: watermark
             )
-            let url = stagingRoot.appendingPathComponent("report.html")
+            let url = payloadDir.appendingPathComponent("\(baseStem).html")
             try Data(html.utf8).write(to: url, options: .atomic)
             return url
         }.value
 
         // 2. Generate the paginated PDF from the same HTML.
+        // Its temp name is irrelevant — we copy it into the payload folder under
+        // the export stem below.
         let pdfTempURL = try await PDFReportRenderer.generatePDF(
             fromHTMLFile: htmlURL,
-            baseURL: stagingRoot,
-            clientName: version.inspection.clientName
+            baseURL: payloadDir,
+            outputBaseName: nil
         )
-        let pdfDest = stagingRoot.appendingPathComponent("report.pdf")
+        let pdfDest = payloadDir.appendingPathComponent("\(baseStem).pdf")
         if FileManager.default.fileExists(atPath: pdfDest.path) {
             try? FileManager.default.removeItem(at: pdfDest)
         }
@@ -159,7 +167,7 @@ public enum InspectionZIPExportService {
             withJSONObject: manifest,
             options: [.prettyPrinted, .sortedKeys]
         )
-        try manifestData.write(to: stagingRoot.appendingPathComponent("manifest.json"), options: .atomic)
+        try manifestData.write(to: payloadDir.appendingPathComponent("manifest.json"), options: .atomic)
 
         let integrityText = """
         NexGenSpec — Report Integrity
@@ -173,15 +181,15 @@ public enum InspectionZIPExportService {
         are not individually covered by this hash.
 
         How to verify:
-        1. Open report.pdf or report.html. The hash printed in the footer must
-           match the value above.
+        1. Open \(baseStem).pdf or \(baseStem).html. The hash printed in the
+           footer must match the value above.
         2. To verify against the canonical record, send the Report ID and hash
            to contact@nexgenspec.com — we will confirm the report was generated
            by NexGenSpec and that the inspection data was not altered after
            finalization.
         """
         try Data(integrityText.utf8).write(
-            to: stagingRoot.appendingPathComponent("integrity.txt"),
+            to: payloadDir.appendingPathComponent("integrity.txt"),
             options: .atomic
         )
 
@@ -189,18 +197,18 @@ public enum InspectionZIPExportService {
         //    NSFileCoordinator `.forUploading` option, which produces a
         //    standard ZIP archive at a transient URL.
         try FileSecurity.ensureProtectedDirectory(exportFolder)
-        let stamp = Self.filenameDateFormatter.string(from: Date())
-        let safeClient = sanitize(version.inspection.clientName, fallback: "Inspection")
-        let outURL = exportFolder.appendingPathComponent("NexGenSpec_\(safeClient)_\(stamp).zip")
+        let outURL = exportFolder.appendingPathComponent("\(baseStem).zip")
         if FileManager.default.fileExists(atPath: outURL.path) {
             try? FileManager.default.removeItem(at: outURL)
         }
 
+        // Zip the PAYLOAD folder (named with the export stem), NOT the outer
+        // staging dir — so unzipping yields "<baseStem>/", never "zip-staging-…".
         let coordinator = NSFileCoordinator()
         var coordError: NSError?
         var copyError: Error?
         coordinator.coordinate(
-            readingItemAt: stagingRoot,
+            readingItemAt: payloadDir,
             options: .forUploading,
             error: &coordError
         ) { tempZipURL in
@@ -228,24 +236,4 @@ public enum InspectionZIPExportService {
         )
         return outURL
     }
-
-    // MARK: - Helpers
-
-    private static func sanitize(_ raw: String, fallback: String) -> String {
-        let allowed = CharacterSet.alphanumerics
-        let cleaned = raw.unicodeScalars
-            .map { allowed.contains($0) ? String($0) : "_" }
-            .joined()
-            .replacingOccurrences(of: "_+", with: "_", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
-        return cleaned.isEmpty ? fallback : cleaned
-    }
-
-    private static let filenameDateFormatter: DateFormatter = {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd_HHmmss"
-        fmt.locale = Locale(identifier: "en_US_POSIX")
-        fmt.timeZone = TimeZone(identifier: "UTC")
-        return fmt
-    }()
 }

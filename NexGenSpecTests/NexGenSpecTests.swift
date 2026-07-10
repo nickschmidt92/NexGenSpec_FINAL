@@ -1001,7 +1001,7 @@ final class HTMLReportRendererTests: XCTestCase {
             let htmlURL = dir.appendingPathComponent("index.html")
             try Data(html.utf8).write(to: htmlURL)
             let pdfURL = try await PDFReportRenderer.generatePDF(
-                fromHTMLFile: htmlURL, baseURL: dir, clientName: label)
+                fromHTMLFile: htmlURL, baseURL: dir, outputBaseName: label)
             return PDFDocument(url: pdfURL)?.string ?? ""
         }
         let freeText = try await exportPDF(watermark: true, label: "free")
@@ -1042,7 +1042,7 @@ final class HTMLReportRendererTests: XCTestCase {
         let html = HTMLReportRenderer.renderHTML(for: version, imageFolderURL: dir.appendingPathComponent("images"), videosFolderURL: nil, watermark: true)
         let htmlURL = dir.appendingPathComponent("index.html")
         try Data(html.utf8).write(to: htmlURL)
-        let pdfURL = try await PDFReportRenderer.generatePDF(fromHTMLFile: htmlURL, baseURL: dir, clientName: "Pagination")
+        let pdfURL = try await PDFReportRenderer.generatePDF(fromHTMLFile: htmlURL, baseURL: dir, outputBaseName: "Pagination")
         let doc = try XCTUnwrap(PDFDocument(url: pdfURL))
         XCTAssertGreaterThan(doc.pageCount, 1, "multi-section report must paginate into multiple pages, not one tall page")
         let bounds = try XCTUnwrap(doc.page(at: 0)).bounds(for: .mediaBox)
@@ -2340,6 +2340,9 @@ final class InspectionZIPExportServiceTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: zipURL.path))
         XCTAssertEqual(zipURL.pathExtension, "zip")
+        XCTAssertEqual(zipURL.deletingPathExtension().lastPathComponent,
+                       ExportNaming.baseStem(for: version.inspection),
+                       "ZIP must be named with the human-readable export stem, not an internal temp name")
         XCTAssertTrue(zipURL.path.contains("/Exports/"))
         XCTAssertTrue(zipURL.standardizedFileURL.path.hasPrefix(FilePaths.appRoot.standardizedFileURL.path),
                       "exported ZIP must live under the private per-UID appRoot, not Documents")
@@ -3389,5 +3392,77 @@ final class SyncAssetPathsTests: XCTestCase {
             XCTAssertEqual(CloudKitSchema.recordType(forAssetKind: kind.rawValue),
                            CloudKitSchema.RecordType.mediaAsset)
         }
+    }
+}
+
+// MARK: - Export file naming (client-facing deliverables)
+
+/// Locks the human-readable naming for exported/shared artifacts (the ZIP + its
+/// unzipped folder, the shared PDF, and the text summary). The prior scheme
+/// leaked an internal `zip-staging-<UUID>` folder name and generic
+/// `Inspection_Report.pdf` names to clients; `ExportNaming` makes every
+/// deliverable read "<Company>_<Property>_<Date>".
+final class ExportNamingTests: XCTestCase {
+
+    private let fixedDate = Date(timeIntervalSince1970: 1_783_900_800)
+
+    func testBaseStemCompanyPropertyDate() {
+        let stem = ExportNaming.baseStem(company: "Summit Home Inspections",
+                                         property: "123 Main St", date: fixedDate)
+        XCTAssertTrue(stem.hasPrefix("Summit-Home-Inspections_123-Main-St_"), stem)
+        let fields = stem.split(separator: "_")
+        XCTAssertEqual(fields.count, 3)
+        let date = String(fields[2])
+        XCTAssertEqual(date.count, 10)                        // yyyy-MM-dd
+        XCTAssertEqual(date.filter { $0 == "-" }.count, 2)
+    }
+
+    func testBaseStemDropsEmptyCompany() {
+        let stem = ExportNaming.baseStem(company: "   ", property: "45 Oak Ave", date: fixedDate)
+        XCTAssertTrue(stem.hasPrefix("45-Oak-Ave_"), stem)
+        XCTAssertEqual(stem.split(separator: "_").count, 2)
+    }
+
+    func testBaseStemEmptyPropertyBecomesInspection() {
+        let stem = ExportNaming.baseStem(company: "", property: "  ", date: fixedDate)
+        XCTAssertTrue(stem.hasPrefix("Inspection_"), stem)
+    }
+
+    func testBaseStemSanitizesUnsafeCharacters() {
+        let stem = ExportNaming.baseStem(company: "A/B: Co.", property: "12 O'Neil Rd #4", date: fixedDate)
+        for bad in ["/", ":", "'", "#", " ", ".."] {
+            XCTAssertFalse(stem.contains(bad), "stem must not contain \(bad): \(stem)")
+        }
+        XCTAssertFalse(stem.contains("--"), stem)             // no doubled hyphens
+    }
+
+    func testBaseStemClampsLongComponents() {
+        let long = String(repeating: "a", count: 200)
+        let stem = ExportNaming.baseStem(company: long, property: long, date: fixedDate)
+        for field in stem.split(separator: "_").dropLast() {  // skip the date field
+            XCTAssertLessThanOrEqual(field.count, 60)
+        }
+    }
+
+    func testPreparedShareURLRenamesOnlyWhenNeeded() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ngs-share-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let internalPDF = tmp.appendingPathComponent("Inspection_Report.pdf")
+        try Data("pdf".utf8).write(to: internalPDF)
+
+        // Different desired name → a copy under the clean name, in a reap-tagged dir.
+        let renamed = ExportNaming.preparedShareURL(for: internalPDF, desiredName: "123-Main-St_2026-07-10.pdf")
+        XCTAssertEqual(renamed.lastPathComponent, "123-Main-St_2026-07-10.pdf")
+        XCTAssertNotEqual(renamed.path, internalPDF.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.path))
+        XCTAssertTrue(renamed.path.contains("ngs-export-"), "share copy must live in a reap-tagged dir")
+        try? FileManager.default.removeItem(at: renamed.deletingLastPathComponent())
+
+        // Same name → original returned unchanged (no wasteful copy — e.g. ZIP backups).
+        let same = ExportNaming.preparedShareURL(for: internalPDF, desiredName: "Inspection_Report.pdf")
+        XCTAssertEqual(same.path, internalPDF.path)
     }
 }

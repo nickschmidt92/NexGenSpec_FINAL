@@ -19,7 +19,8 @@ struct MyReportsView: View {
 
     private struct Deliverable: Identifiable {
         let id: String          // file path — stable + unique
-        let shareURL: URL       // the file handed to the share sheet
+        let shareURL: URL       // the on-disk file backing this row
+        let shareName: String   // clean filename to present when sharing / saving
         let deleteURL: URL      // what a delete removes (address folder for PDFs)
         let title: String
         let subtitle: String
@@ -93,7 +94,10 @@ struct MyReportsView: View {
 
     private func deliverableRow(_ d: Deliverable) -> some View {
         Button {
-            shareItem = ShareItem(url: d.shareURL)
+            // Present the clean export name (e.g. "123-Main-St_2026-07-10.pdf")
+            // instead of the internal fixed "Inspection_Report.pdf" — copies only
+            // when the on-disk name differs, so ZIP backups share with no copy.
+            shareItem = ShareItem(url: ExportNaming.preparedShareURL(for: d.shareURL, desiredName: d.shareName))
         } label: {
             HStack(spacing: Spacing.md) {
                 Image(systemName: d.systemImage)
@@ -198,6 +202,10 @@ struct MyReportsView: View {
             out.append(Deliverable(
                 id: pdf.path,
                 shareURL: pdf,
+                // Folder name is the property address; date is the PDF's mtime.
+                // No company here (the browser has only the folder), so the stem
+                // is "<Address>_<Date>" — the file itself stays Inspection_Report.pdf.
+                shareName: "\(ExportNaming.baseStem(company: "", property: folder.lastPathComponent, date: date)).pdf",
                 deleteURL: folder,
                 title: folder.lastPathComponent,
                 subtitle: DateFormatters.mediumDate.string(from: date),
@@ -232,6 +240,7 @@ struct MyReportsView: View {
             out.append(Deliverable(
                 id: zip.path,
                 shareURL: zip,
+                shareName: zip.lastPathComponent,   // already the export name → shared as-is (no copy)
                 deleteURL: zip,
                 title: label,
                 subtitle: subtitle,
