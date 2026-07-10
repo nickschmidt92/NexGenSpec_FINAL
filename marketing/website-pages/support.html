@@ -62,10 +62,10 @@
       },
       {
         "@type": "Question",
-        "name": "Do my inspections sync between iPads?",
+        "name": "Do my inspections sync between my devices?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. NexGenSpec is local-first. Inspections live on the device they were created on. To move an inspection between your own devices, use the Files-app export from within the inspection."
+          "text": "Yes. With iCloud Sync on (the default), NexGenSpec syncs your inspections (the inspection record, report PDFs, thumbnails, and LiDAR floor plans) across the Apple devices on your iCloud account, through your private iCloud (Apple CloudKit). The data goes only to your iCloud account; NexGenSpec never receives, stores, or can access it. Full-resolution photos, videos, and 3D scan files stay on the device where they were captured. Prefer one device? Turn on Local-Only mode in Settings. Sync is not a backup: deleting an inspection removes it from your other devices too."
         }
       },
       {
@@ -335,10 +335,11 @@
 
     <div class="faq">
       <details>
-        <summary>Do my inspections sync between iPads?</summary>
+        <summary>Do my inspections sync between my devices?</summary>
         <div class="answer">
-          <p>No. NexGenSpec is intentionally local-first &mdash; your inspection content never leaves your device. Inspections live on the iPad or iPhone they were created on.</p>
-          <p>To move an inspection between your own devices: open the inspection, tap the share icon, choose <strong>Save to Files</strong>, then transfer the resulting .zip via AirDrop, iCloud Drive, or any file-sharing method you prefer.</p>
+          <p>Yes. With iCloud Sync on (the default), NexGenSpec syncs your inspections &mdash; the inspection record, report PDFs, thumbnails, and LiDAR floor plans &mdash; across the Apple devices signed in to your iCloud account, through your <strong>private</strong> iCloud (Apple CloudKit). The data goes only to your iCloud account: <strong>NexGenSpec never receives, stores, or can access it</strong>, and there is no NexGenSpec server in the path.</p>
+          <p>Full-resolution photos, videos, and 3D scan files stay on the device where they were captured, and archive/invoice status is tracked per-device. Prefer to keep everything on a single device? Turn on <strong>Local-Only mode</strong> in Settings. Note that sync is not a backup &mdash; deleting an inspection removes it from your other devices too, so keep your own backups.</p>
+          <p>To move a full inspection package (PDF + photos + LiDAR scans) intentionally, open the inspection, tap the share icon, and choose <strong>Save to Files</strong>.</p>
         </div>
       </details>
     </div>
@@ -368,6 +369,7 @@
         <div class="answer">
           <p>NexGenSpec relies on iCloud Backup. Make sure iCloud Backup is turned on under iOS <strong>Settings</strong> &rarr; your name &rarr; <strong>iCloud</strong> &rarr; <strong>iCloud Backup</strong>. Your inspection data is included in the device backup.</p>
           <p>For an explicit copy of a specific inspection, use <strong>Save to Files</strong> from the inspection's share menu to write a .zip archive to iCloud Drive (or any provider you choose).</p>
+          <p>iCloud Sync (on by default) keeps your inspection records, report PDFs, and floor plans on your other Apple devices, but it is <strong>not</strong> a backup &mdash; deleting an inspection removes it everywhere it synced, and full-resolution photos and videos live only on the device that captured them. Keep iCloud Backup on, or save periodic <strong>Save to Files</strong> archives, for a true backup.</p>
         </div>
       </details>
     </div>
@@ -376,14 +378,14 @@
       <details>
         <summary>Does NexGenSpec work without an internet connection?</summary>
         <div class="answer">
-          <p>Yes. Inspections are created, captured, finalized, and exported entirely on-device. Internet is only required for sign-in (one time per device), subscription validation, the weather stamp at the start of an inspection, and sending the final PDF via email.</p>
+          <p>Yes. Inspections are created, captured, finalized, and exported on your device, with no internet connection required for that work. Internet is used for sign-in, subscription validation, the weather stamp at the start of an inspection, sending the final PDF via email, and &mdash; when iCloud Sync is on &mdash; syncing your inspections to your other devices through your private iCloud.</p>
           <p>If you go offline mid-inspection, the app continues to work. Pro entitlement is cached for up to 7 days offline so a subscriber on a remote job site does not lose Pro features.</p>
         </div>
       </details>
     </div>
 
     <h3>Account &amp; Privacy</h3>
-    <p>NexGenSpec is local-first and stores all inspection content on your device. We do not host your reports, photos, or client information on our servers. See the <a href="privacy.html">Privacy Policy</a> for the full data-handling story and the <a href="terms.html">Terms of Service</a> for usage terms.</p>
+    <p>With iCloud Sync on (the default), NexGenSpec syncs your inspections &mdash; records, report PDFs, thumbnails, and LiDAR floor plans &mdash; across the Apple devices on your private iCloud account (Apple CloudKit). The data goes only to your iCloud, and <strong>NexGenSpec never hosts, receives, or can access your reports, photos, or client information on any server</strong>. Full-resolution photos and videos stay on the device that captured them. Turn on <strong>Local-Only mode</strong> in Settings to keep inspections on a single device. See the <a href="privacy.html">Privacy Policy</a> for the full data-handling story and the <a href="terms.html">Terms of Service</a> for usage terms.</p>
 
     <h3>System Requirements</h3>
     <ul>

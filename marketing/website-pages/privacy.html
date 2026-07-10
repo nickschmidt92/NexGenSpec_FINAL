@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - NexGenSpec</title>
+  <meta name="description" content="NexGenSpec Privacy Policy. Your inspections sync only through your own private iCloud — NexGenSpec runs no content servers and never sees your data.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.nexgenspec.com/privacy.html">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #e2e8f0; background: #0a0e1a; line-height: 1.6;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    img { max-width: 100%; height: auto; display: block; }
+    a { color: #3b82f6; text-decoration: none; transition: color 0.2s; }
+    a:hover { color: #60a5fa; }
+
+    /* Background */
+    .bg-glow { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+    .bg-glow::before, .bg-glow::after {
+      content: ''; position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.12;
+      animation: float 20s ease-in-out infinite;
+    }
+    .bg-glow::before { width: 500px; height: 500px; background: #3b82f6; top: -200px; left: -100px; }
+    .bg-glow::after { width: 400px; height: 400px; background: #06b6d4; bottom: -150px; right: -100px; animation-delay: -10s; animation-direction: reverse; }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(100px, -50px) scale(1.1); }
+      66% { transform: translate(-50px, 80px) scale(0.9); }
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    /* Header */
+    #header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10, 14, 26, 0.8); backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; height: 80px;
+    }
+    .logo-link {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: #fff;
+      font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em;
+    }
+    .logo-icon { width: 42px; height: 42px; transition: transform 0.3s; }
+    .logo-link:hover .logo-icon { transform: scale(1.05); }
+    .back-link {
+      font-weight: 500; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .back-link:hover { color: #fff; }
+
+    @media (max-width: 768px) {
+      .header-inner { height: 70px; }
+      .logo-icon { width: 36px; height: 36px; }
+      .logo-link { font-size: 1rem; }
+    }
+
+    /* Content */
+    .content {
+      max-width: 780px; margin: 0 auto; padding: 4rem 1.5rem 6rem;
+    }
+    .content h1 {
+      font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; color: #fff;
+      letter-spacing: -0.03em; margin-bottom: 0.5rem;
+    }
+    .effective-date {
+      font-size: 0.9rem; color: #64748b; margin-bottom: 3rem;
+      padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .content h3 {
+      font-size: 1.2rem; font-weight: 700; color: #f1f5f9;
+      margin-top: 2.5rem; margin-bottom: 1rem;
+      padding-left: 1rem; border-left: 3px solid #3b82f6;
+    }
+    .content p {
+      color: #94a3b8; line-height: 1.8; margin-bottom: 1rem; font-size: 0.95rem;
+    }
+    .content ul {
+      list-style: none; margin-bottom: 1rem; padding-left: 0;
+    }
+    .content ul li {
+      color: #94a3b8; line-height: 1.8; font-size: 0.95rem;
+      padding: 0.4rem 0 0.4rem 1.5rem; position: relative;
+    }
+    .content ul li::before {
+      content: ''; position: absolute; left: 0; top: 0.9rem;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    }
+    .content strong { color: #e2e8f0; }
+
+    .contact-card {
+      margin-top: 2rem; padding: 1.5rem 2rem;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 1rem;
+    }
+    .contact-card strong { display: block; color: #f1f5f9; font-size: 1rem; margin-bottom: 0.5rem; }
+    .contact-card a { color: #3b82f6; }
+
+    /* Footer */
+    #footer {
+      background: rgba(3,7,18,0.8); color: #64748b; padding: 1.5rem 0;
+      border-top: 1px solid rgba(255,255,255,0.04); font-size: 0.8rem;
+    }
+    .footer-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 600; color: #94a3b8; font-size: 0.9rem;
+    }
+    .footer-logo-icon { width: 28px; height: 28px; }
+    .footer-copy { font-size: 0.78rem; color: #64748b; }
+    @media (max-width: 600px) {
+      .footer-inner { justify-content: center; text-align: center; }
+    }
+
+    @media print {
+      #header, .bg-glow { display: none; }
+      body { color: #000; background: #fff; }
+      .content h1, .content h3 { color: #000; }
+      .content p, .content ul li { color: #333; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header id="header">
+    <div class="header-inner">
+      <a href="/" class="logo-link" aria-label="NexGenSpec Home">
+        <picture>
+          <source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x">
+          <img src="icon-hex.png?v=3" alt="NexGenSpec" class="logo-icon" width="42" height="42" decoding="async">
+        </picture>
+        NexGenSpec
+      </a>
+      <a href="/" class="back-link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to Home
+      </a>
+    </div>
+  </header>
+
+  <main class="content">
+    <h1>Privacy Policy</h1>
+    <p class="effective-date">Effective Date: July 9, 2026</p>
+
+    <h3>1. Zero-Storage Commitment</h3>
+    <p>NexGenSpec ("we," "us," or "our") does not store, host, or have access to your inspection data, client information, photos, or reports. There is no NexGenSpec server that holds your inspection content. Your data lives on your device and &mdash; when iCloud Sync is on (the default) &mdash; in your own <strong>private iCloud account</strong>, where it syncs across your Apple devices (see Section 5). Data you export goes only to the third-party storage providers you choose (e.g., iCloud Drive, email).</p>
+
+    <h3>2. Information We Receive (Limited)</h3>
+    <p>Because we do not store your data on our servers, we only interact with the following:</p>
+    <ul>
+      <li><strong>Account login:</strong> Your email and an encrypted password &mdash; or, if you use Sign in with Apple, an Apple-issued user identifier and the email Apple chooses to share with us (which may be a private relay address). Stored in Firebase Authentication. Used solely to authenticate you.</li>
+      <li><strong>Optional fallback contact email:</strong> If you provide one at signup, it is stored alongside your authentication record and used only if your primary email becomes unreachable (e.g. an Apple private relay is disabled) and we need to deliver a critical service notice or account-deletion receipt.</li>
+      <li><strong>Anonymized crash reports:</strong> If the app crashes, anonymous technical logs are sent to Firebase Crashlytics so we can fix bugs. These logs do not contain your inspection content, client information, photos, or signatures.</li>
+      <li><strong>Free-tier usage check (Apple DeviceCheck):</strong> To enforce the free tier's 3-inspection limit fairly across reinstalls, the app uses Apple's DeviceCheck service, which stores two anonymous per-device bits with Apple. This contains no personal information and cannot be used to identify you or your clients.</li>
+    </ul>
+    <p>That is the complete list of data NexGenSpec holds on its own systems. We do not collect analytics, advertising identifiers, contact lists, or any inspection content. The app does use your device location for two optional features &mdash; address auto-fill and inspection-day weather &mdash; described in Section 3 and Section 6. Your location is never stored on NexGenSpec servers and is never used for tracking or advertising.</p>
+
+    <h3>3. Device Permissions (How &amp; Why)</h3>
+    <p>NexGenSpec requests the following iOS permissions only to enable specific app functionality:</p>
+    <ul>
+      <li><strong>Camera:</strong> So you can capture inspection photos and video directly inside NexGenSpec. Photos and video taken with the in-app camera are saved only to NexGenSpec's secure storage on your device &mdash; <strong>they are never written to your iPhone/iPad Photos app</strong>.</li>
+      <li><strong>Location (optional):</strong> When you grant location access, NexGenSpec uses it for two things: (1) to auto-fill the property address when you start a new inspection, and (2) to record inspection-day weather conditions on the report. For weather, your approximate location is sent to <a href="https://open-meteo.com/">Open-Meteo</a> &mdash; a third-party weather API &mdash; which returns the conditions stamped onto your report. <strong>Your location is used only at the moment you take these actions, is never stored on NexGenSpec servers, and is never used for tracking or advertising.</strong> You can decline or revoke location access at any time; the rest of the app works without it.</li>
+      <li><strong>Photo Library (read-only):</strong> So you can <em>import</em> existing photos and video into a specific inspection &mdash; for example, drone or thermal imagery you AirDropped to your iPad. NexGenSpec uses this access only when you actively pick from the library. <strong>NexGenSpec never writes anything back to your Photo Library, never scans or analyzes your library in the background, and never accesses photos outside of explicit picker actions you initiate.</strong> Imported photos are copied into NexGenSpec's secure storage and stay there.</li>
+      <li><strong>Calendar (optional):</strong> If you grant Calendar access, NexGenSpec adds scheduled inspection appointments to a calendar you choose, and reads your other events to flag scheduling conflicts. Calendar data stays on your device &mdash; NexGenSpec never sends it to our servers.</li>
+      <li><strong>Microphone:</strong> Recorded only when you explicitly capture video with audio inside the app. Recordings are saved only to NexGenSpec's secure storage on your device.</li>
+      <li><strong>Notifications (optional):</strong> Used for inspection reminders and service notices you have enabled.</li>
+    </ul>
+    <p>You can revoke any permission at any time in iOS Settings → NexGenSpec.</p>
+
+    <h3>4. Data Ownership and Control</h3>
+    <p>You are the sole owner and controller of all inspection content you create with NexGenSpec. You are responsible for:</p>
+    <ul>
+      <li>Backing up your inspection records and generated reports (see Terms of Service Section 8 for our recommended backup approach).</li>
+      <li>Managing the security of your device (passcode, Face ID / Touch ID, iOS encryption).</li>
+      <li>Ensuring the privacy of your clients and stakeholders in accordance with the laws that apply to you and to them.</li>
+    </ul>
+    <p><strong>You, not NexGenSpec, are the data controller</strong> for any personal information about your clients, agents, or other parties that you choose to enter into the app.</p>
+
+    <h3>5. Cross-Device Sync (Your iCloud)</h3>
+    <p>When iCloud Sync is on (the default), your inspections &mdash; the inspection record, report PDFs, thumbnails, and LiDAR floor plans &mdash; sync across the Apple devices signed in to your iCloud account, through Apple's iCloud (CloudKit) in your <strong>private</strong> database. This data goes <strong>only to your iCloud account. NexGenSpec never receives, stores, or has access to it</strong>, and there is no NexGenSpec server in the path. Apple encrypts this data in transit and at rest.</p>
+    <p>Full-resolution photos, videos, and 3D room-scan files stay on the device where they were captured and do not sync; archive and invoice status are stored per-device. Use the Files-app export feature in the app to move a complete inspection package between your devices intentionally.</p>
+    <p>Because inspection records can contain your client's personal information and e-signatures, that information is replicated into <strong>your</strong> iCloud; you are responsible for it as the inspector. To keep inspections on a single device instead, turn on <strong>Local-Only mode</strong> in Settings. <strong>Sync is not a backup:</strong> deletions propagate across your devices, so keep your own backups.</p>
+
+    <h3>6. Third-Party Services</h3>
+    <p>When you export a report via email or save it to a cloud provider (like iCloud Drive, Google Drive, Dropbox, or your own NAS), the data is subject to the privacy and retention policies of that specific provider. NexGenSpec does not control or see this data during the transfer or after delivery.</p>
+    <p><strong>Email retention.</strong> Once a PDF report is emailed to a client, it is in transit on your email provider's servers and, upon delivery, on the recipient's email provider's servers. Retention of those copies is governed by those email providers, not by NexGenSpec.</p>
+    <p><strong>Weather data (Open-Meteo).</strong> If you use weather logging, NexGenSpec sends your approximate location to <a href="https://open-meteo.com/">Open-Meteo</a> to retrieve inspection-day weather conditions for your report. Open-Meteo's handling of that request is governed by its own privacy terms. NexGenSpec does not receive or store your location or the returned weather data on its servers.</p>
+
+    <h3>7. Security</h3>
+    <p>On your device, your data is protected by your device's security (passcode, Face ID / Touch ID, and iOS file-level encryption). When iCloud Sync is on, the synced copy in your private iCloud is encrypted by Apple in transit and at rest. We strongly recommend you keep iOS updated, use a strong device passcode, and enable iCloud Backup so your inspections survive device loss or replacement.</p>
+
+    <h3>8. Privacy Rights (GDPR / CCPA / Other)</h3>
+    <p>NexGenSpec holds <strong>only your account login and (if you provided one) your optional fallback contact email</strong>. We do not have your inspection content, your clients' personal information, photos, signatures, or reports.</p>
+    <p>Accordingly:</p>
+    <ul>
+      <li><strong>Right to access:</strong> The data we hold on you is your account email and (optional) fallback email. Email <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a> and we will confirm what we have.</li>
+      <li><strong>Right to deletion:</strong> Use the in-app "Delete Account" button (Settings → Delete Account) to permanently remove your authentication record and erase all locally stored inspections. Or email us &mdash; we will process the request manually.</li>
+      <li><strong>Right to portability:</strong> Use the in-app per-inspection export feature to obtain your inspection data as a Files-app archive (.zip) at any time.</li>
+      <li><strong>Requests from your clients:</strong> If a homeowner, buyer, agent, or other person whose information appears in <em>your</em> inspections asks NexGenSpec for their data, our answer is that we do not hold it. You, the inspector, are the data controller for that information and must respond directly. We will refer such requests to you.</li>
+    </ul>
+    <p>For California (CCPA / CPRA): we do not sell or share personal information for cross-context behavioral advertising. We have not done so in the preceding 12 months.</p>
+    <p>For European Economic Area / United Kingdom (GDPR / UK GDPR): the legal basis for processing your authentication credentials is performance of the Terms of Service (Article 6(1)(b) GDPR). Processing of crash diagnostics is based on our legitimate interest in maintaining a functional product (Article 6(1)(f) GDPR).</p>
+
+    <h3>9. Children</h3>
+    <p>NexGenSpec is intended for adult professional inspectors. The app is not directed to children under 13 (or under 16 in jurisdictions that apply that threshold), and we do not knowingly collect personal information from children.</p>
+
+    <h3>10. Contact</h3>
+    <p>For privacy inquiries, please contact:</p>
+    <div class="contact-card">
+      <strong>NexGenSpec</strong>
+      <p>Email: <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a></p>
+    </div>
+  </main>
+
+  <footer id="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <picture>
+          <source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x">
+          <img src="icon-hex.png?v=3" alt="NexGenSpec" class="footer-logo-icon" loading="lazy" decoding="async" width="28" height="28">
+        </picture>
+        NexGenSpec
+      </div>
+      <p class="footer-copy">&copy; 2026 NexGenSpec. All rights reserved.</p>
+    </div>
+  </footer>
+
+</body>
+</html>

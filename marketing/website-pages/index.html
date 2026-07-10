@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexGenSpec — Home Inspection Software &amp; Report App for iPhone &amp; iPad</title>
+<meta name="description" content="NexGenSpec is a professional home inspection app for iPhone and iPad. Capture photos, generate branded PDF reports, and deliver to clients fast. Built by a licensed inspector.">
+<meta property="og:title" content="NexGenSpec — Professional Home Inspection App">
+<meta property="og:description" content="Built by a licensed inspector. Capture evidence-grade photos, generate PDF reports, and deliver to clients from your iPhone or iPad.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nexgenspec.com/">
+<meta property="og:image" content="https://nexgenspec.com/logo.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NexGenSpec — Professional Home Inspection App">
+<meta name="twitter:description" content="Built by a licensed inspector. Capture evidence-grade photos, generate PDF reports, and deliver to clients from your iPhone or iPad.">
+<meta name="twitter:image" content="https://nexgenspec.com/logo.jpg">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='32' y2='32'%3E%3Cstop offset='0%25' stop-color='%231F6EF5'/%3E%3Cstop offset='100%25' stop-color='%2326D1EE'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpolygon points='16,1 29,8.5 29,23.5 16,31 3,23.5 3,8.5' fill='url(%23g)'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='white' font-family='Inter,system-ui,sans-serif' font-weight='800' font-size='18'%3ES%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #141727;
+  --navy-light: #1c2038;
+  --navy-mid: #232847;
+  --blue: #1F6EF5;
+  --cyan: #26D1EE;
+  --white: #ffffff;
+  --gray-50: #f8f9fc;
+  --gray-100: #eef1f6;
+  --gray-200: #dde1ea;
+  --gray-400: #8b92a8;
+  --gray-500: #6b7394;
+  --gray-600: #4a5068;
+  --gradient-blue-cyan: linear-gradient(135deg, var(--blue), var(--cyan));
+  --gradient-hero: radial-gradient(ellipse 80% 60% at 50% 20%, rgba(31,110,245,0.15) 0%, transparent 60%),
+                   radial-gradient(ellipse 50% 40% at 80% 10%, rgba(38,209,238,0.1) 0%, transparent 50%);
+  --glass-bg: rgba(255,255,255,0.06);
+  --glass-border: rgba(255,255,255,0.1);
+  --glass-bg-light: rgba(255,255,255,0.7);
+  --glass-border-light: rgba(255,255,255,0.5);
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 12px 40px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--navy);
+  background: var(--white);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scroll offset for fixed navbar ── */
+section[id] { scroll-margin-top: 80px; }
+
+/* ── NAV ── */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  padding: 0 24px;
+  transition: background var(--transition), box-shadow var(--transition), backdrop-filter var(--transition);
+}
+.nav.scrolled {
+  background: rgba(20, 23, 39, 0.85);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06);
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 72px;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--white);
+  font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em;
+}
+.nav-logo svg { flex-shrink: 0; }
+.nav-logo-icon {
+  width: 42px; height: 42px;
+}
+.footer-logo-icon {
+  width: 36px; height: 36px;
+}
+.nav-logo-mark, .footer-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--gradient-blue-cyan);
+  font-weight: 800; font-size: 16px; color: var(--white);
+  letter-spacing: 0;
+}
+.footer-mark { width: 24px; height: 24px; font-size: 13px; border-radius: 6px; }
+.nav-links {
+  display: flex; align-items: center; gap: 32px;
+  list-style: none;
+}
+.nav-links a {
+  color: var(--gray-400); text-decoration: none;
+  font-size: 0.875rem; font-weight: 500;
+  transition: color var(--transition);
+}
+.nav-links a:hover { color: var(--white); }
+.btn-nav {
+  display: inline-flex; align-items: center; padding: 9px 20px;
+  background: var(--gradient-blue-cyan);
+  color: var(--white); font-size: 0.85rem; font-weight: 600;
+  border: none; border-radius: 100px; cursor: pointer;
+  text-decoration: none;
+  transition: opacity var(--transition), transform var(--transition);
+}
+.btn-nav:hover { opacity: 0.9; transform: translateY(-1px); }
+
+.hamburger {
+  display: none; flex-direction: column; gap: 5px;
+  background: none; border: none; cursor: pointer; padding: 4px;
+}
+.hamburger span {
+  display: block; width: 22px; height: 2px;
+  background: var(--white); border-radius: 2px;
+  transition: transform var(--transition), opacity var(--transition);
+}
+.hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+.mobile-menu {
+  display: none; position: fixed; top: 72px; left: 0; right: 0;
+  background: rgba(20, 23, 39, 0.97);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  padding: 24px; flex-direction: column; gap: 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  color: var(--gray-400); text-decoration: none;
+  font-size: 1rem; font-weight: 500; padding: 8px 0;
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  background: var(--navy);
+  padding: 160px 24px 120px;
+  text-align: center;
+}
+.hero-canvas {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+.hero::before {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  background: var(--gradient-hero);
+  pointer-events: none;
+}
+.hero::after {
+  content: ''; position: absolute; z-index: 1;
+  width: 600px; height: 600px;
+  top: -200px; left: 50%; transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(31,110,245,0.2) 0%, transparent 70%);
+  pointer-events: none;
+  animation: heroPulse 6s ease-in-out infinite alternate;
+}
+@keyframes heroPulse {
+  0% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+}
+
+.hero-content { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px 6px 8px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 100px; margin-bottom: 32px;
+  font-size: 0.8rem; color: var(--cyan); font-weight: 500;
+}
+.hero-badge-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--cyan);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1.1; margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--white) 30%, var(--cyan) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero p {
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  color: var(--gray-400); max-width: 580px;
+  margin: 0 auto 32px; line-height: 1.7;
+}
+
+.hero-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 32px;
+  background: var(--gradient-blue-cyan);
+  color: var(--white); font-size: 1rem; font-weight: 600;
+  border: none; border-radius: 100px; cursor: pointer;
+  text-decoration: none;
+  transition: transform var(--transition), box-shadow var(--transition);
+  box-shadow: 0 4px 24px rgba(31,110,245,0.35);
+}
+.hero-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(31,110,245,0.45);
+}
+
+.hero-logo-container {
+  position: relative; margin-top: 48px;
+  display: flex; justify-content: center;
+}
+.hero-logo-img {
+  max-width: 340px; width: 80%;
+  border-radius: 20px;
+  filter: drop-shadow(0 20px 60px rgba(31,110,245,0.3)) drop-shadow(0 8px 20px rgba(0,0,0,0.4));
+}
+@media (max-width: 600px) {
+  .hero-logo-img { max-width: 260px; }
+}
+
+/* ── SECTIONS COMMON ── */
+.section { padding: 100px 24px; }
+.section-dark { background: var(--navy); color: var(--white); }
+.section-light { background: var(--gray-50); }
+.container { max-width: 1200px; margin: 0 auto; }
+
+.section-label {
+  display: inline-block;
+  font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.1em; margin-bottom: 12px;
+  background: var(--gradient-blue-cyan);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.section-title {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1.15; margin-bottom: 16px;
+}
+.section-subtitle {
+  font-size: 1.05rem; color: var(--gray-500);
+  max-width: 560px; line-height: 1.7;
+}
+.section-header { text-align: center; margin-bottom: 64px; }
+.section-header .section-subtitle { margin: 0 auto; }
+
+/* ── FEATURES ── */
+/* 9 cards: minmax sized so we get 3 columns at iPad portrait (834px)
+   and desktop (1024px+), 2 columns on tighter widths, 1 column on phones.
+   Orphan-free at the most common breakpoints. */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.feature-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  position: relative; overflow: hidden;
+}
+.feature-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; background: var(--gradient-blue-cyan);
+  opacity: 0; transition: opacity var(--transition);
+}
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: transparent;
+}
+.feature-card:hover::before { opacity: 1; }
+
+.feature-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.35rem; margin-bottom: 20px;
+  background: linear-gradient(135deg, rgba(31,110,245,0.1), rgba(38,209,238,0.08));
+  transition: transform 0.4s cubic-bezier(0.4,0,0.2,1), box-shadow 0.4s cubic-bezier(0.4,0,0.2,1), background 0.4s ease;
+}
+.feature-card:hover .feature-icon {
+  transform: scale(1.15);
+  background: linear-gradient(135deg, rgba(31,110,245,0.2), rgba(38,209,238,0.18));
+  box-shadow: 0 0 20px rgba(31,110,245,0.25), 0 0 40px rgba(38,209,238,0.1);
+}
+.feature-card:hover .feature-icon svg {
+  filter: drop-shadow(0 0 6px rgba(31,110,245,0.5));
+}
+.feature-card h3 {
+  font-size: 1.05rem; font-weight: 700;
+  letter-spacing: -0.01em; margin-bottom: 8px;
+}
+.feature-card p {
+  font-size: 0.9rem; color: var(--gray-500); line-height: 1.65;
+}
+
+/* ── HOW IT WORKS ── */
+.steps {
+  display: flex; align-items: flex-start; gap: 0;
+  position: relative; justify-content: center;
+}
+.step {
+  flex: 1; max-width: 320px; text-align: center;
+  padding: 0 24px; position: relative;
+}
+.step-number {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.25rem; font-weight: 800;
+  background: var(--gradient-blue-cyan); color: var(--white);
+  margin: 0 auto 24px; position: relative; z-index: 2;
+}
+.step-connector {
+  position: absolute; top: 28px;
+  left: calc(50% + 40px); right: calc(-50% + 40px);
+  height: 2px; background: var(--gray-200); z-index: 1;
+  overflow: hidden;
+}
+.step-connector::after {
+  content: ''; position: absolute; inset: 0;
+  background: var(--gradient-blue-cyan);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 1s cubic-bezier(0.4,0,0.2,1);
+}
+.step.visible .step-connector::after {
+  transform: scaleX(1);
+}
+.step:last-child .step-connector { display: none; }
+
+.step-number {
+  transition: box-shadow 0.5s ease;
+}
+.step.visible .step-number {
+  box-shadow: 0 4px 20px rgba(31,110,245,0.3), 0 0 0 6px rgba(31,110,245,0.08);
+}
+.step h3 {
+  font-size: 1.15rem; font-weight: 700;
+  margin-bottom: 8px; letter-spacing: -0.01em;
+}
+.step p { font-size: 0.9rem; color: var(--gray-500); line-height: 1.65; }
+
+@media (max-width: 700px) {
+  .steps { flex-direction: column; align-items: center; gap: 48px; }
+  .step-connector { display: none !important; }
+  .step { max-width: 400px; }
+}
+
+/* ── PRICING ── */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+  align-items: start;
+  max-width: 780px;
+  margin: 0 auto;
+}
+@media (max-width: 700px) { .pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; } }
+
+.pricing-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 32px 24px 28px;
+  text-align: center;
+  transition: transform var(--transition), box-shadow var(--transition);
+  position: relative;
+}
+.pricing-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+}
+.pricing-card.popular {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue), var(--shadow-card);
+}
+.pricing-card.popular:hover {
+  box-shadow: 0 0 0 1px var(--blue), var(--shadow-card-hover);
+}
+.popular-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  padding: 4px 16px; border-radius: 100px;
+  background: var(--gradient-blue-cyan);
+  color: var(--white); font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.pricing-card h3 {
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--navy); margin-bottom: 8px; margin-top: 4px;
+}
+.pricing-card.popular h3 { color: var(--blue); }
+.pricing-amount {
+  font-size: 2.25rem; font-weight: 800;
+  letter-spacing: -0.03em; margin-bottom: 4px;
+}
+.pricing-period {
+  font-size: 0.85rem; color: var(--gray-400); margin-bottom: 16px;
+}
+.pricing-options {
+  display: flex; gap: 8px; justify-content: center;
+  margin-bottom: 20px;
+}
+.pricing-option {
+  font-size: 0.78rem; color: var(--gray-500);
+  background: var(--gray-50); border-radius: 8px;
+  padding: 6px 12px;
+}
+.pricing-option strong { color: var(--navy); font-weight: 600; }
+.pricing-features {
+  text-align: left; padding-top: 16px;
+  border-top: 1px solid var(--gray-100);
+  list-style: none; margin: 0; padding-left: 0; padding-top: 16px;
+}
+.pricing-features li {
+  font-size: 0.85rem; color: var(--gray-500);
+  padding: 5px 0; padding-left: 22px; position: relative;
+}
+.pricing-features li::before {
+  content: '\2713'; position: absolute; left: 0;
+  color: var(--blue); font-weight: 700;
+}
+.pricing-features li.disabled {
+  color: var(--gray-300); text-decoration: line-through;
+}
+.pricing-features li.disabled::before {
+  content: '\2014'; color: var(--gray-300); font-weight: 400;
+}
+.pricing-desc {
+  font-size: 0.875rem; color: var(--gray-500);
+  padding-top: 16px; border-top: 1px solid var(--gray-100);
+}
+.pricing-card.coming-soon {
+  border-style: dashed;
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+}
+.pricing-card.coming-soon:hover {
+  border-color: var(--blue);
+}
+.coming-soon-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  padding: 4px 16px; border-radius: 100px;
+  background: var(--navy);
+  color: var(--white); font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.coming-soon-label {
+  font-size: 1.5rem; font-weight: 800; color: var(--navy);
+  letter-spacing: -0.02em; margin-bottom: 4px;
+}
+.coming-soon-sub {
+  font-size: 0.85rem; color: var(--gray-400); margin-bottom: 16px;
+}
+.interest-btn {
+  display: inline-block;
+  padding: 10px 24px;
+  border-radius: 10px;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background var(--transition), transform var(--transition);
+  margin-top: 8px;
+}
+.interest-btn:hover {
+  background: var(--blue);
+  transform: translateY(-2px);
+}
+.pricing-note {
+  text-align: center; margin-top: 32px;
+  font-size: 0.95rem; color: var(--gray-500);
+}
+.pricing-note strong { color: var(--navy); font-weight: 600; }
+.pricing-fine {
+  text-align: center; margin-top: 12px;
+  font-size: 0.78rem; color: var(--gray-400);
+  max-width: 560px; margin-left: auto; margin-right: auto;
+}
+
+/* ── WAVE DIVIDERS ── */
+.wave-divider {
+  position: relative; width: 100%; overflow: hidden;
+  line-height: 0; margin: 0; padding: 0;
+}
+.wave-divider svg {
+  display: block; width: 100%; height: auto;
+}
+.wave-top { margin-bottom: -3px; margin-top: -3px; }
+.wave-bottom { margin-top: -3px; margin-bottom: -3px; }
+.section, .cta-section, .footer { border: none; outline: none; }
+
+/* ── CTA ── */
+.cta-section {
+  background: var(--navy); color: var(--white);
+  text-align: center; padding: 100px 24px;
+  position: relative; overflow: hidden;
+}
+.cta-canvas {
+  position: absolute; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+.cta-section::before {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  background: radial-gradient(ellipse 60% 50% at 50% 100%, rgba(31,110,245,0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+.cta-content { position: relative; z-index: 2; }
+.cta-section .section-title { color: var(--white); }
+.cta-section .section-subtitle { color: var(--gray-400); margin: 0 auto 36px; }
+.cta-email {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--cyan); font-size: 1rem; font-weight: 500;
+  text-decoration: none; transition: opacity var(--transition);
+  margin-top: 20px;
+}
+.cta-email:hover { opacity: 0.8; }
+
+/* ── FOOTER ── */
+.footer {
+  background: var(--navy); color: var(--gray-400);
+  padding: 48px 24px;
+}
+.footer-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+}
+.footer-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 600; color: var(--gray-400); font-size: 0.9rem;
+}
+.footer-links {
+  display: flex; gap: 24px; list-style: none;
+  font-size: 0.85rem;
+}
+.footer-links a {
+  color: var(--gray-400); text-decoration: none;
+  transition: color var(--transition);
+}
+.footer-links a:hover { color: var(--white); }
+.footer-copy { font-size: 0.8rem; width: 100%; text-align: center; margin-top: 16px; }
+
+@media (max-width: 600px) {
+  .footer-inner { flex-direction: column; text-align: center; }
+  .footer-links { justify-content: center; }
+}
+
+/* ── ANIMATIONS ── */
+.reveal {
+  opacity: 0; transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1), transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.35s; }
+.reveal-delay-5 { transition-delay: 0.4s; }
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── MODALS ── */
+.legal-modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  align-items: center; justify-content: center; padding: 24px;
+}
+.legal-modal-overlay.open { display: flex; }
+.legal-modal {
+  background: var(--white); border-radius: 20px; max-width: 680px; width: 100%;
+  max-height: 85vh; display: flex; flex-direction: column;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.3);
+}
+.legal-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24px 28px 16px; border-bottom: 1px solid var(--gray-100);
+}
+.legal-modal-header h3 { font-size: 1.25rem; font-weight: 700; color: var(--navy); }
+.legal-modal-close {
+  background: none; border: none; cursor: pointer; padding: 8px;
+  color: var(--gray-500); font-size: 1.5rem; line-height: 1; border-radius: 8px;
+  transition: background var(--transition);
+}
+.legal-modal-close:hover { background: var(--gray-100); }
+.legal-modal-body {
+  padding: 24px 28px 32px; overflow-y: auto; font-size: 0.9rem;
+  line-height: 1.7; color: var(--gray-600);
+}
+.legal-modal-body h4 { color: var(--navy); font-size: 1rem; margin: 20px 0 8px; }
+.legal-modal-body h4:first-child { margin-top: 0; }
+.legal-modal-body p { margin-bottom: 12px; }
+.legal-modal-body ul { margin: 0 0 12px 20px; }
+.legal-modal-body li { margin-bottom: 6px; }
+.legal-modal-date { font-size: 0.8rem; color: var(--gray-400); margin-bottom: 16px; }
+
+/* ── GET EARLY ACCESS NAV BUTTON ── */
+.btn-early-access {
+  display: inline-block;
+  background: var(--blue) !important;
+  color: var(--white) !important;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  transition: background var(--transition), transform var(--transition);
+}
+.btn-early-access:hover {
+  background: #2d5ed9 !important;
+  transform: translateY(-1px);
+}
+
+/* ── HERO TAGLINE ── */
+.hero-tagline {
+  font-size: clamp(0.95rem, 1.8vw, 1.1rem);
+  color: var(--cyan);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 16px;
+}
+
+/* ── HERO CREDIBILITY ── */
+.hero-credibility {
+  font-size: 13px;
+  color: var(--gray-500);
+  margin-top: 20px;
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+/* ── HERO MOCKUP ── */
+.hero-mockup {
+  margin-top: 48px;
+  display: flex;
+  justify-content: center;
+}
+.hero-mockup-frame {
+  max-width: 800px;
+  width: 90%;
+  background: #111318;
+  border: 1px solid #2A2A2A;
+  border-radius: 20px;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+.hero-mockup-caption {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+@media (max-width: 600px) {
+  .hero-mockup-frame { padding: 36px 16px; min-height: 160px; }
+}
+
+/* ── SOCIAL PROOF ── */
+.proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.proof-tile {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 32px 20px;
+  text-align: center;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.proof-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+}
+.proof-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--blue);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.proof-label {
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  line-height: 1.5;
+}
+@media (max-width: 700px) {
+  .proof-grid { grid-template-columns: repeat(2, 1fr); max-width: 420px; }
+}
+
+/* ── HERO BUTTONS ── */
+.hero-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 0;
+}
+.hero-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 14px 32px;
+  color: var(--gray-400);
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  text-decoration: none;
+  transition: color var(--transition), border-color var(--transition), transform var(--transition);
+}
+.hero-cta-secondary:hover {
+  color: var(--white);
+  border-color: var(--gray-400);
+  transform: translateY(-2px);
+}
+
+/* ── STEP ICONS ── */
+.step-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(31,110,245,0.1), rgba(38,209,238,0.08));
+  margin: 0 auto 16px;
+}
+
+/* ── WAITLIST FORM ── */
+.waitlist-form {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.waitlist-input {
+  flex: 1;
+  min-width: 220px;
+  padding: 14px 20px;
+  border-radius: 100px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
+  color: var(--white);
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+}
+.waitlist-input::placeholder { color: var(--gray-500); }
+.waitlist-input:focus {
+  border-color: var(--cyan);
+  background: rgba(255,255,255,0.12);
+}
+.waitlist-btn {
+  padding: 14px 28px;
+  border-radius: 100px;
+  border: none;
+  background: var(--gradient-blue-cyan);
+  color: var(--white);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+  box-shadow: 0 4px 24px rgba(31,110,245,0.35);
+  white-space: nowrap;
+}
+.waitlist-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(31,110,245,0.45);
+}
+.waitlist-note {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+  margin-top: 12px;
+  text-align: center;
+}
+
+/* ── 4-COL PROOF GRID (desktop override) ── */
+@media (min-width: 701px) {
+  .proof-grid {
+    grid-template-columns: repeat(4, 1fr);
+    max-width: 1000px;
+  }
+}
+.proof-value {
+  white-space: nowrap;
+}
+
+/* Hero mockup removed — placeholder no longer needed */
+.mockup-placeholder {
+  display: none;
+  letter-spacing: 0.05em;
+}
+</style>
+
+  <link rel="canonical" href="https://nexgenspec.com/">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "NexGenSpec",
+    "description": "Professional home inspection app for iPhone and iPad. Capture evidence-grade photos, generate branded PDF reports, and deliver to clients fast.",
+    "url": "https://nexgenspec.com/",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "iOS, iPadOS",
+    "offers": [
+      {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "First 3 inspections free with full feature access; free-tier reports carry a small watermark"},
+      {"@type": "Offer", "name": "NexGenSpec Pro Monthly", "price": "49.00", "priceCurrency": "USD"},
+      {"@type": "Offer", "name": "NexGenSpec Pro Annual", "price": "449.00", "priceCurrency": "USD"}
+    ],
+    "creator": {"@type": "Organization", "name": "NexGenSpec", "email": "contact@nexgenspec.com"}
+  }
+  </script>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo"><picture><source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x"><img src="icon-hex.png?v=3" alt="NexGenSpec" class="nav-logo-icon" decoding="async" width="32" height="32"></picture>NexGenSpec</a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#cta" class="btn-early-access">Get Early Access</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <a href="#features" onclick="closeMobile()">Features</a>
+  <a href="#how-it-works" onclick="closeMobile()">How It Works</a>
+  <a href="#pricing" onclick="closeMobile()">Pricing</a>
+  <a href="#cta" class="btn-early-access" onclick="closeMobile()">Get Early Access</a>
+</div>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <canvas class="hero-canvas" id="hero-canvas" role="img" aria-label="Animated particle network background"></canvas>
+  <div class="hero-content">
+    <div class="hero-badge reveal">
+      <span class="hero-badge-dot"></span>
+      Launching Soon &mdash; Join the Waitlist
+    </div>
+    <h1 class="reveal reveal-delay-1">Built by Inspectors.<br>For Inspectors.</h1>
+    <p class="reveal reveal-delay-2">The professional home inspection app for iPhone &amp; iPad. Capture evidence-grade photos, generate PDF reports with your logo, and deliver to clients fast &mdash; designed by a licensed inspector in the Denver Metro area.</p>
+    <div class="hero-buttons reveal reveal-delay-3">
+      <a href="#cta" class="hero-cta">Get Early Access</a>
+    </div>
+  </div>
+  <!-- WAVE: Hero → Features (inside hero to eliminate gap) -->
+  <div class="wave-divider wave-bottom" style="background:transparent; position:absolute; bottom:-1px; left:0; right:0; z-index:2; margin:0;">
+    <svg viewBox="0 0 1440 80" preserveAspectRatio="none"><path d="M0,40 C360,80 1080,0 1440,40 L1440,80 L0,80 Z" fill="var(--gray-50)"/></svg>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section section-light" id="features" style="padding-top:60px;">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label reveal">Features</div>
+      <h2 class="section-title reveal reveal-delay-1">Everything you need<br>in the field.</h2>
+      <p class="section-subtitle reveal reveal-delay-2">Built for professional inspectors who demand speed, precision, and polished deliverables.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+        </div>
+        <h3>Structured Inspections</h3>
+        <p>Customizable templates for Roof, Electrical, Plumbing, HVAC, and more. Organize every inspection consistently.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </div>
+        <h3>Photo Capture &amp; Annotation</h3>
+        <p>Take photos, mark defects with arrows, circles, and PencilKit drawings. Evidence-grade documentation made easy.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <h3>LiDAR Room Scanning<sup style="font-size:0.6em;color:var(--blue);">*</sup></h3>
+        <p>Capture 3D room dimensions on iPad Pro and iPhone Pro models. Accurate measurements without a tape measure.</p>
+        <p style="font-size:0.75rem;color:#94a3b8;margin-top:6px;font-style:italic;"><sup>*</sup>Requires a device with a LiDAR sensor. <a href="#faq-lidar" style="color:var(--blue);">Supported devices</a></p>
+      </div>
+      <div class="feature-card reveal reveal-delay-3">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <h3>PDF Reports &amp; Invoicing</h3>
+        <p>Generate professional reports featuring your company logo and email them directly to clients &mdash; from finalized inspection to PDF in seconds.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-5">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        </div>
+        <h3>Apple Pencil Support</h3>
+        <p>Draw annotations directly on inspection photos with precision. Circle defects, add arrows, and sketch notes naturally.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <h3>Calendar Integration</h3>
+        <p>Schedule inspections and they appear automatically on your iPhone or iPad calendar &mdash; with the property address, client contact info, and job ID. NexGenSpec also checks your existing events and flags scheduling conflicts. Cancel an inspection and the event clears too.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/><circle cx="6.5" cy="7.5" r="2"/></svg>
+        </div>
+        <h3>Weather Logging</h3>
+        <p>Inspection-day weather conditions are pulled automatically from Open-Meteo and stamped onto the report &mdash; one less variable to defend later if a finding is challenged.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-3">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.39 0 4.68.94 6.36 2.64"/></svg>
+        </div>
+        <h3>Audit Trail &amp; Acceptance Logs</h3>
+        <p>Every signature, terms acceptance, and report finalization is timestamped on-device. If a finding is ever questioned, you have a clean, defensible record of what was signed and when.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-4">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Private by Design &mdash; Your Evidence, Your Control</h3>
+        <p>Your inspections sync across your own Apple devices through your <strong>private iCloud</strong> &mdash; only to your iCloud, never to a NexGenSpec server. Full-resolution photos stay on the device that captured them, and a Local-Only mode keeps everything on one device. Works offline in basements, attics, and crawl spaces. <strong>Recommended:</strong> enable iCloud Backup and export each finalized inspection to your Files app for long-term retention &mdash; the inspector is responsible for keeping their own records.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WAVE: Features → How It Works -->
+<div class="wave-divider wave-bottom" style="background:var(--gray-50);">
+  <svg viewBox="0 0 1440 80" preserveAspectRatio="none"><path d="M0,40 C480,0 960,80 1440,40 L1440,80 L0,80 Z" fill="var(--white)"/></svg>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how-it-works" style="padding-top:60px;padding-bottom:40px;">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label reveal">How It Works</div>
+      <h2 class="section-title reveal reveal-delay-1">Three steps.<br>Zero friction.</h2>
+      <p class="section-subtitle reveal reveal-delay-2">From walking the property to delivering the report, NexGenSpec keeps you moving.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-number">1</div>
+        <div class="step-connector"></div>
+        <div class="step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+        </div>
+        <h3>Inspect</h3>
+        <p>Walk the property, capture photos, notes, and defects organized by room. Templates keep you on track.</p>
+      </div>
+      <div class="step reveal reveal-delay-1">
+        <div class="step-number">2</div>
+        <div class="step-connector"></div>
+        <div class="step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <h3>Generate</h3>
+        <p>Generate a PDF report with your company logo &mdash; all findings, photos, and annotations included automatically.</p>
+      </div>
+      <div class="step reveal reveal-delay-2">
+        <div class="step-number">3</div>
+        <div class="step-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <h3>Send</h3>
+        <p>Email the report and invoice directly to your client. Professional delivery in seconds, not hours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL PROOF -->
+<section class="section" style="padding-top:40px;padding-bottom:40px;">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label reveal">Why NexGenSpec</div>
+      <h2 class="section-title reveal reveal-delay-1">Why Inspectors Choose NexGenSpec</h2>
+    </div>
+    <div class="proof-grid">
+      <div class="proof-tile reveal">
+        <div class="proof-value">3</div>
+        <div class="proof-label">Free inspections to start</div>
+      </div>
+      <div class="proof-tile reveal reveal-delay-1">
+        <div class="proof-value">100%</div>
+        <div class="proof-label">On-device. Inspections work offline.</div>
+      </div>
+      <div class="proof-tile reveal reveal-delay-2">
+        <div class="proof-value">0</div>
+        <div class="proof-label">Hidden fees or surprise charges</div>
+      </div>
+      <div class="proof-tile reveal reveal-delay-3">
+        <div class="proof-value">PDF</div>
+        <div class="proof-label">Branded reports with your logo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WAVE: How It Works → Pricing -->
+<div class="wave-divider wave-bottom" style="background:var(--white);">
+  <svg viewBox="0 0 1440 80" preserveAspectRatio="none"><path d="M0,40 C360,80 1080,0 1440,40 L1440,80 L0,80 Z" fill="var(--gray-50)"/></svg>
+</div>
+
+<!-- PRICING -->
+<section class="section section-light" id="pricing" style="padding-top:60px;">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label reveal">Pricing</div>
+      <h2 class="section-title reveal reveal-delay-1">Simple, transparent pricing.</h2>
+      <p class="section-subtitle reveal reveal-delay-2">One plan, every feature. No hidden fees, no surprises.</p>
+    </div>
+    <div class="pricing-grid">
+
+      <!-- PRO -->
+      <div class="pricing-card popular reveal">
+        <div class="popular-badge">Full Access</div>
+        <h3>NexGenSpec Pro</h3>
+        <div class="pricing-amount">$49</div>
+        <div class="pricing-period">per month</div>
+        <div class="pricing-options">
+          <span class="pricing-option">Monthly <strong>$49</strong></span>
+          <span class="pricing-option">Annual <strong>$449/yr</strong></span>
+        </div>
+        <ul class="pricing-features">
+          <li>Unlimited inspections</li>
+          <li>Clean, unwatermarked reports</li>
+        </ul>
+      </div>
+
+      <!-- TEAMS — COMING SOON -->
+      <div class="pricing-card coming-soon reveal reveal-delay-1">
+        <div class="coming-soon-badge">Coming Soon</div>
+        <h3>Teams</h3>
+        <div class="coming-soon-label">Built for firms</div>
+        <div class="coming-soon-sub">Everything in Pro, plus:</div>
+        <ul class="pricing-features">
+          <li>Team collaboration</li>
+          <li>Multi-user workspaces</li>
+          <li>Shared inspection templates</li>
+          <li>Admin dashboard</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="mailto:contact@nexgenspec.com?subject=Teams%20Interest&body=I'm%20interested%20in%20NexGenSpec%20Teams.%20My%20company%20has%20____%20inspectors." class="interest-btn">Notify Me</a>
+      </div>
+
+    </div>
+    <p class="pricing-note reveal"><strong>Start free</strong> &mdash; your first 3 inspections include full access to every feature: LiDAR scanning, Apple Pencil annotation, logo'd PDF export, and invoicing. Free-tier reports carry a small NexGenSpec watermark. No credit card required.</p>
+    <p class="pricing-fine reveal">All purchases through the App Store. Subscriptions auto-renew unless canceled 24 hours before the end of the current period. Save ~24% with annual billing.</p>
+  </div>
+</section>
+
+<!-- WAVE: Pricing → CTA -->
+<div class="wave-divider wave-bottom" style="background:var(--navy);">
+  <svg viewBox="0 0 1440 80" preserveAspectRatio="none"><path d="M0,0 L0,40 C480,0 960,80 1440,40 L1440,0 Z" fill="var(--gray-50)"/></svg>
+</div>
+
+<!-- CTA -->
+<section class="cta-section" id="cta">
+  <canvas class="cta-canvas" id="cta-canvas" role="img" aria-label="Animated particle network background"></canvas>
+  <div class="cta-content">
+    <div class="section-label reveal">Early Access</div>
+    <h2 class="section-title reveal reveal-delay-1" style="color:var(--white)">Launch Day Access. Zero Cost to Start.</h2>
+    <p class="section-subtitle reveal reveal-delay-2">Join the waitlist and get notified the moment NexGenSpec hits the App Store. First 3 inspections are free &mdash; no credit card required.</p>
+    <form class="waitlist-form reveal reveal-delay-3" action="https://formspree.io/f/mwvaezwb" method="POST" onsubmit="return handleWaitlist(event);">
+      <input type="email" name="email" class="waitlist-input" placeholder="you@example.com" required aria-label="Email address">
+      <input type="hidden" name="_subject" value="New NexGenSpec Waitlist Signup">
+      <button type="submit" class="waitlist-btn">Join Waitlist</button>
+    </form>
+    <p class="waitlist-note reveal reveal-delay-3">No spam, ever. Just a one-time launch notification.</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <picture><source type="image/webp" srcset="icon-hex-48.webp 1x, icon-hex.webp 2x"><img src="icon-hex.png?v=3" alt="NexGenSpec" class="footer-logo-icon" loading="lazy" decoding="async" width="32" height="32"></picture>NexGenSpec
+    </div>
+    <ul class="footer-links">
+      <li><a href="privacy.html">Privacy Policy</a></li>
+      <li><a href="terms.html">Terms of Service</a></li>
+      <li><a href="#" onclick="openModal('support-modal');return false;">Support</a></li>
+      <li><a href="mailto:contact@nexgenspec.com">Contact</a></li>
+    </ul>
+    <div class="footer-copy">&copy; 2026 NexGenSpec. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+// Nav scroll effect
+const nav = document.getElementById('nav');
+const onScroll = () => {
+  nav.classList.toggle('scrolled', window.scrollY > 20);
+};
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+
+// Mobile menu
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+hamburger.addEventListener('click', () => {
+  hamburger.classList.toggle('open');
+  mobileMenu.classList.toggle('open');
+});
+function closeMobile() {
+  hamburger.classList.remove('open');
+  mobileMenu.classList.remove('open');
+}
+
+// Reveal on scroll — with fallback for elements already in viewport
+const reveals = document.querySelectorAll('.reveal');
+
+// Fallback: immediately reveal anything already in viewport on load
+function revealIfVisible(el) {
+  var rect = el.getBoundingClientRect();
+  if (rect.top < window.innerHeight + 40 && rect.bottom > 0) {
+    el.classList.add('visible');
+    return true;
+  }
+  return false;
+}
+
+// Run fallback on load for all reveal elements
+reveals.forEach(function(el) { revealIfVisible(el); });
+
+// Observer for elements that scroll into view later
+var observer = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.05, rootMargin: '0px 0px -20px 0px' });
+reveals.forEach(function(el) {
+  if (!el.classList.contains('visible')) observer.observe(el);
+});
+
+// Safety net: after 2s, force-reveal anything still hidden
+setTimeout(function() {
+  document.querySelectorAll('.reveal:not(.visible)').forEach(function(el) {
+    el.classList.add('visible');
+  });
+}, 2000);
+
+// Legal modals
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.querySelectorAll('.legal-modal-overlay').forEach(el => {
+  el.addEventListener('click', (e) => {
+    if (e.target === el) closeModal(el.id);
+  });
+});
+
+// Formspree form ID: mwvaezwb
+// Waitlist form handler (Formspree integration)
+function handleWaitlist(e) {
+  e.preventDefault();
+  var form = e.target;
+  var data = new FormData(form);
+  var btn = form.querySelector('.waitlist-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+  fetch(form.action, {
+    method: 'POST',
+    body: data,
+    headers: { 'Accept': 'application/json' }
+  }).then(function(response) {
+    if (response.ok) {
+      form.innerHTML = '<p style="font-family:inherit;font-size:1rem;color:var(--gray-400);text-align:center;margin:0;">You\u2019re on the list. We\u2019ll notify you at launch.</p>';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Join Waitlist';
+      form.innerHTML = '<p style="font-family:inherit;font-size:1rem;color:var(--gray-400);text-align:center;margin:0;">Something went wrong. Email us at <a href="mailto:contact@nexgenspec.com" style="color:var(--cyan);">contact@nexgenspec.com</a></p>';
+    }
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = 'Join Waitlist';
+    form.innerHTML = '<p style="font-family:inherit;font-size:1rem;color:var(--gray-400);text-align:center;margin:0;">Something went wrong. Email us at <a href="mailto:contact@nexgenspec.com" style="color:var(--cyan);">contact@nexgenspec.com</a></p>';
+  });
+  return false;
+}
+
+// Auto-open logic moved to a <script> tag AFTER the modal HTML (bottom of page)
+
+// ── Particle Network ──
+(function() {
+  const canvas = document.getElementById('hero-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let w, h, particles, mouse = { x: -999, y: -999, active: false };
+  const PARTICLE_COUNT = 90;
+  const CONNECT_DIST = 140;
+  const MOUSE_DIST = 260;
+  const MOUSE_ATTRACT = 0.012;
+
+  function resize() {
+    const hero = document.getElementById('hero');
+    w = canvas.width = hero.offsetWidth;
+    h = canvas.height = hero.offsetHeight;
+  }
+
+  function createParticles() {
+    particles = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        r: Math.random() * 1.8 + 0.8,
+        opacity: Math.random() * 0.5 + 0.3
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw connections between particles
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < CONNECT_DIST) {
+          const alpha = (1 - dist / CONNECT_DIST) * 0.15;
+          ctx.strokeStyle = 'rgba(31, 110, 245, ' + alpha + ')';
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.stroke();
+        }
+      }
+
+      // Mouse → particle connections (brighter, thicker)
+      if (mouse.active) {
+        const mdx = particles[i].x - mouse.x;
+        const mdy = particles[i].y - mouse.y;
+        const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+        if (mDist < MOUSE_DIST) {
+          const t = 1 - mDist / MOUSE_DIST;
+          const alpha = t * 0.55;
+          ctx.strokeStyle = 'rgba(38, 209, 238, ' + alpha + ')';
+          ctx.lineWidth = 1.2 + t * 1.2;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(mouse.x, mouse.y);
+          ctx.stroke();
+
+          // Boost particle brightness near cursor
+          particles[i]._glow = Math.max(particles[i]._glow || 0, t);
+        }
+      }
+    }
+
+    // Draw mouse glow aura
+    if (mouse.active) {
+      const grad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 120);
+      grad.addColorStop(0, 'rgba(38, 209, 238, 0.12)');
+      grad.addColorStop(0.5, 'rgba(31, 110, 245, 0.04)');
+      grad.addColorStop(1, 'rgba(31, 110, 245, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 120, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bright cursor dot
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(38, 209, 238, 0.9)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(38, 209, 238, 0.25)';
+      ctx.fill();
+    }
+
+    // Draw particles
+    for (const p of particles) {
+      const glow = p._glow || 0;
+      const baseOpacity = p.opacity + glow * 0.4;
+      const radius = p.r + glow * 1.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(38, 209, 238, ' + Math.min(baseOpacity, 1) + ')';
+      ctx.fill();
+      // Outer glow ring for particles near cursor
+      if (glow > 0.3) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(38, 209, 238, ' + (glow * 0.15) + ')';
+        ctx.fill();
+      }
+      p._glow = 0; // reset each frame
+    }
+  }
+
+  function update() {
+    for (const p of particles) {
+      // Gentle attraction toward mouse
+      if (mouse.active) {
+        const dx = mouse.x - p.x;
+        const dy = mouse.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < MOUSE_DIST && dist > 30) {
+          p.vx += (dx / dist) * MOUSE_ATTRACT;
+          p.vy += (dy / dist) * MOUSE_ATTRACT;
+        }
+      }
+      // Dampen so particles don't fly off
+      p.vx *= 0.995;
+      p.vy *= 0.995;
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+    }
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  const hero = document.getElementById('hero');
+  hero.addEventListener('mousemove', (e) => {
+    const rect = hero.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+    mouse.active = true;
+  });
+  hero.addEventListener('mouseleave', () => { mouse.x = -999; mouse.y = -999; mouse.active = false; });
+
+  window.addEventListener('resize', () => { resize(); createParticles(); });
+  resize();
+  createParticles();
+  loop();
+})();
+
+// ── CTA Particle Network (with mouse interaction) ──
+(function() {
+  const canvas = document.getElementById('cta-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let w, h, particles, mouse = { x: -999, y: -999, active: false };
+  const COUNT = 70;
+  const DIST = 140;
+  const MOUSE_DIST = 260;
+  const MOUSE_ATTRACT = 0.012;
+
+  function resize() {
+    const section = canvas.parentElement;
+    w = canvas.width = section.offsetWidth;
+    h = canvas.height = section.offsetHeight;
+  }
+
+  function create() {
+    particles = [];
+    for (let i = 0; i < COUNT; i++) {
+      particles.push({
+        x: Math.random() * w, y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5,
+        r: Math.random() * 1.8 + 0.8, opacity: Math.random() * 0.5 + 0.3
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < DIST) {
+          ctx.strokeStyle = 'rgba(38, 209, 238, ' + ((1 - dist / DIST) * 0.15) + ')';
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.stroke();
+        }
+      }
+      if (mouse.active) {
+        const mdx = particles[i].x - mouse.x;
+        const mdy = particles[i].y - mouse.y;
+        const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+        if (mDist < MOUSE_DIST) {
+          const t = 1 - mDist / MOUSE_DIST;
+          ctx.strokeStyle = 'rgba(38, 209, 238, ' + (t * 0.55) + ')';
+          ctx.lineWidth = 1.2 + t * 1.2;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(mouse.x, mouse.y);
+          ctx.stroke();
+          particles[i]._glow = Math.max(particles[i]._glow || 0, t);
+        }
+      }
+    }
+    if (mouse.active) {
+      const grad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 120);
+      grad.addColorStop(0, 'rgba(38, 209, 238, 0.12)');
+      grad.addColorStop(0.5, 'rgba(31, 110, 245, 0.04)');
+      grad.addColorStop(1, 'rgba(31, 110, 245, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 120, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(38, 209, 238, 0.9)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(38, 209, 238, 0.25)';
+      ctx.fill();
+    }
+    for (const p of particles) {
+      const glow = p._glow || 0;
+      const baseOpacity = p.opacity + glow * 0.4;
+      const radius = p.r + glow * 1.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(38, 209, 238, ' + Math.min(baseOpacity, 1) + ')';
+      ctx.fill();
+      if (glow > 0.3) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(38, 209, 238, ' + (glow * 0.15) + ')';
+        ctx.fill();
+      }
+      p._glow = 0;
+    }
+  }
+
+  function update() {
+    for (const p of particles) {
+      if (mouse.active) {
+        const dx = mouse.x - p.x;
+        const dy = mouse.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < MOUSE_DIST && dist > 30) {
+          p.vx += (dx / dist) * MOUSE_ATTRACT;
+          p.vy += (dy / dist) * MOUSE_ATTRACT;
+        }
+      }
+      p.vx *= 0.995;
+      p.vy *= 0.995;
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+    }
+  }
+
+  function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+  const section = document.getElementById('cta');
+  section.addEventListener('mousemove', (e) => {
+    const rect = section.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+    mouse.active = true;
+  });
+  section.addEventListener('mouseleave', () => { mouse.x = -999; mouse.y = -999; mouse.active = false; });
+
+  window.addEventListener('resize', () => { resize(); create(); });
+  resize(); create(); loop();
+})();
+</script>
+
+<!-- PRIVACY POLICY MODAL -->
+<div class="legal-modal-overlay" id="privacy-modal">
+  <div class="legal-modal">
+    <div class="legal-modal-header">
+      <h3>Privacy Policy</h3>
+      <button class="legal-modal-close" onclick="closeModal('privacy-modal')">&times;</button>
+    </div>
+    <div class="legal-modal-body">
+      <div class="legal-modal-date">Effective Date: May 30, 2026</div>
+      <p>NexGenSpec ("we," "our," or "the app") is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your rights.</p>
+
+      <h4>What We Collect</h4>
+      <ul>
+        <li><strong>Account Information:</strong> Email address and password used to create your account. If you sign in with Apple, we receive your Apple ID identifier and optional email.</li>
+        <li><strong>Inspection Data:</strong> Client names, property addresses, inspection notes, photos, annotations, signatures, LiDAR scans, and videos you create within the app. This data is stored locally on your device.</li>
+        <li><strong>Location Data:</strong> When you grant permission, we use your device location to auto-fill property addresses and to record inspection-day weather. For weather, your approximate location is sent to Open-Meteo (a third-party weather API) to retrieve the conditions stamped onto your report. Location is used only at the moment of the request, is not stored on our servers, and is not used for tracking.</li>
+        <li><strong>Device Information:</strong> Device model, OS version, and crash logs are collected via Firebase Crashlytics to diagnose and fix issues.</li>
+        <li><strong>Purchase Information:</strong> Subscription status is managed by Apple. We do not collect or store your payment details.</li>
+      </ul>
+
+      <h4>How We Use Your Data</h4>
+      <ul>
+        <li>To provide the core inspection workflow (reports, photos, annotations, signatures)</li>
+        <li>To generate PDF reports and invoices</li>
+        <li>To diagnose crashes and improve app stability</li>
+        <li>To verify your subscription entitlement</li>
+        <li>If you grant Calendar access, to add inspection appointments to a calendar you choose and flag scheduling conflicts with your existing events &mdash; calendar data stays on your device</li>
+      </ul>
+
+      <h4>Data Storage and Security</h4>
+      <p>Inspection data is stored on your device with iOS file protection enabled. With iCloud Sync on (the default), your inspections &mdash; the inspection record, report PDFs, thumbnails, and LiDAR floor plans &mdash; also sync across the Apple devices on your iCloud account, through your <strong>private</strong> iCloud (Apple CloudKit): only to your iCloud, never to a NexGenSpec server, and NexGenSpec cannot access them. Full-resolution photos, videos, and 3D scans stay on the device that captured them. A Local-Only mode in Settings keeps inspections on a single device. Sync is not a backup &mdash; deletions propagate across your devices. Crash logs are sent to Firebase Crashlytics (Google) for diagnostics only.</p>
+
+      <h4>Third-Party Services</h4>
+      <ul>
+        <li><strong>Firebase Authentication:</strong> Account sign-in</li>
+        <li><strong>Firebase Crashlytics:</strong> Crash reporting and diagnostics</li>
+        <li><strong>Apple StoreKit:</strong> Subscription management and purchase verification</li>
+        <li><strong>Open-Meteo:</strong> Inspection-day weather lookup &mdash; receives your approximate location to return weather conditions for your report</li>
+      </ul>
+      <p>We do not sell, rent, or share your personal information with third parties for marketing purposes.</p>
+
+      <h4>Your Rights</h4>
+      <ul>
+        <li>You can delete your account and all associated data in the app: Settings &rarr; Delete Account (permanent, cannot be undone). You can also contact contact@nexgenspec.com and we will process the request manually</li>
+        <li>You can deny or revoke location, camera, microphone, calendar, and photo library permissions at any time in iOS Settings</li>
+        <li>You can request a copy of any data we hold about you</li>
+      </ul>
+
+      <h4>Children's Privacy</h4>
+      <p>NexGenSpec is not directed at children under 13. We do not knowingly collect personal information from children.</p>
+
+      <h4>Changes to This Policy</h4>
+      <p>We may update this policy from time to time. We will notify you of material changes through the app or via email.</p>
+
+      <h4>Contact Us</h4>
+      <p>If you have questions about this privacy policy, contact us at: <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- TERMS OF SERVICE MODAL -->
+<div class="legal-modal-overlay" id="terms-modal">
+  <div class="legal-modal">
+    <div class="legal-modal-header">
+      <h3>Terms of Service</h3>
+      <button class="legal-modal-close" onclick="closeModal('terms-modal')">&times;</button>
+    </div>
+    <div class="legal-modal-body">
+      <div class="legal-modal-date">Effective Date: May 30, 2026</div>
+      <p>By using NexGenSpec ("the app"), you agree to these Terms of Service. If you do not agree, do not use the app. <strong>This summary covers the key terms; the complete Terms of Service &mdash; including data-retention obligations, the liability cap, and the class-action waiver &mdash; are at <a href="terms.html">/terms.html</a> and are also presented in-app during onboarding.</strong></p>
+
+      <h4>1. Use of the App</h4>
+      <p>NexGenSpec is a field inspection tool designed for professional home inspectors. You are responsible for the accuracy and completeness of all inspection data you enter. NexGenSpec is a tool to assist your workflow &mdash; it does not replace professional judgment, licensing requirements, or applicable inspection standards.</p>
+
+      <h4>2. Accounts</h4>
+      <p>You must create an account to use the app. You are responsible for maintaining the confidentiality of your login credentials. You agree to notify us immediately of any unauthorized use of your account.</p>
+
+      <h4>3. Subscriptions and Payments</h4>
+      <p>NexGenSpec offers an optional Pro subscription:</p>
+      <ul>
+        <li>Free &mdash; 3 inspections with full access to every feature (LiDAR, Apple Pencil annotation, logo'd PDF export, invoicing); free-tier reports carry a small NexGenSpec watermark; no credit card required</li>
+        <li>Pro Monthly: $49/month &mdash; Unlimited inspections and clean, unwatermarked reports</li>
+        <li>Pro Annual: $449/year &mdash; Same as Pro Monthly, billed annually (~24% savings)</li>
+      </ul>
+      <p>Subscriptions are billed through your Apple ID account. Subscriptions automatically renew unless canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions in your device's App Store account settings. Any unused portion of a free trial, if offered, is forfeited when you purchase a subscription.</p>
+
+      <h4>4. Free and Pro Features</h4>
+      <p>Free users can create up to 3 inspections with full access to every feature; free-tier reports carry a small NexGenSpec watermark. Pro subscribers unlock unlimited inspections and clean, unwatermarked reports.</p>
+
+      <h4>5. Intellectual Property</h4>
+      <p>The app, its design, code, branding, and content are owned by NexGenSpec. You retain ownership of all inspection data, photos, and reports you create.</p>
+
+      <h4>6. Your Data</h4>
+      <p>Inspection data is stored on your device and, with iCloud Sync on (the default), syncs across your own Apple devices through your private iCloud &mdash; never to a NexGenSpec server, and NexGenSpec cannot access it. A Local-Only mode keeps inspections on one device. Sync is not a backup: you are responsible for backing up your device. See our Privacy Policy for details on data handling.</p>
+
+      <h4>7. Disclaimer of Warranties</h4>
+      <p>The app is provided "as is" without warranties of any kind, express or implied. We do not guarantee the app will be error-free or uninterrupted. NexGenSpec is not liable for any inspection outcomes, property assessments, or professional decisions made using the app.</p>
+
+      <h4>8. Limitation of Liability</h4>
+      <p>To the maximum extent permitted by law, NexGenSpec shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the app.</p>
+
+      <h4>9. Termination</h4>
+      <p>We may suspend or terminate your access if you violate these terms. You may stop using the app at any time and cancel your subscription through App Store settings.</p>
+
+      <h4>10. Changes to These Terms</h4>
+      <p>We may update these terms from time to time. Continued use of the app after changes constitutes acceptance of the new terms.</p>
+
+      <h4>11. Governing Law</h4>
+      <p>These terms are governed by the laws of the State of Colorado, USA, and any dispute will be brought exclusively in the state or federal courts located in Denver, Colorado. <strong>Canadian users:</strong> the foregoing does not deprive you of any non-waivable consumer-protection rights granted by your province or territory of residence. Disputes are resolved on an individual basis only; class actions and consolidated proceedings are not permitted. See the <a href="terms.html">full Terms</a> for details.</p>
+
+      <h4>Contact Us</h4>
+      <p>If you have questions about these terms, contact us at: <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- SUPPORT MODAL -->
+<div class="legal-modal-overlay" id="support-modal">
+  <div class="legal-modal">
+    <div class="legal-modal-header">
+      <h3>Support</h3>
+      <button class="legal-modal-close" onclick="closeModal('support-modal')">&times;</button>
+    </div>
+    <div class="legal-modal-body">
+      <h4>Need Help?</h4>
+      <p>We're here to help you get the most out of NexGenSpec. If you're experiencing issues or have questions, reach out and we'll get back to you as quickly as possible.</p>
+
+      <h4>Contact Support</h4>
+      <p>Email us at: <a href="mailto:contact@nexgenspec.com">contact@nexgenspec.com</a></p>
+      <p>Please include as much detail as possible, including your device model, iOS version, and a description of the issue.</p>
+
+      <h4>Common Questions</h4>
+
+      <h4>How do I manage or cancel my subscription?</h4>
+      <p>Open your device's Settings &gt; Apple ID &gt; Subscriptions. You can change or cancel your NexGenSpec subscription there. Cancellations take effect at the end of the current billing period.</p>
+
+      <h4>How do I delete my account?</h4>
+      <p>In the app, go to Settings &gt; Delete Account. This permanently removes all your data and cannot be undone.</p>
+
+      <h4 id="faq-lidar">Which devices support LiDAR scanning?</h4>
+      <p>LiDAR scanning requires an iPhone Pro or iPad Pro with a LiDAR sensor (iPhone 12 Pro and later, iPad Pro 2020 and later). On devices without a LiDAR sensor the feature is hidden in the app — every other capability still works as expected.</p>
+
+      <h4>How do I restore my subscription on a new device?</h4>
+      <p>Sign in with the same Apple ID you used to purchase your subscription. Your Pro access will be restored automatically. If not, use the "Restore Purchases" option on the upgrade screen.</p>
+
+      <h4>Is my data backed up?</h4>
+      <p>Inspection data is stored on your device and included in your standard iCloud device backups. With iCloud Sync on (the default), your inspection records, report PDFs, and floor plans also sync across your own Apple devices through your private iCloud &mdash; but sync is <strong>not</strong> a backup: deletions propagate, and full-resolution photos and videos live only on the device that captured them. NexGenSpec never stores your data on its own servers.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Auto-open modal from URL path — MUST be after modal HTML -->
+<script>
+(function() {
+  var path = window.location.pathname.replace(/^\//, '').replace(/\.html$/, '').replace(/\/$/, '');
+  var hash = window.location.hash.replace('#', '');
+  var map = { 'privacy': 'privacy-modal', 'terms': 'terms-modal', 'support': 'support-modal' };
+  var target = map[path] || map[hash];
+  if (target) {
+    var el = document.getElementById(target);
+    if (el) {
+      el.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+})();
+</script>
+</body>
+</html>
