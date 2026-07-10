@@ -177,6 +177,12 @@ struct NexGenSpecApp: App {
                     // cold-launch / account-switch case.)
                     if newPhase == .active {
                         syncCoordinator.pullNow()
+                        // Build 32: with no CloudKit push subscription, a device that
+                        // stays foregrounded while another edits would not converge.
+                        // Poll a live-pull while active; stop when off-screen.
+                        syncCoordinator.startForegroundPolling()
+                    } else {
+                        syncCoordinator.stopForegroundPolling()
                     }
                 }
         }
