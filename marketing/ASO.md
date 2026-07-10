@@ -93,7 +93,7 @@ REQUIREMENTS
 
 SUBSCRIPTION
 
-Create up to 3 inspections free with every feature included; free-tier reports carry a small NexGenSpec watermark. NexGenSpec Pro unlocks unlimited inspections and clean, watermark-free reports. Monthly or annual billing via your Apple ID. Cancel anytime in Settings > Subscriptions.
+Create up to 3 full inspections free; free-tier reports carry a small NexGenSpec watermark. NexGenSpec Pro unlocks unlimited inspections and clean, watermark-free reports. Monthly or annual billing via your Apple ID. Cancel anytime in Settings > Subscriptions.
 
 TERMS
 

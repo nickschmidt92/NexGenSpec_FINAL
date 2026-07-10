@@ -37,7 +37,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlimited inspections, branded PDFs, LiDAR scanning, photo annotations, invoicing",
+              "description" : "Unlimited inspections and watermark-free, branded PDF reports (LiDAR, annotations, and invoicing are free)",
               "displayName" : "Pro Annual",
               "locale" : "en_US"
             }
@@ -62,7 +62,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlimited inspections, branded PDFs, LiDAR scanning, photo annotations, invoicing",
+              "description" : "Unlimited inspections and watermark-free, branded PDF reports (LiDAR, annotations, and invoicing are free)",
               "displayName" : "Pro Monthly",
               "locale" : "en_US"
             }
