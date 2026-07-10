@@ -70,7 +70,7 @@ struct ItemDetailView: View {
                         Text(status.displayName).tag(status)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .disabled(isLocked)
                 Toggle("Include in Report", isOn: bind(\.includeInReport))
                     .disabled(isLocked)
@@ -86,7 +86,7 @@ struct ItemDetailView: View {
                             Text(s.displayName).tag(Severity?.some(s))
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     .disabled(isLocked)
                 } header: {
                     Text("Defect Severity")
@@ -409,8 +409,8 @@ struct ItemDetailView: View {
                                     }
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
-                                    .background(Color.blue.opacity(0.1))
-                                    .foregroundStyle(.blue)
+                                    .background(AppColor.accentSoft)
+                                    .foregroundStyle(AppColor.accent)
                                     .clipShape(Capsule())
                                 }
                             }

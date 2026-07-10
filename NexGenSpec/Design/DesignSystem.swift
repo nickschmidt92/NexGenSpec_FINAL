@@ -396,6 +396,24 @@ extension View {
         modifier(CardStyle())
     }
 
+    /// Card SURFACE only (elevated background + rounded border + soft shadow) --
+    /// no padding, so it's a safe drop-in for views that already own their
+    /// padding. Replaces the old systemGray6/cornerRadius(8) look with the
+    /// design-system card so the inspection screen matches the Dashboard.
+    func cardSurface() -> some View {
+        self
+            .background(
+                LinearGradient(colors: [AppColor.brandBlue.opacity(0.04), AppColor.elevatedSurface],
+                               startPoint: .top, endPoint: .bottom)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(AppColor.border, lineWidth: 1)
+            )
+            .shadow(color: AppColor.cardShadow, radius: 8, x: 0, y: 3)
+    }
+
     func elevatedCard() -> some View {
         modifier(ElevatedCardStyle())
     }
