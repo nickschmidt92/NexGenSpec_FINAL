@@ -20,6 +20,10 @@ struct SignatureView: View {
     @Binding var version: InspectionVersion
     var onComplete: () -> Void
     @Environment(\.dismiss) private var dismiss
+    // Gate the comfortable iPad/Mac sheet size to the regular width class.
+    // Forcing minWidth:720 on a compact-width iPhone rammed the Form to
+    // 720pt inside a ~390pt sheet → the layout blew out horizontally.
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var inspectorSignature: UIImage?
     @State private var clientSignature: UIImage?
     @State private var showSaveError = false
@@ -84,7 +88,10 @@ struct SignatureView: View {
                 }
             }
         }
-        .frame(minWidth: 720, minHeight: 800)
+        .frame(
+            minWidth: hSizeClass == .regular ? 720 : nil,
+            minHeight: hSizeClass == .regular ? 800 : nil
+        )
         .presentationDetents([.large])
         .alert("Couldn't Save Signature", isPresented: $showSaveError) {
             Button("OK") { showSaveError = false }

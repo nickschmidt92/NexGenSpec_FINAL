@@ -232,7 +232,7 @@ struct InspectionOverviewView: View {
                             .foregroundStyle(.secondary)
                         }
                         .padding(12)
-                        .background(Color.blue.opacity(0.08))
+                        .background(AppColor.accentSoft)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
 
@@ -502,8 +502,7 @@ struct InspectionOverviewView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Client and property details")
     }
@@ -558,8 +557,7 @@ struct InspectionOverviewView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
     }
 
     // MARK: - Reminders
@@ -800,8 +798,7 @@ struct InspectionOverviewView: View {
                         }
                     }
                     .padding(8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+                    .cardSurface()
                 }
             }
         }
@@ -1048,8 +1045,7 @@ struct InspectionOverviewView: View {
             }
         }
         .padding(8)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
     }
 
     private func loadLiDARScans() {
@@ -1363,8 +1359,7 @@ struct InspectionOverviewView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
     }
 
     @ViewBuilder
@@ -1385,8 +1380,7 @@ struct InspectionOverviewView: View {
                 .autocapitalization(.none)
         }
         .padding(10)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
     }
 
     /// Bridges an optional `RealEstateAgent` field through to a `String`
@@ -1469,8 +1463,7 @@ private struct SummaryBadge: View {
         }
         .frame(maxWidth: .infinity)
         .padding(8)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
     }
 }
 
@@ -1593,8 +1586,7 @@ private struct SchedulingCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .cardSurface()
         .onAppear {
             calendarService.refreshAuthorizationState()
         }
