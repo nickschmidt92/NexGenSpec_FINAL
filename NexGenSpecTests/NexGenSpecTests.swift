@@ -3444,6 +3444,18 @@ final class ExportNamingTests: XCTestCase {
         }
     }
 
+    func testFreshShareDirectoryAlwaysReapTagged() {
+        // The share dir must ALWAYS carry the `ngs-export-` reap prefix and sit
+        // directly in temp, so no shared-PII artifact can land in un-reaped bare
+        // temp and outlive account deletion (5.1.1(v)). Regression guard for the
+        // former `(try? …) ?? temporaryDirectory` fallback.
+        let dir = ExportNaming.freshShareDirectory()
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertTrue(dir.lastPathComponent.hasPrefix("ngs-export-"), dir.lastPathComponent)
+        XCTAssertEqual(dir.deletingLastPathComponent().standardizedFileURL.path,
+                       FileManager.default.temporaryDirectory.standardizedFileURL.path)
+    }
+
     func testPreparedShareURLRenamesOnlyWhenNeeded() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("ngs-share-test-\(UUID().uuidString)", isDirectory: true)

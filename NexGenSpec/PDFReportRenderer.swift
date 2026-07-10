@@ -185,9 +185,9 @@ public enum PDFReportRenderer {
             filenameStem = "InspectionReport_\(Self.filenameDateFormatter.string(from: Date()))"
         }
         // Land the shared PDF in a fresh, reap-tagged temp dir (ngs-export-*) so it
-        // carries the clean stem AND is swept by the temp / account-deletion wipes.
-        // `try?` keeps a share working even if the tagged dir can't be created.
-        let shareDir = (try? ExportNaming.freshShareDirectory()) ?? FileManager.default.temporaryDirectory
+        // carries the clean stem AND is always swept by the temp / account-deletion
+        // wipes — freshShareDirectory() never yields un-reaped bare temp.
+        let shareDir = ExportNaming.freshShareDirectory()
         let outURL = shareDir.appendingPathComponent("\(filenameStem).pdf")
         do {
             try FileSecurity.writeProtected(pdfData, to: outURL)

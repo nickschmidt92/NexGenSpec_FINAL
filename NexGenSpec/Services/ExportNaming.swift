@@ -64,13 +64,21 @@ enum ExportNaming {
 
     /// A fresh, uniquely-named temp directory for user-facing share artifacts
     /// (the shared PDF, the text summary). Prefixed `ngs-export-` so
-    /// `ReportExportService.tempExportPrefixes` reaps it in both the routine
-    /// temp sweep and the Account-Deletion wipe — client PII must never outlive
-    /// account deletion (Guideline 5.1.1(v)).
-    static func freshShareDirectory() throws -> URL {
+    /// `ReportExportService.tempExportPrefixes` reaps it in both the routine temp
+    /// sweep and the Account-Deletion wipe — client PII must never outlive account
+    /// deletion (Guideline 5.1.1(v)).
+    ///
+    /// Non-throwing on purpose: it ALWAYS returns an `ngs-export-`-prefixed URL, so
+    /// a caller can never be pushed onto a bare-temp fallback whose filename would
+    /// escape the reap prefixes. Directory creation is best-effort here; the
+    /// protected write that follows (`FileSecurity.writeProtected` /
+    /// `copyProtectedItem`) re-creates the dir if this attempt didn't, and if that
+    /// write can't create it either it throws — so no un-reaped PII file is ever
+    /// left behind.
+    static func freshShareDirectory() -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ngs-export-\(UUID().uuidString)", isDirectory: true)
-        try FileSecurity.ensureProtectedDirectory(dir)
+        try? FileSecurity.ensureProtectedDirectory(dir)
         return dir
     }
 
@@ -84,7 +92,7 @@ enum ExportNaming {
     static func preparedShareURL(for originalURL: URL, desiredName: String) -> URL {
         guard originalURL.lastPathComponent != desiredName else { return originalURL }
         do {
-            let dest = try freshShareDirectory().appendingPathComponent(desiredName)
+            let dest = freshShareDirectory().appendingPathComponent(desiredName)
             try FileSecurity.copyProtectedItem(from: originalURL, to: dest)
             return dest
         } catch {

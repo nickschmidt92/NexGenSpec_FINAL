@@ -1520,7 +1520,7 @@ enum ReportExporter {
             report += "\n"
         }
         do {
-            let dir = (try? ExportNaming.freshShareDirectory()) ?? FileManager.default.temporaryDirectory
+            let dir = ExportNaming.freshShareDirectory()
             let url = dir.appendingPathComponent("\(ExportNaming.baseStem(for: inspection))_Summary.txt")
             if let data = report.data(using: .utf8) {
                 try FileSecurity.writeProtected(data, to: url)
