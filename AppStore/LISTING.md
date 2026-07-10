@@ -20,7 +20,7 @@ https://nexgenspec.com
 ## Copyright
 2026 NexGenSpec
 
-## Description (3,965 chars — VERIFIED; paste lines 24–54 ONLY, ending at the PLATFORM paragraph. ASC hard cap = 4,000. The Terms/Privacy URLs are NOT part of the Description — they go in ASC's own fields, see "## Store URLs" below.)
+## Description (3,840 chars — VERIFIED; paste lines 24–53 ONLY, ending at the PLATFORM paragraph. ASC hard cap = 4,000. The Terms/Privacy URLs are NOT part of the Description — they go in ASC's own fields, see "## Store URLs" below. NOTE: "AI defect detection" bullet removed 2026-07-10 — the feature (generic VNClassify keyword-map) usually suggests nothing on real photos, so marketing it was a 2.3.1 risk; feature stays in-app, unadvertised until improved.)
 Professional inspection reports for home AND commercial property, built on iPhone, iPad, and Apple Silicon Mac. NexGenSpec lets residential and building inspectors capture a job, document every defect with photos, and hand the client a signed, polished PDF before leaving the site. One workflow for single-family homes, multi-unit buildings, and commercial assets.
 
 Start from a built-in inspection template or build your own. Walk the property, snap photos, mark up findings, tag defects by severity, and finalize a tamper-evident report your clients and their agents can trust.
@@ -28,7 +28,6 @@ Start from a built-in inspection template or build your own. Walk the property, 
 KEY FEATURES
 - LiDAR room capture: scan a space in 3D and auto-generate a top-down floor plan plus a USDZ model. LiDAR scanning requires a compatible device.
 - Photo annotation: draw freehand, add arrows and circles, pick red/yellow/green, with full undo/redo. Works with Apple Pencil on iPad and with your finger too. Marks stay editable and never overwrite the original photo.
-- AI defect detection: on-device photo analysis suggests defect tags as you work; accepted tags carry through to the report.
 - Structured findings: rate each item's status (Inspected / Not Inspected / Not Present) and severity, write up Location, Observed, Implication, Recommendation, and comments, add a contractor referral tag, or omit any item from the client report.
 - Add custom items to any section on the fly, beyond your template.
 - Attach it all: in-app photos and walk-through video, plus drone and thermal imagery you import (added from your photo library, e.g. AirDropped media), organized right on the inspection.
