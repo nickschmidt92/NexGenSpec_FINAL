@@ -50,33 +50,26 @@ struct PaywallView: View {
 
                         premiumFeaturesList
 
-                        if subscriptions.products.isEmpty {
-                            VStack(spacing: 8) {
-                                ProgressView("Loading purchase options…")
-                                if let err = subscriptions.lastError {
-                                    #if DEBUG
-                                    Text("Debug: \(err)")
-                                        .font(.caption)
-                                        .foregroundColor(.red)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal)
-                                    #else
-                                    Text("Unable to load purchase options. Please check your connection and try again.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal)
-                                    #endif
-                                }
-                                Button("Retry") {
-                                    Task { await subscriptions.refresh() }
-                                }
-                                .font(.caption)
-                            }
-                            .padding()
+                        #if DEBUG
+                        if ScreenshotMode.isActive {
+                            // Screenshot capture: always render the static rows.
+                            // They mirror purchaseButton pixel-for-pixel with the
+                            // FINAL App Store Connect display names/prices — the
+                            // sandbox otherwise serves whatever stale metadata is
+                            // currently saved in ASC.
+                            screenshotStaticPlans
+                        } else if subscriptions.products.isEmpty {
+                            emptyProductsBlock
                         } else {
                             subscriptionOptions
                         }
+                        #else
+                        if subscriptions.products.isEmpty {
+                            emptyProductsBlock
+                        } else {
+                            subscriptionOptions
+                        }
+                        #endif
 
                         legalText
 
@@ -160,6 +153,84 @@ struct PaywallView: View {
         .contentShape(Rectangle())
         .padding(.vertical, 4)
     }
+
+    /// Shown while products are loading (or failed to load): spinner,
+    /// error detail, and a retry button. Extracted verbatim from the body.
+    private var emptyProductsBlock: some View {
+        VStack(spacing: 8) {
+            ProgressView("Loading purchase options…")
+            if let err = subscriptions.lastError {
+                #if DEBUG
+                Text("Debug: \(err)")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                #else
+                Text("Unable to load purchase options. Please check your connection and try again.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                #endif
+            }
+            Button("Retry") {
+                Task { await subscriptions.refresh() }
+            }
+            .font(.caption)
+        }
+        .padding()
+    }
+
+    #if DEBUG
+    /// Screenshot-only (never compiled into Release): static plan rows that
+    /// mirror subscriptionOptions/purchaseButton exactly, using the display
+    /// names, descriptions, and prices configured in App Store Connect for
+    /// com.nexgenspec.annualv1 / com.nexgenspec.monthlyv1 — what the live
+    /// paywall shows once StoreKit serves real products.
+    private var screenshotStaticPlans: some View {
+        VStack(spacing: 12) {
+            Text("Choose Your Plan")
+                .font(.headline)
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            staticPlanRow(
+                name: "NexGenSpec Pro — Annual",
+                description: "Unlimited inspections and watermark-free, branded PDF reports with your company logo, across iPhone, iPad, and Mac. Billed annually.",
+                price: "$449.00")
+            staticPlanRow(
+                name: "NexGenSpec Pro — Monthly",
+                description: "Unlimited inspections and watermark-free, branded PDF reports with your company logo, across iPhone, iPad, and Mac. Billed monthly.",
+                price: "$49.00")
+
+            Button(action: {}) {
+                Text("Restore Purchases")
+            }
+            .buttonStyle(AppSecondaryButtonStyle())
+            .padding(.top, 20)
+        }
+    }
+
+    private func staticPlanRow(name: String, description: String, price: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name)
+                    .font(.headline)
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Text(price)
+                .font(.headline)
+        }
+        .padding()
+        .background(AppColor.accent.opacity(0.10))
+        .cornerRadius(16)
+    }
+    #endif
 
     private var subscriptionOptions: some View {
         VStack(spacing: 12) {

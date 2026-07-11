@@ -32,6 +32,28 @@ struct PencilKitPhotoAnnotationView: View {
     @State private var undoStack: [AnnotationSnapshot] = []
     @State private var redoStack: [AnnotationSnapshot] = []
 
+    init(baseImage: UIImage, initialOverlay: AnnotationOverlay?, onSave: @escaping (AnnotationOverlay) -> Void) {
+        self.baseImage = baseImage
+        self.initialOverlay = initialOverlay
+        self.onSave = onSave
+        // Seed the annotation state in init (not only onAppear): @State set
+        // from onAppear is lost if SwiftUI recreates the view's state storage
+        // after the first appearance (observed under ScreenshotHost, where a
+        // store publish re-evaluates the host body right after onAppear) —
+        // the marks would silently vanish. State(initialValue:) survives that.
+        if let o = initialOverlay {
+            if let data = o.drawingData, let drawing = try? PKDrawing(data: data) {
+                _canvasDrawing = State(initialValue: drawing)
+            }
+            _arrows = State(initialValue: o.arrows.map {
+                ArrowShape(start: CGPoint(x: $0.startX, y: $0.startY), end: CGPoint(x: $0.endX, y: $0.endY), colorName: $0.colorName)
+            })
+            _circles = State(initialValue: o.circles.map {
+                CircleShape(center: CGPoint(x: $0.centerX, y: $0.centerY), radius: $0.radius, colorName: $0.colorName)
+            })
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geo in

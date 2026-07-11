@@ -44,3 +44,8 @@ marketing/website-pages/*.reference
 
 # iPhone-audit screenshots: regenerable QA scratch, not deliverables
 marketing/iphone-audit/
+marketing/screenshot-assets/*.usdz
+marketing/screenshots/raw-iphone/
+marketing/screenshots/raw-ipad/
+marketing/screenshots/final-iphone/
+marketing/screenshots/final-ipad/

@@ -506,6 +506,39 @@ struct PDFKitView: UIViewRepresentable {
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.document = PDFDocument(url: url)
+        #if DEBUG
+        // Screenshot capture: `-screenshotPDFPage <n|last>` opens the report on
+        // a specific page (1-indexed), fitted as a single page. Debug-only and
+        // inert without -screenshotMode.
+        if ScreenshotMode.isActive,
+           let i = CommandLine.arguments.firstIndex(of: "-screenshotPDFPage"),
+           i + 1 < CommandLine.arguments.count,
+           let doc = pdfView.document, doc.pageCount > 0 {
+            let arg = CommandLine.arguments[i + 1]
+            let requested = (arg == "last") ? doc.pageCount - 1 : (Int(arg) ?? 1) - 1
+            let index = max(0, min(requested, doc.pageCount - 1))
+            // Stay in .singlePageContinuous: autoScales fits the page WIDTH
+            // (filling the screen, top-aligned) instead of letterboxing the
+            // whole page with gray bands. Optional `-screenshotPDFZoom <f>`
+            // magnifies (like a user pinch-zoom); the destination pins the
+            // requested page's top-left to the top of the view either way.
+            var zoom: CGFloat = 1
+            if let zi = CommandLine.arguments.firstIndex(of: "-screenshotPDFZoom"),
+               zi + 1 < CommandLine.arguments.count,
+               let z = Double(CommandLine.arguments[zi + 1]) {
+                zoom = CGFloat(z)
+            }
+            if let page = doc.page(at: index) {
+                DispatchQueue.main.async {
+                    if zoom != 1 {
+                        pdfView.scaleFactor = pdfView.scaleFactorForSizeToFit * zoom
+                    }
+                    let top = PDFDestination(page: page, at: CGPoint(x: 0, y: page.bounds(for: .mediaBox).height))
+                    pdfView.go(to: top)
+                }
+            }
+        }
+        #endif
         return pdfView
     }
 
