@@ -528,12 +528,21 @@ struct PDFKitView: UIViewRepresentable {
                let z = Double(CommandLine.arguments[zi + 1]) {
                 zoom = CGFloat(z)
             }
+            // `-screenshotPDFOffset <pts>` scrolls further down INTO the page
+            // (PDF-space points from its top) — for framing a card that sits
+            // mid-page or straddles a page boundary.
+            var offset: CGFloat = 0
+            if let oi = CommandLine.arguments.firstIndex(of: "-screenshotPDFOffset"),
+               oi + 1 < CommandLine.arguments.count,
+               let o = Double(CommandLine.arguments[oi + 1]) {
+                offset = CGFloat(o)
+            }
             if let page = doc.page(at: index) {
                 DispatchQueue.main.async {
                     if zoom != 1 {
                         pdfView.scaleFactor = pdfView.scaleFactorForSizeToFit * zoom
                     }
-                    let top = PDFDestination(page: page, at: CGPoint(x: 0, y: page.bounds(for: .mediaBox).height))
+                    let top = PDFDestination(page: page, at: CGPoint(x: 0, y: page.bounds(for: .mediaBox).height - offset))
                     pdfView.go(to: top)
                 }
             }

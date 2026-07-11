@@ -230,34 +230,41 @@ enum DemoModeFixture {
         let defectMap: [String: [DemoDefect]] = [
             "Roof Structure": [DemoDefect(itemIndex: 0, severity: .marginal,
                 location: "South slope",
-                observed: "Multiple displaced tiles with exposed underlayment on the south slope; battens visible in several courses.",
+                observed: "Displaced tiles with exposed underlayment on the south slope.",
                 implication: "Open courses admit wind-driven rain and accelerate deck deterioration.",
                 recommendation: "Licensed roofing contractor to reset or replace displaced tiles and evaluate the underlayment.")],
             "Exterior": [DemoDefect(itemIndex: 1, severity: .minor,
                 location: "Front entry walkway",
-                observed: "Walkway slab offset approximately 3/4\" at the front approach joint.",
+                observed: "Walkway slab offset 3/4\" at the front approach joint.",
                 implication: "Trip hazard on the primary entry path.",
                 recommendation: "Grind or mudjack the offset section to restore an even walking surface.")],
             "Foundation": [DemoDefect(itemIndex: 1, severity: .major,
                 location: "Northeast corner",
-                observed: "Vertical crack wider than 1/8\" with minor spalling in the foundation wall.",
+                observed: "Vertical crack wider than 1/8\" with minor spalling.",
                 implication: "May indicate ongoing settlement and provides a moisture entry path.",
                 recommendation: "Consult a licensed structural engineer; seal and monitor the crack.")],
             "Plumbing": [DemoDefect(itemIndex: 2, severity: .marginal,
                 location: "Kitchen sink cabinet",
-                observed: "Active seep at the copper supply joint below the kitchen sink; green oxidation on the fittings.",
+                observed: "Active seep at the copper supply joint below the kitchen sink.",
                 implication: "Continued leakage will damage the cabinet base and may promote mold growth.",
                 recommendation: "Licensed plumber to re-sweat or replace the affected joint.")],
             "Electrical": [DemoDefect(itemIndex: 13, severity: .safety,
                 location: "Kitchen counter receptacle",
-                observed: "Open ground reading at the kitchen counter GFCI receptacle (sampled).",
+                observed: "Open ground at the kitchen counter GFCI receptacle.",
                 implication: "Shock hazard; downstream protection may not operate as intended.",
                 recommendation: "Licensed electrician to correct the grounding before close.")],
             "Heating & Cooling": [DemoDefect(itemIndex: 3, severity: .marginal,
                 location: "Furnace return",
-                observed: "Return filter heavily loaded with debris; airflow restricted at the blower compartment.",
+                observed: "Return filter heavily loaded; airflow restricted at the blower.",
                 implication: "Reduced efficiency and added strain on the blower motor.",
-                recommendation: "Replace the filter, service the furnace, and verify airflow.")]
+                recommendation: "Replace the filter, service the furnace, and verify airflow.")],
+            // Documented with the imported thermal image — shows the
+            // drone/thermal photo-library import feature in the report.
+            "Attic": [DemoDefect(itemIndex: 2, severity: .marginal,
+                location: "North attic wall",
+                observed: "Infrared scan: cold streaking between framing bays — insulation voids.",
+                implication: "Heat loss, higher energy costs, and potential condensation points at the cold bays.",
+                recommendation: "Air-seal and top up insulation in the affected bays; re-scan to verify coverage.")]
         ]
 
         for sIdx in version.inspection.sections.indices {
