@@ -130,10 +130,15 @@ final class SyncCoordinatorTests: XCTestCase {
         coord.startForegroundPolling()
         try? await Task.sleep(nanoseconds: 150_000_000)   // ~7 intervals
         coord.stopForegroundPolling()
+        // stop() cancels the poll loop, but a pullNow() the loop already
+        // dispatched into its own Task can still land after cancellation —
+        // let any in-flight pull settle BEFORE snapshotting, or the final
+        // equality assert flakes on scheduler timing (seen as 7 != 6).
+        try? await Task.sleep(nanoseconds: 40_000_000)
         let afterStop = fake.pulls
         XCTAssertGreaterThan(afterStop, 1, "Polling repeatedly pulls while active.")
 
-        // No further pulls after stop.
+        // No further pulls after stop (5 would-be intervals of silence).
         try? await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertEqual(fake.pulls, afterStop, "stop() halts the poll — no pulls after stop.")
     }
