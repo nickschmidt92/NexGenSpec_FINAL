@@ -145,6 +145,7 @@ jobs = [
     ("raw-ipad/pdf-thermal.png", "Import drone and thermal imagery into your findings", "final-ipad/04-thermal.png", IPAD),
     ("raw-ipad/roomscan3d.png", "Capture any room in 3D with measured dimensions", "final-ipad/05-room-3d.png", IPAD),
     ("raw-ipad/dashboard.png", "Every inspection organized in one workspace", "final-ipad/06-dashboard.png", IPAD),
+    ("raw-ipad/welcome.png", "The future of inspections is here", "final-ipad/07-welcome.png", IPAD),
 ]
 
 import os
