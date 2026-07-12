@@ -14,12 +14,15 @@
 //
 //  Usage:
 //    xcrun simctl launch <udid> com.nexgenspec.app \
-//        --args -screenshotMode -screenshotRoute dashboard|inspection|pdf|paywall
+//        -screenshotMode -screenshotRoute \
+//        dashboard|inspection|draftInspection|pdf|paywall|annotation|calendar|roomScan3D
+//    The pdf route also honors `-screenshotPDFPage <n|last>` (see PDFKitView).
 //
 
 #if DEBUG
 import SwiftUI
 import UIKit
+import SceneKit
 
 enum ScreenshotMode {
     static var isActive: Bool { CommandLine.arguments.contains("-screenshotMode") }
@@ -93,16 +96,46 @@ struct ScreenshotHost: View {
                 Text("No demo inspection seeded")
             }
         case "annotation":
-            if let image = UIImage(contentsOfFile: "/Users/nicholasschmidt/Developer/NexGenSpec_FINAL/marketing/screenshot-assets/annotation-demo.jpg") ?? firstDefectPhoto() {
+            // Clean base photo (no baked-in marks) + the seeded overlay, so the
+            // capture shows real PencilKitPhotoAnnotationView marks with no taps.
+            if let image = UIImage(contentsOfFile: "/Users/nicholasschmidt/Developer/NexGenSpec_FINAL/marketing/screenshot-assets/14-defect-foundation-crack.jpg") ?? firstDefectPhoto() {
                 NavigationStack {
                     PencilKitPhotoAnnotationView(
                         baseImage: image,
-                        initialOverlay: nil,
+                        initialOverlay: Self.seededAnnotationOverlay,
                         onSave: { _ in }
                     )
                 }
             } else {
                 Text("No demo photo available")
+            }
+        case "roomScan3D":
+            // Mirrors the Overview room-scan sheet (InspectionOverviewView).
+            // The simulator's QLPreviewController shows only a file placeholder
+            // for USDZ (no AR/3D renderer), so the screenshot route renders the
+            // same model through SceneKit instead — visually equivalent to the
+            // on-device QuickLook dollhouse.
+            if let id = primaryVersionID, let version = store.loadFullVersion(id: id) {
+                let jobId = UUID(uuidString: version.inspection.inspectionId) ?? version.id
+                if let scan = LiDARScanStore.loadScans(jobId: jobId).first {
+                    NavigationStack {
+                        DemoUSDZSceneView(
+                            url: FilePaths.lidarFolder(jobId: jobId).appendingPathComponent(scan.usdzFileName)
+                        )
+                        .ignoresSafeArea()
+                        .navigationTitle(scan.displayName)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") {}
+                            }
+                        }
+                    }
+                } else {
+                    Text("No demo room scan seeded")
+                }
+            } else {
+                Text("No demo inspection seeded")
             }
         case "calendar":
             NavigationStack { CalendarView() }
@@ -131,18 +164,47 @@ struct ScreenshotHost: View {
         return nil
     }
 
+    /// SceneKit dollhouse view of the seeded USDZ (screenshot route only) —
+    /// camera framed for the 15.2 × 13.1 ft demo living room.
+    struct DemoUSDZSceneView: UIViewRepresentable {
+        let url: URL
+
+        func makeUIView(context: Context) -> SCNView {
+            let view = SCNView()
+            view.backgroundColor = .systemBackground
+            view.autoenablesDefaultLighting = true
+            view.allowsCameraControl = true
+            view.antialiasingMode = .multisampling4X
+            if let scene = try? SCNScene(url: url, options: nil) {
+                let camNode = SCNNode()
+                camNode.camera = SCNCamera()
+                camNode.position = SCNVector3(4.0, 8.0, 5.0)
+                camNode.look(at: SCNVector3(0, 0, 0))
+                scene.rootNode.addChildNode(camNode)
+                view.scene = scene
+                view.pointOfView = camNode
+            }
+            return view
+        }
+
+        func updateUIView(_ uiView: SCNView, context: Context) {}
+    }
+
     /// Screenshot-only: a red circle + red arrow already drawn over the defect,
     /// so the annotation capture shows a COMPLETE annotated photo with no taps.
+    /// NOTE: PencilKitPhotoAnnotationView applies these point values RAW (no
+    /// canvas rescale), so they are tuned for the iPhone 17 Pro Max capture —
+    /// shoot this route on iPhone only.
     private static var seededAnnotationOverlay: AnnotationOverlay {
         AnnotationOverlay(
             arrows: [
-                ArrowAnnotation(startX: 60, startY: 110, endX: 190, endY: 250, colorName: "red")
+                ArrowAnnotation(startX: 95, startY: 250, endX: 185, endY: 415, colorName: "red")
             ],
             circles: [
-                CircleAnnotation(centerX: 215, centerY: 285, radius: 70, colorName: "red")
+                CircleAnnotation(centerX: 225, centerY: 480, radius: 88, colorName: "red")
             ],
-            canvasWidth: 390,
-            canvasHeight: 720
+            canvasWidth: 440,
+            canvasHeight: 900
         )
     }
 }

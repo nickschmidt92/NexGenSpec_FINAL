@@ -99,7 +99,17 @@ public final class SubscriptionManager: ObservableObject {
 
     /// Remaining free inspections. Returns nil if subscribed, admin, or beta tester.
     public var freeInspectionsRemaining: Int? {
-        (isPro || isAdminAccount || Self.isBetaOrSandboxBuild) ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
+        #if DEBUG
+        // Screenshot capture (paywall route only): pose as a fresh free-tier
+        // user so PaywallView shows "You have 3 free inspections remaining" —
+        // the simulator's isBetaOrSandboxBuild unlock otherwise returns nil.
+        // Deliberately NOT forcing isPro: PaywallView self-dismisses when
+        // isPro flips true, which would blank the capture.
+        if ScreenshotMode.isActive, ScreenshotMode.route == "paywall" {
+            return Self.freeInspectionLimit
+        }
+        #endif
+        return (isPro || isAdminAccount || Self.isBetaOrSandboxBuild) ? nil : max(0, Self.freeInspectionLimit - freeInspectionsUsed)
     }
 
     /// Call after a new inspection is successfully created.

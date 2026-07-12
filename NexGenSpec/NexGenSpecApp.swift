@@ -185,6 +185,18 @@ struct NexGenSpecApp: App {
                         syncCoordinator.stopForegroundPolling()
                     }
                 }
+                .task {
+                    // Build 36: on Mac (Designed for iPad) the scene is born
+                    // .active and window focus changes never move scenePhase,
+                    // so the .onChange above never fires on a plain launch and
+                    // the build-32 foreground poll never started — an idle-open
+                    // Mac window only synced on launch or manual refresh
+                    // (found in the build-35 production pass, 2026-07-12).
+                    // Start it at appear as well: idempotent (internally
+                    // guarded), and the scenePhase handler still stops/starts
+                    // polling around real background transitions on iOS.
+                    syncCoordinator.startForegroundPolling()
+                }
         }
     }
 
