@@ -62,15 +62,11 @@ and ready for sandbox purchase.
 iPhone). The "Scan Room (LiDAR)" control is intentionally HIDDEN on
 non-LiDAR devices and on Mac. On a supported device: open an inspection →
 tap into a section → the "Scan Room (LiDAR)" button is at the bottom of that
-section's item list. A scan generates a top-down floor plan (spatial
-reference, not a measured architectural drawing) that renders in the report;
-scanning two or more rooms produces a merged whole-home floor plan.
-
-**AI photo tagging (labeled "AI defect detection").** On-device photo
-analysis that SUGGESTS tags as you add photos to an item (shown below the
-Photos section). It is best-effort and on-device — for some images it may
-suggest nothing, which is expected, not a bug. Accepted suggestions carry
-through to the report; the inspector always writes the actual findings.
+section's item list. Each scan generates a top-down PER-ROOM floor plan
+(spatial reference, not a measured architectural drawing) plus a 3D (USDZ)
+model; the floor plan renders in the report's "Room Scans (LiDAR)" page
+with the room's dimensions. Rooms are scanned and rendered one at a time —
+the listing claims per-room plans only.
 
 ---
 
@@ -129,10 +125,11 @@ usage is:
 - **Open-Meteo** (open-meteo.com) — inspection weather stamp; the device
   sends only coarsened coordinates (~1 km, no account, no identifiers)
 - **Apple location services (CLGeocoder)** — optional property-address
-  auto-fill reverse-geocodes a precise (~100 m) coordinate via Apple; the
-  coordinate goes to Apple only, is not retained, and the resulting address is
-  stored as on-device user content. (This is why the App Privacy label declares
-  Precise Location.)
+  auto-fill reverse-geocodes a coordinate via Apple; the coordinate goes to
+  Apple only, is not retained, and the resulting address is stored as
+  on-device user content. (The App Privacy label declares **Coarse
+  Location**: the only location data the app retains is the ~1 km-coarsened
+  weather coordinate; the geocoding coordinate is transient.)
 - **StoreKit** — for subscription management (Apple-provided)
 
 No analytics SDK is linked. No advertising. No third-party tracking.
