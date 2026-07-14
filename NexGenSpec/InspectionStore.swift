@@ -860,7 +860,20 @@ public extension InspectionStore {
                 saveError = "Couldn't finalize: the integrity snapshot could not be written (\(error.localizedDescription)). The inspection has not been finalized. Reopen the app after unlocking the device and try again."
                 return
             }
-            let written = (try? writeVersionToFile(updated)) ?? updated
+            // The current.json write is as load-bearing as the integrity snapshot
+            // (A4): on a throw the version on disk is STILL A DRAFT, so proceeding
+            // to stage finalized metadata / rewrite the index would advertise a
+            // finalization that never persisted — and the sync emit (inside
+            // writeVersionToFile, after the write) never fired, so the "finalized"
+            // report would silently never reach the other device either. Surface
+            // the failure and leave everything a draft; the user retries.
+            let written: InspectionVersion
+            do {
+                written = try writeVersionToFile(updated)
+            } catch {
+                saveError = "Couldn't finalize: the inspection could not be written to disk (\(error.localizedDescription)). The inspection has not been finalized. Reopen the app after unlocking the device and try again."
+                return
+            }
             // Persist the finalize WITHOUT any @Published mutation, because the
             // Dashboard/Calendar/Archived screens observe the WHOLE store via
             // @EnvironmentObject — so ANY published change (not just metadataList:

@@ -20,6 +20,7 @@
 		T1B2C3D4E5F600000000010B /* LiDARMeasurementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F600000000010C /* LiDARMeasurementTests.swift */; };
 		T1B2C3D4E5F600000000010D /* PhoneNumberFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F600000000010E /* PhoneNumberFormatterTests.swift */; };
 		T1B2C3D4E5F600000000010F /* WholeHomeMergeGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000110 /* WholeHomeMergeGateTests.swift */; };
+		T1B2C3D4E5F6000000000111 /* SyncHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000112 /* SyncHardeningTests.swift */; };
 		U1B2C3D4E5F6000000000001 /* NexGenSpecUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -54,6 +55,7 @@
 		T1B2C3D4E5F600000000010C /* LiDARMeasurementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARMeasurementTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F600000000010E /* PhoneNumberFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneNumberFormatterTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000110 /* WholeHomeMergeGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WholeHomeMergeGateTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000112 /* SyncHardeningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHardeningTests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecUITests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000004 /* NexGenSpecUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -143,6 +145,7 @@
 				T1B2C3D4E5F600000000010C /* LiDARMeasurementTests.swift */,
 				T1B2C3D4E5F600000000010E /* PhoneNumberFormatterTests.swift */,
 				T1B2C3D4E5F6000000000110 /* WholeHomeMergeGateTests.swift */,
+				T1B2C3D4E5F6000000000112 /* SyncHardeningTests.swift */,
 			);
 			path = NexGenSpecTests;
 			sourceTree = "<group>";
@@ -310,6 +313,7 @@
 				T1B2C3D4E5F600000000010B /* LiDARMeasurementTests.swift in Sources */,
 				T1B2C3D4E5F600000000010D /* PhoneNumberFormatterTests.swift in Sources */,
 				T1B2C3D4E5F600000000010F /* WholeHomeMergeGateTests.swift in Sources */,
+				T1B2C3D4E5F6000000000111 /* SyncHardeningTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

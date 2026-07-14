@@ -63,8 +63,12 @@ struct LocalVersionSnapshot {
 /// Reads on-disk version payloads for mirroring. The local store stays the source
 /// of truth; the mirror only ever reads from it.
 protocol LocalVersionReader: Sendable {
-    /// The `current.json` bytes for one version.
-    func versionData(forVersionId id: UUID) -> Data?
+    /// The `current.json` bytes for one version. Returns nil ONLY when the file is
+    /// CONFIRMED ABSENT (e.g. a just-deleted version) — the caller may then settle
+    /// the change. An existing-but-unreadable file (data-protection while locked,
+    /// transient I/O) THROWS instead, so the push path re-queues the change rather
+    /// than silently dequeuing an edit it never read (A5).
+    func versionData(forVersionId id: UUID) throws -> Data?
     /// Every local inspection version, for one-time seeding (slice 3).
     func allLocalVersions() -> [LocalVersionSnapshot]
     /// The local store's view of one version, for conflict resolution (slice 4).
@@ -89,17 +93,19 @@ struct DiskVersionReader: LocalVersionReader {
     /// else the live active-user `appRoot`.
     private var root: URL { pinnedRoot ?? FilePaths.appRoot }
 
-    func versionData(forVersionId id: UUID) -> Data? {
+    func versionData(forVersionId id: UUID) throws -> Data? {
         let url = FilePaths.currentVersionFile(jobId: id, inRoot: root)
-        // Legitimate absence (e.g. a just-deleted version) is a silent nil; a real
-        // read failure (I/O, data-protection) is logged so it can't masquerade as
-        // absence (review finding: swallowed errors).
+        // Legitimate absence (e.g. a just-deleted version) is a silent nil — the
+        // caller settles the change. A real read failure (I/O, data-protection
+        // while the device is locked) must NOT masquerade as absence: it THROWS so
+        // `flushPending` re-queues the change instead of dequeuing an edit whose
+        // bytes were never read (A5 — the old nil here silently dropped the push).
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
             return try Data(contentsOf: url)
         } catch {
-            Diagnostics.logError(context: "DiskVersionReader.versionData read failed for \(id)", error: error)
-            return nil
+            Diagnostics.logError(context: "DiskVersionReader.versionData read failed for \(id); change will be re-queued", error: error)
+            throw error
         }
     }
 

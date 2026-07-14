@@ -159,6 +159,18 @@ final class SyncCoordinator: ObservableObject {
         port.recordLocalChange(change)
     }
 
+    /// Mirror the active port's live status into the published property (A6).
+    /// The port recomputes `_status` on every flush/pull cycle, but the
+    /// coordinator only copied it out ONCE at bind — so a later failed flush
+    /// (port → `.error("Some changes couldn't be uploaded yet…")`) never reached
+    /// the Settings status row, and a recovered cycle never cleared a stale
+    /// error. Call after every pull/flush cycle (poll tick, foreground,
+    /// pull-to-refresh). Guarded so a stale cycle from a superseded port can
+    /// never clobber the rebound port's status.
+    private func mirrorStatus(from active: SyncPort) {
+        if port === active { status = active.status }
+    }
+
     /// Record that a synced media file was written. Main-actor-hopping so services on
     /// any queue/thread can call it after a successful byte write. Inert when sync is
     /// off / no user (the active port is a NoopSyncPort).
@@ -190,6 +202,9 @@ final class SyncCoordinator: ObservableObject {
             // Also re-drive any outbound changes queued during a transient unbind
             // window (fix F). Inert on a NoopSyncPort (flag off).
             await active.flushPending()
+            // Mirror the cycle's outcome so a push failure surfaces in the UI and
+            // a clean cycle clears it (A6).
+            self?.mirrorStatus(from: active)
         }
     }
 
@@ -202,6 +217,8 @@ final class SyncCoordinator: ObservableObject {
         let active = port
         await active.pull()
         await active.flushPending()
+        // Mirror the cycle's outcome (A6) — see mirrorStatus.
+        mirrorStatus(from: active)
     }
 
     // MARK: - Foreground live-pull poll (build 32)

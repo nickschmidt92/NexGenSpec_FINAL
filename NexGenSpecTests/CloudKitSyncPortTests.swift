@@ -696,7 +696,7 @@ final class CloudKitSyncPortTests: XCTestCase {
         let pinnedA = DiskVersionReader(uid: uidA)
         XCTAssertTrue(pinnedA.localState(forVersionId: id).exists,
                       "a reader pinned to A must see A's version even though the live user is B")
-        XCTAssertNotNil(pinnedA.versionData(forVersionId: id), "pinned-A reader must read A's payload")
+        XCTAssertNotNil(try pinnedA.versionData(forVersionId: id), "pinned-A reader must read A's payload")
 
         let live = DiskVersionReader()
         XCTAssertEqual(live.localState(forVersionId: id), .absent,

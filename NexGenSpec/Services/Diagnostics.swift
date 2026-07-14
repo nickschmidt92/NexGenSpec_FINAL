@@ -1,9 +1,36 @@
 import Foundation
 import FirebaseCrashlytics
+import os
 
 enum Diagnostics {
     private static let maxBytes = 512 * 1024
     private static let queue = DispatchQueue(label: "com.nexgenspec.diagnostics")
+
+    /// Unified-log channel for the sync pipeline (A7). `.notice` persists to the
+    /// log store, so a field device's sysdiagnose / Console capture shows the
+    /// sync pipeline without a debugger attached.
+    private static let syncLogger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.nexgenspec.app",
+        category: "Sync"
+    )
+
+    /// Permanent sync-pipeline diagnostics (A7 — replaces the throwaway
+    /// [SYNCDIAG] scaffolding). Mirrors `context` to (a) the unified log at
+    /// `.notice` with PUBLIC privacy, and (b) the same sinks as `logInfo`
+    /// (Crashlytics breadcrumb + the on-disk diagnostics.log).
+    ///
+    /// RULE: because the unified-log line is `privacy: .public`, call sites may
+    /// contain ONLY record UUIDs, change tags, counts, zone names, and error
+    /// codes/domains — never user content (client names, addresses, payloads, or
+    /// report file paths, whose folder names embed client name + address).
+    static func logSync(_ context: String) {
+        syncLogger.notice("\(context, privacy: .public)")
+        Crashlytics.crashlytics().log("SYNC: \(context)")
+        queue.async {
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            append("[\(timestamp)] [SYNC] \(context)")
+        }
+    }
 
     static func logError(context: String, error: Error? = nil, persistToDisk: Bool = true) {
         // Report to Crashlytics for remote monitoring
