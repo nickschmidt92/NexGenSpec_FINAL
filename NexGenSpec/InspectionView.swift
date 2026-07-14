@@ -83,6 +83,12 @@ struct InspectionView: View {
     /// version` would reset the draft to the original (pre-media) version
     /// and clobber the media the user just added — the B-0059 data-loss bug.
     @State private var didSeedDraft = false
+    /// Snapshot of `draft` as seeded / as last flushed through `updated(_:)`.
+    /// Teardown persists ONLY when `draft` differs from it: an untouched open
+    /// copy is stale by definition once a remote apply lands while this view
+    /// is on screen, and unconditionally re-saving it re-stamped the LWW clock
+    /// and echo-pushed the stale copy back over the remote edit (B-0122).
+    @State private var lastPersistedDraft: InspectionVersion?
 
     // Timer state
     //
@@ -277,6 +283,7 @@ struct InspectionView: View {
             if !didSeedDraft {
                 didSeedDraft = true
                 draft = version
+                lastPersistedDraft = version
                 // Seed the long-lived Summary VM with the inspection data
                 // so the first visit to Summary already has the right
                 // sections/items even if no edit has happened yet.
@@ -318,7 +325,12 @@ struct InspectionView: View {
             // pick up the latest client name, date, etc.
             autoSaveTask?.cancel()
             autoSaveTask = nil
-            updated(draft)
+            // Only flush when the user actually changed something (B-0122);
+            // see lastPersistedDraft.
+            if draft != lastPersistedDraft {
+                updated(draft)
+                lastPersistedDraft = draft
+            }
             store.saveNow()
         }
         // ---- PRIMARY AUTO-SAVE PATH ----
@@ -366,7 +378,12 @@ struct InspectionView: View {
             // the UICollectionView diff risk is zero.
             autoSaveTask?.cancel()
             autoSaveTask = nil
-            updated(draft)
+            // Only flush when the user actually changed something (B-0122);
+            // see lastPersistedDraft.
+            if draft != lastPersistedDraft {
+                updated(draft)
+                lastPersistedDraft = draft
+            }
             store.saveNow()
             localLastSavedAt = Date()
         }

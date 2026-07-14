@@ -68,12 +68,17 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
         // Cross-account safety: assets don't route through InspectionStore, so the
         // guard here is (a) the writer's pinned bound-UID root and (b) an explicit
         // active-segment check that mirrors InspectionStore.applyRemoteVersion's
-        // intent — on a mismatch, hold (safe no-op) rather than write into another
-        // UID's disk after an A→B switch. Unpinned construction (boundUID nil) skips
-        // the segment check for back-compat, matching the version writer.
+        // intent — on a mismatch, HOLD THE TOKEN (return false, A8) rather than
+        // write into another UID's disk after an A→B switch. Returning true here
+        // (the old bug) SETTLED the bound account's change token past a record that
+        // was never applied — incremental pulls never re-fetch a settled record, so
+        // the asset was permanently, silently lost. false matches
+        // applyRemoteVersion's cross-account behavior: the next pull under the
+        // correct binding re-delivers it. Unpinned construction (boundUID nil)
+        // skips the segment check for back-compat, matching the version writer.
         if let boundUID, await MainActor.run(body: { SessionScope.currentSegment }) != boundUID {
-            Diagnostics.logError(context: "applyRemoteAsset: refused cross-account write (bound=\(boundUID)); holding")
-            return true
+            Diagnostics.logError(context: "applyRemoteAsset: refused cross-account write (bound=\(boundUID)); holding token")
+            return false
         }
         let root = FilePaths.userRoot(uid: boundUID ?? SessionScope.currentSegment)
         let dest = root.appendingPathComponent(record.relativePath)
@@ -127,13 +132,26 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
 
     func deleteLocalAsset(jobId: UUID, relativePath: String) async -> Bool {
         guard SyncAssetPaths.kind(forRelativePath: relativePath) != nil else { return true }
+        // Same A8 cross-account hold as applyRemoteAsset: returning true settled the
+        // token past a delete that was never applied — return false so the next pull
+        // under the correct binding re-delivers it.
         if let boundUID, await MainActor.run(body: { SessionScope.currentSegment }) != boundUID {
-            Diagnostics.logError(context: "deleteLocalAsset: refused cross-account delete (bound=\(boundUID)); holding")
-            return true
+            Diagnostics.logError(context: "deleteLocalAsset: refused cross-account delete (bound=\(boundUID)); holding token")
+            return false
         }
         let root = FilePaths.userRoot(uid: boundUID ?? SessionScope.currentSegment)
         let dest = root.appendingPathComponent(relativePath)
-        try? FileManager.default.removeItem(at: dest)   // absent = success (idempotent)
-        return true
+        do {
+            try FileManager.default.removeItem(at: dest)
+            return true
+        } catch {
+            // Confirmed-absent = idempotent success (the goal state). A REAL removal
+            // failure must hold the token (A8) so the next pull retries — the old
+            // `try?` settled the token over a file still on disk, permanently
+            // stranding a tombstoned asset locally.
+            if !FileManager.default.fileExists(atPath: dest.path) { return true }
+            Diagnostics.logError(context: "deleteLocalAsset: remove failed for job=\(jobId.uuidString); holding token", error: error)
+            return false
+        }
     }
 }

@@ -698,6 +698,16 @@ public final class InspectionStore: ObservableObject {
     public func writeVersionFileOnlyForAutoSave(_ version: InspectionVersion) {
         guard InspectionStateMachine.allowsEdit(version.state) else { return }
         guard !isWiping else { return }
+        // Same staleness rule as update() (B-0122): the on-screen draft may
+        // predate a remote finalize applied while the view was open, and this
+        // path writes current.json directly. Checked at enqueue time on the
+        // main actor; a remote apply landing in the same instant can still
+        // race this one queued write (the check can't re-run on the ioQueue —
+        // main-actor state), but that write can never publish a row or push:
+        // update()'s row-state guard blocks the teardown flush.
+        if let row = metadataList.first(where: { $0.id == version.id }),
+           !InspectionStateMachine.allowsEdit(row.state) { return }
+        guard pendingFinalizedMetadata[version.id] == nil else { return }
         // Foreground per-edit autosave: encode + write OFF the main thread so
         // typing/editing never blocks on JSON encoding + disk I/O. Dispatched
         // to the same serial `ioQueue` as every other store write, so it stays
@@ -890,7 +900,20 @@ public extension InspectionStore {
                 saveError = "Couldn't finalize: the integrity snapshot could not be written (\(error.localizedDescription)). The inspection has not been finalized. Reopen the app after unlocking the device and try again."
                 return
             }
-            let written = (try? writeVersionToFile(updated)) ?? updated
+            // The current.json write is as load-bearing as the integrity snapshot
+            // (A4): on a throw the version on disk is STILL A DRAFT, so proceeding
+            // to stage finalized metadata / rewrite the index would advertise a
+            // finalization that never persisted — and the sync emit (inside
+            // writeVersionToFile, after the write) never fired, so the "finalized"
+            // report would silently never reach the other device either. Surface
+            // the failure and leave everything a draft; the user retries.
+            let written: InspectionVersion
+            do {
+                written = try writeVersionToFile(updated)
+            } catch {
+                saveError = "Couldn't finalize: the inspection could not be written to disk (\(error.localizedDescription)). The inspection has not been finalized. Reopen the app after unlocking the device and try again."
+                return
+            }
             // Persist the finalize WITHOUT any @Published mutation, because the
             // Dashboard/Calendar/Archived screens observe the WHOLE store via
             // @EnvironmentObject — so ANY published change (not just metadataList:
@@ -1011,7 +1034,18 @@ public extension InspectionStore {
     func update(version: InspectionVersion) {
         guard let idx = metadataList.firstIndex(where: { $0.id == version.id }) else { return }
         guard InspectionStateMachine.allowsEdit(version.state) else { return }
-        let written = (try? writeVersionToFile(version)) ?? version
+        // The caller's copy can be STALE: a remote finalize may have been applied
+        // (applyRemoteVersion) — or a local one staged in pendingFinalizedMetadata —
+        // while that copy sat open on screen. Judging editability on `version.state`
+        // alone let the stale draft overwrite the finalized current.json, flip the
+        // row back to Draft, re-stamp the LWW clock, and echo-push the reversion to
+        // every other device (B-0122). Editability is the store's call, not the
+        // caller's.
+        guard InspectionStateMachine.allowsEdit(metadataList[idx].state),
+              pendingFinalizedMetadata[version.id] == nil else { return }
+        // Publish the row only for a write that actually reached disk; the old
+        // `?? version` fallback advertised a save that never happened.
+        guard let written = try? writeVersionToFile(version) else { return }
         metadataList[idx] = VersionMetadata(from: written)
         scheduleDebouncedSave()
     }
