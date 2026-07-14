@@ -658,6 +658,70 @@ final class SyncRoundTripRegressionTests: XCTestCase {
         // the real inspections.json (test hygiene, not part of the assertion).
         store.saveNow()
     }
+
+    /// The SECOND stale write-back path (B-0122): the per-keystroke autosave
+    /// (`writeVersionFileOnlyForAutoSave`) writes current.json directly and also
+    /// judged editability only on the PASSED copy — a single keystroke in a stale
+    /// open view clobbered a just-applied remote finalize on disk. File-only path
+    /// (no row publish, no push), so the disk state is the only assertion.
+    @MainActor
+    func testStaleAutoSaveCannotOverwriteAppliedRemoteFinalizeOnDisk() throws {
+        // --- Stash the real on-disk store aside; restore in teardown. ---
+        let fm = FileManager.default
+        try FileSecurity.ensureProtectedDirectory(FilePaths.appRoot)
+        let stash = fm.temporaryDirectory.appendingPathComponent("ngs-staleas-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stash, withIntermediateDirectories: true)
+        let inspectionsDir = FilePaths.appRoot.appendingPathComponent("Inspections", isDirectory: true)
+        let stashedPairs: [(name: String, live: URL)] = [
+            ("Inspections", inspectionsDir),
+            ("inspections.json", FilePaths.inspectionsIndex),
+            ("inspections.json.backup", FilePaths.inspectionsIndexBackup)
+        ]
+        for (name, live) in stashedPairs where fm.fileExists(atPath: live.path) {
+            try fm.moveItem(at: live, to: stash.appendingPathComponent(name))
+        }
+        addTeardownBlock {
+            for (name, live) in stashedPairs {
+                try? fm.removeItem(at: live)
+                let src = stash.appendingPathComponent(name)
+                if fm.fileExists(atPath: src.path) { try? fm.moveItem(at: src, to: live) }
+            }
+            try? fm.removeItem(at: stash)
+        }
+
+        // No coordinator: the autosave path never pushes; disk is the assertion.
+        let store = InspectionStore()
+
+        // 1) Local draft exists (open in InspectionView).
+        let id = UUID()
+        let draft = makeDraft(id: id)
+        store.insert(version: draft)
+
+        // 2) A remote FINALIZE of the same version is applied by a pull.
+        var finalized = draft
+        finalized.status = .final
+        finalized.locked = true
+        finalized.finalizedAt = tFinalize
+        finalized.updatedAt = tFinalize
+        XCTAssertTrue(store.applyRemoteVersion(finalized), "the remote finalize applies cleanly")
+        XCTAssertEqual(store.loadFullVersion(id: id)?.locked, true, "precondition: disk is finalized")
+
+        // 3) One more keystroke lands in the stale open view → per-edit autosave.
+        var staleOpenCopy = draft
+        staleOpenCopy.inspection.clientName = "Stale Keystroke"
+        store.writeVersionFileOnlyForAutoSave(staleOpenCopy)
+
+        // Drain the serial ioQueue behind the (possibly) enqueued stale write by
+        // pushing a synchronous write for a DIFFERENT version through it (FIFO:
+        // insert → writeVersionToFile → ioQueue.sync).
+        store.insert(version: makeDraft(id: UUID()))
+
+        XCTAssertEqual(store.loadFullVersion(id: id)?.locked, true,
+                       "a stale keystroke autosave must not overwrite the finalized current.json on disk")
+
+        // Flush the debounced index save NOW (test hygiene, as above).
+        store.saveNow()
+    }
 }
 
 /// Minimal recording SyncPort for the store-level test (the NexGenSpecTests.swift
