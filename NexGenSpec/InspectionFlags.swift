@@ -2,11 +2,13 @@
 //  InspectionFlags.swift
 //  NexGenSpec
 //
-//  UserDefaults-backed soft flags for an inspection's lifecycle —
-//  invoice sent, invoice paid, archived. Kept out of the persisted
-//  Inspection JSON so existing TestFlight drafts don't need a
-//  migration. Lost if the user reinstalls the app, which is the
-//  same trade-off InvoiceAndSendView already accepts.
+//  LEGACY UserDefaults-backed soft flags for an inspection's lifecycle —
+//  invoice sent, invoice paid, archived. Superseded by the synced
+//  `InspectionSideStateStore` (sync data completeness pass): live reads and
+//  writes now go through the side-state store, which hoists these legacy
+//  values on first read and then treats them as read-only. This type remains
+//  for (a) the one-time hoist source, (b) the Account-Deletion sweep
+//  (`clearAll`), and (c) the shared per-UID key scoping helper.
 //
 
 import Foundation
@@ -155,12 +157,17 @@ extension VersionMetadata {
 
     /// Single-state badge for the workspace row. Paid wins over
     /// invoiced wins over finalized wins over draft.
+    ///
+    /// Derives from the SYNCED `InspectionSideStateStore` (which lazily hoists
+    /// any legacy UserDefaults flags on first read), so a badge flipped on one
+    /// device — invoice sent/paid — shows on every device.
     public var badge: InspectionBadge {
         let id = inspectionId.uuidString
-        if InspectionFlags.invoicePaidAt(inspectionId: id) != nil {
+        let sideState = InspectionSideStateStore.shared
+        if sideState.invoicePaidAt(inspectionId: id) != nil {
             return .paid
         }
-        if InspectionFlags.invoiceSentAt(inspectionId: id) != nil {
+        if sideState.invoiceSentAt(inspectionId: id) != nil {
             return .invoiced
         }
         if locked || status == .final {
@@ -170,6 +177,6 @@ extension VersionMetadata {
     }
 
     public var isArchived: Bool {
-        InspectionFlags.isArchived(inspectionId: inspectionId.uuidString)
+        InspectionSideStateStore.shared.isArchived(inspectionId: inspectionId.uuidString)
     }
 }

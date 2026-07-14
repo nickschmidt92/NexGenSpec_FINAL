@@ -128,6 +128,11 @@ struct NexGenSpecApp: App {
                     // CloudKit port whose writer applies pulled changes through it).
                     store.syncCoordinator = syncCoordinator
                     syncCoordinator.store = store
+                    // Item 4 (finalize auto-publish): the auto-generated report PDF
+                    // inherits the SAME watermark decision as the manual Export/Send
+                    // flow (free tier ⇒ watermarked deliverable).
+                    let subs = subscriptions
+                    store.autoPublishWatermarkProvider = { !subs.hasFeatureAccess }
                     // Publish the live coordinator so decoupled media services can emit
                     // asset-sync changes without a store reference (D-0203).
                     SyncCoordinator.active = syncCoordinator

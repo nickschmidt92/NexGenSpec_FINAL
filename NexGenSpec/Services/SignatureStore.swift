@@ -21,11 +21,25 @@ enum SignatureStore {
         do {
             try FileSecurity.ensureProtectedDirectory(url.deletingLastPathComponent())
             try FileSecurity.writeProtected(imageData, to: url)
+            // Mirror the signature PNG to CloudKit (sync data completeness): the
+            // synced model carries only the signature metadata + fileName, so
+            // without these bytes a receiving device renders reports with the
+            // signatures silently missing. Emitted only after a durable write.
+            SyncCoordinator.noteMediaUpserted(
+                jobId: jobId,
+                relativePath: relativePath(jobId: jobId, signatureId: signatureId)
+            )
             return true
         } catch {
             Diagnostics.logError(context: "Signature image save failed", error: error)
             return false
         }
+    }
+
+    /// Canonical root-relative path of a signature PNG — matches
+    /// `FilePaths.signatureFile` and the `SyncAssetPaths` allowlist.
+    static func relativePath(jobId: UUID, signatureId: UUID) -> String {
+        "Inspections/\(jobId.uuidString)/signatures/\(signatureId.uuidString).png"
     }
 
     static func loadImageData(jobId: UUID, signatureId: UUID) -> Data? {

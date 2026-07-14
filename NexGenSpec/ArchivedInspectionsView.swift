@@ -3,9 +3,10 @@
 //  NexGenSpec
 //
 //  Top-level tab listing inspections the user has archived from the
-//  Workspace dashboard. Archived state is a soft flag stored in
-//  UserDefaults (see InspectionFlags) so existing JSON drafts don't
-//  need migration. Restoring an inspection puts it back into the
+//  Workspace dashboard. Archived state is a soft flag in the synced
+//  InspectionSideStateStore (kept OUT of the persisted Inspection JSON,
+//  so existing drafts need no migration and finalized/sealed records are
+//  never touched). Restoring an inspection puts it back into the
 //  Workspace list at the top of its date sort.
 //
 
@@ -14,6 +15,9 @@ import SwiftUI
 struct ArchivedInspectionsView: View {
     @EnvironmentObject private var store: InspectionStore
     @State private var versionToDeleteID: UUID?
+    /// Bumped when a SYNCED-IN side-state change lands (archived toggled on
+    /// another device) so the filter re-derives without a store publish.
+    @State private var sideStateTick = 0
 
     /// Live filtered list. We re-read on every render so newly archived
     /// rows show up immediately without needing a separate cache.
@@ -43,7 +47,7 @@ struct ArchivedInspectionsView: View {
                             //   surfaced in Terms §8.
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
-                                    InspectionFlags.setArchived(false, inspectionId: meta.inspectionId.uuidString)
+                                    InspectionSideStateStore.shared.setArchived(false, inspectionId: meta.inspectionId.uuidString)
                                     store.objectWillChange.send()
                                 } label: {
                                     Label("Restore", systemImage: "tray.and.arrow.up")
@@ -60,7 +64,7 @@ struct ArchivedInspectionsView: View {
                             }
                             .contextMenu {
                                 Button {
-                                    InspectionFlags.setArchived(false, inspectionId: meta.inspectionId.uuidString)
+                                    InspectionSideStateStore.shared.setArchived(false, inspectionId: meta.inspectionId.uuidString)
                                     store.objectWillChange.send()
                                 } label: {
                                     Label("Restore", systemImage: "tray.and.arrow.up")
@@ -119,6 +123,13 @@ struct ArchivedInspectionsView: View {
         // no-op when nothing is staged. See InspectionStore.flushPendingMetadata.
         .onAppear {
             store.flushPendingMetadata()
+        }
+        // A synced-in side-state change (archived toggled on another device)
+        // re-derives the filtered list. Local restores already publish via
+        // store.objectWillChange at their call sites.
+        .onReceive(NotificationCenter.default.publisher(for: .sideStateDidChange)) { note in
+            guard (note.userInfo?["remote"] as? Bool) == true else { return }
+            sideStateTick &+= 1
         }
     }
 }
@@ -186,7 +197,7 @@ private struct EmptyArchivedState: View {
                 .foregroundStyle(.tertiary)
             Text("No Archived Inspections")
                 .font(.title3.weight(.semibold))
-            Text("Swipe an inspection on the Workspace tab to archive it. Archiving is tracked per device — archiving here doesn’t archive the inspection on your other Apple devices. Swipe again to restore, or to permanently delete drafts. Finalized inspections cannot be deleted (5-year retention).")
+            Text("Swipe an inspection on the Workspace tab to archive it. With iCloud Sync on, archiving syncs across your own Apple devices. Swipe again to restore, or to permanently delete drafts. Finalized inspections cannot be deleted (5-year retention).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

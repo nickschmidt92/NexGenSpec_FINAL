@@ -54,6 +54,25 @@ public final class InspectionStore: ObservableObject {
     /// behavior identical to build 21. Set by NexGenSpecApp.
     weak var syncCoordinator: SyncCoordinator?
 
+    /// Product default (sync data completeness, Item 4 — pending Nick's final
+    /// confirmation): after a SUCCESSFUL finalize, auto-generate the report PDF
+    /// and publish it through `FilesAppPublisher` — the same machinery the manual
+    /// Export / Send flow uses — so a ReportPDF sync record reaches the user's
+    /// other devices with no manual export step. Single toggle: set false to
+    /// restore manual-only publishing.
+    public static var autoPublishReportPDFOnFinalize = true
+
+    /// Test seam for the finalize auto-publish: when set, it REPLACES the default
+    /// export+publish and is invoked exactly once per SUCCESSFUL finalize with the
+    /// finalized (locked) version — never on an aborted/failed finalize.
+    var finalizeAutoPublishHook: ((InspectionVersion) -> Void)?
+
+    /// Watermark decision for the auto-published PDF, wired by NexGenSpecApp to
+    /// the live SubscriptionManager (`{ !subscriptions.hasFeatureAccess }`) so it
+    /// matches the manual Export/Send flow. Defaults to watermark-on when unset
+    /// (free-tier-safe: never leaks a clean deliverable).
+    var autoPublishWatermarkProvider: (() -> Bool)?
+
     /// True from the moment a Delete-Account wipe begins (`beginWipe()`) until
     /// the off-main disk wipe finishes (`performDiskWipe()`). While set, every
     /// disk-write path (`save`, `writeVersionToFile`, `writeVersionFileOnlyForAutoSave`)
@@ -451,6 +470,17 @@ public final class InspectionStore: ObservableObject {
                  relativeDir: "Inspections/\(jobStr)/thumbnails")
         addFiles(inDir: FilePaths.lidarFolder(jobId: inspectionId),
                  relativeDir: "Inspections/\(jobStr)/lidar")
+        // Sync data completeness pass: signature PNGs, plus the fixed-name cover
+        // photo and side-state document at the inspection folder root.
+        addFiles(inDir: FilePaths.signaturesFolder(jobId: inspectionId),
+                 relativeDir: "Inspections/\(jobStr)/signatures")
+        for name in [FilePaths.defaultCoverPhotoFileName, FilePaths.sideStateFileName] {
+            let rel = "Inspections/\(jobStr)/\(name)"
+            if fm.fileExists(atPath: FilePaths.inspectionFolder(jobId: inspectionId).appendingPathComponent(name).path),
+               SyncAssetPaths.kind(forRelativePath: rel) != nil {
+                out.append((inspectionId, rel))
+            }
+        }
         if let pdfRel = FilesAppPublisher.publishedReportRelativePath(forJobId: inspectionId, inspection: inspection),
            SyncAssetPaths.kind(forRelativePath: pdfRel) != nil {
             out.append((inspectionId, pdfRel))
@@ -883,8 +913,48 @@ public extension InspectionStore {
             _ = idx
             pendingFinalizedMetadata[written.id] = VersionMetadata(from: written)
             try? saveMetadataIndex()
+            // Item 4 (sync data completeness): the finalize SUCCEEDED and fully
+            // persisted — kick off the non-blocking report-PDF auto-publish so a
+            // ReportPDF sync record is created without a manual Export/Send.
+            // Deliberately the LAST statement of the success path: it can never
+            // block or fail the finalize, and the finalize→Invoice redirect (which
+            // runs after this method returns) is unaffected. Every failed/aborted
+            // finalize above returns before reaching here.
+            scheduleFinalizeAutoPublish(for: written)
         case .failure:
             break
+        }
+    }
+
+    /// Fires the finalize auto-publish exactly once per successful finalize (Item
+    /// 4). Test seam first; otherwise the default fire-and-forget export+publish.
+    /// Skipped when the product toggle is off, and in DEBUG screenshot runs (the
+    /// demo fixture finalizes seed data — a WKWebView PDF render mid-capture would
+    /// only add churn).
+    private func scheduleFinalizeAutoPublish(for version: InspectionVersion) {
+        guard Self.autoPublishReportPDFOnFinalize else { return }
+        if let hook = finalizeAutoPublishHook {
+            hook(version)
+            return
+        }
+        #if DEBUG
+        if ScreenshotMode.isActive { return }
+        #endif
+        let watermark = autoPublishWatermarkProvider?() ?? true
+        Task { @MainActor in
+            // A fresh, view-independent exporter: the same HTML→PDF pipeline the
+            // manual Export/Send flow drives, ending in the same
+            // FilesAppPublisher.publish — which emits the ReportPDF sync record.
+            let exporter = ReportExportService()
+            await exporter.export(version: version, watermark: watermark)
+            if case .success(_, let pdf?) = exporter.result {
+                FilesAppPublisher.publish(version: version, pdfURL: pdf)
+                Diagnostics.logInfo("Finalize auto-publish: report PDF published for \(version.id)")
+            } else {
+                // Failure-tolerant by contract: log only — the finalize already
+                // succeeded, and the manual Export/Send flow remains available.
+                Diagnostics.logError(context: "Finalize auto-publish: PDF export failed for \(version.id) (non-blocking; manual Export/Send still available)")
+            }
         }
     }
 

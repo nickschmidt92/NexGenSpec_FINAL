@@ -35,19 +35,24 @@ struct DashboardView: View {
 
     // MARK: - Derived state
     //
-    // Hoisted out of the List body so the UserDefaults reads behind
+    // Hoisted out of the List body so the side-state reads behind
     // `isArchived` and `badge` happen ONCE per body render rather than
     // N+1 times (once per row + once for the section header count).
-    // Each `metadata.badge` does up to 2 UserDefaults reads, and every
-    // `store.objectWillChange.send()` rebuilds the whole dashboard, so
+    // Every `store.objectWillChange.send()` rebuilds the whole dashboard, so
     // this materially cuts the cost of marking an inspection paid /
-    // invoiced / finalized.
+    // invoiced / finalized. (`badge`/`isArchived` now read the SYNCED
+    // InspectionSideStateStore, which caches in memory, so a render is a
+    // dictionary lookup per row.)
     private var visibleList: [VersionMetadata] {
         store.metadataList.filter { !$0.isArchived }
     }
     private var badgeMap: [UUID: InspectionBadge] {
         Dictionary(uniqueKeysWithValues: store.metadataList.map { ($0.id, $0.badge) })
     }
+    /// Bumped when a SYNCED-IN side-state change lands (archived / invoice
+    /// sent / paid flipped on another device) so the rows and archived-filter
+    /// re-derive without a store publish.
+    @State private var sideStateTick = 0
 
     // MARK: - View
     var body: some View {
@@ -128,7 +133,7 @@ struct DashboardView: View {
                             //   policy.
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
-                                    InspectionFlags.setArchived(true, inspectionId: meta.inspectionId.uuidString)
+                                    InspectionSideStateStore.shared.setArchived(true, inspectionId: meta.inspectionId.uuidString)
                                     store.objectWillChange.send()
                                 } label: {
                                     Label("Archive", systemImage: "archivebox.fill")
@@ -145,7 +150,7 @@ struct DashboardView: View {
                             }
                             .contextMenu {
                                 Button {
-                                    InspectionFlags.setArchived(true, inspectionId: meta.inspectionId.uuidString)
+                                    InspectionSideStateStore.shared.setArchived(true, inspectionId: meta.inspectionId.uuidString)
                                     store.objectWillChange.send()
                                 } label: {
                                     Label("Archive", systemImage: "archivebox")
@@ -189,6 +194,13 @@ struct DashboardView: View {
                 // flips to Finalized here, once the user is back on the list.
                 .onAppear {
                     store.flushPendingMetadata()
+                }
+                // A synced-in side-state change (archived / invoiced / paid on
+                // another device) re-renders the rows. Local flag edits already
+                // publish via store.objectWillChange at their call sites.
+                .onReceive(NotificationCenter.default.publisher(for: .sideStateDidChange)) { note in
+                    guard (note.userInfo?["remote"] as? Bool) == true else { return }
+                    sideStateTick &+= 1
                 }
                 .navigationTitle("Workspace")
                 .toolbar {
