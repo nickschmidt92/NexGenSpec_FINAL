@@ -1,11 +1,22 @@
 import Foundation
 import FirebaseCrashlytics
+import os
 
 enum Diagnostics {
     private static let maxBytes = 512 * 1024
     private static let queue = DispatchQueue(label: "com.nexgenspec.diagnostics")
 
+    // Build-37 [SYNCDIAG] scaffolding (remove with the rest of the diag branch):
+    // mirror to os_log so the lines stream live in Console.app from a
+    // TestFlight/Release install. privacy: .public is required — Release
+    // builds redact interpolated values to "<private>" otherwise.
+    private static let console = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.nexgenspec.app",
+                                        category: "Diagnostics")
+
     static func logError(context: String, error: Error? = nil, persistToDisk: Bool = true) {
+        let consoleMessage = error.map { "\(context): \($0.localizedDescription)" } ?? context
+        console.error("\(consoleMessage, privacy: .public)")
+
         // Report to Crashlytics for remote monitoring
         if let error {
             Crashlytics.crashlytics().record(error: error, userInfo: ["context": context])
@@ -31,6 +42,7 @@ enum Diagnostics {
     }
 
     static func logInfo(_ context: String) {
+        console.notice("\(context, privacy: .public)")
         Crashlytics.crashlytics().log("INFO: \(context)")
 
         queue.async {
