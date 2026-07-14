@@ -87,15 +87,22 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
                 existing = nil  // not present yet → create
             }
             if let existing, (existing[CloudKitSchema.Field.locked] as? Int) == 1 {
-                Diagnostics.logInfo("CKCloudDatabase: server record \(record.recordName) is already finalized; left immutable.")
+                Diagnostics.logInfo("[SYNCDIAG] PUSH GUARD-SKIP \(record.recordName): server already finalized; left immutable.")
                 return
             }
 
             let ck = existing ?? CKRecord(recordType: CloudKitSchema.RecordType.inspectionVersion, recordID: recordID)
+            let syncdiagPath = existing != nil ? "UPDATE" : "CREATE"
+            let syncdiagPreTag = existing?.recordChangeTag ?? "nil"
             Self.apply(record, to: ck, assetURL: assetURL)
 
             do {
-                _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                let syncdiagRes = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                var syncdiagNewTag = "no-result"
+                if case .success(let saved)? = syncdiagRes.saveResults[recordID] {
+                    syncdiagNewTag = saved.recordChangeTag ?? "nil"
+                }
+                Diagnostics.logInfo("[SYNCDIAG] PUSH \(syncdiagPath) OK \(record.recordName) locked=\(record.locked) preTag=\(syncdiagPreTag) newTag=\(syncdiagNewTag)")
                 return
             } catch let error where Self.isServerRecordChanged(error) {
                 // Concurrent cross-device write landed in the fetch→save window.
@@ -342,6 +349,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
         var moreComing = true
 
         while moreComing {
+            Diagnostics.logInfo("[SYNCDIAG] PULL fetch zone=\(zoneName) sinceToken=\(serverToken.map { String($0.hashValue) } ?? "nil")")
             let result = try await database.recordZoneChanges(inZoneWith: zoneID, since: serverToken)
             for (_, modificationResult) in result.modificationResultsByID {
                 switch modificationResult {
@@ -349,6 +357,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
                     // A record is EITHER a version OR an asset (remoteVersion returns
                     // nil for the asset record types, and vice versa) — no double-count.
                     if let remote = Self.remoteVersion(from: modification.record) {
+                        Diagnostics.logInfo("[SYNCDIAG] PULL got version \(modification.record.recordID.recordName) tag=\(modification.record.recordChangeTag ?? "nil") locked=\((modification.record[CloudKitSchema.Field.locked] as? Int) ?? -1)")
                         changed.append(remote)
                     } else if let asset = Self.remoteAsset(from: modification.record) {
                         changedAssets.append(asset)
@@ -369,6 +378,7 @@ struct CKZoneFetcher: CloudZoneFetcher, @unchecked Sendable {
             }
             serverToken = result.changeToken
             moreComing = result.moreComing
+            Diagnostics.logInfo("[SYNCDIAG] PULL page done: versions=\(changed.count) deletes=\(deleted.count) moreComing=\(moreComing) newToken=\(serverToken.map { String($0.hashValue) } ?? "nil")")
         }
 
         return ZoneChanges(changed: changed, changedAssets: changedAssets, deletedRecordNames: deleted, newToken: Self.encodeToken(serverToken))

@@ -324,6 +324,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             let decision = SyncConflictResolver.resolveUpsert(
                 local: local, remoteLocked: remote.record.locked, remoteUpdatedAt: remote.modifiedAt
             )
+            Diagnostics.logInfo("[SYNCDIAG] RESOLVE \(remote.record.recordName) local.exists=\(local.exists) local.final=\(local.isFinalized) local.updatedAt=\(local.updatedAt.map { String(describing: $0) } ?? "nil") remote.locked=\(remote.record.locked) remote.updatedAt=\(remote.modifiedAt) → \(decision)")
             if decision == .applyRemote {
                 // TOCTOU guard (fix B / landmine 1): bail before applying a remote
                 // record if an account switch detached/cancelled this pull mid-flight,
@@ -332,7 +333,9 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 if Task.isCancelled { return }
                 let stillBound = lock.withLock { activeBinding?.zoneName == binding.zoneName }
                 guard stillBound else { return }
-                if await writer.applyRemoteVersion(remote.record.payload) == false { allApplied = false }
+                let syncdiagApplied = await writer.applyRemoteVersion(remote.record.payload)
+                Diagnostics.logInfo("[SYNCDIAG] APPLY \(remote.record.recordName) → applied=\(syncdiagApplied)")
+                if syncdiagApplied == false { allApplied = false }
             }
         }
 
@@ -413,6 +416,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
         }
 
         // Persist the new change token only when the whole batch applied cleanly.
+        Diagnostics.logInfo("[SYNCDIAG] SETTLE allApplied=\(allApplied) changed=\(changes.changed.count) newToken=\(changes.newToken != nil ? "present" : "nil") → \(allApplied && changes.newToken != nil ? "token PERSISTED" : "token HELD")")
         guard allApplied, let newToken = changes.newToken else { return }
         var updated = binding
         updated.changeToken = newToken
