@@ -77,6 +77,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 )
                 bindings.save(newBinding)
                 setState(.idle, binding: newBinding)
+                Diagnostics.logSync("bind: bound new zone=\(zoneName)")
             } catch {
                 Diagnostics.logError(context: "CloudKitSyncPort.bind(bindNew) ensureZone failed", error: error)
                 setState(.error("Couldn't set up iCloud sync."), binding: nil)
@@ -86,6 +87,7 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             do {
                 try await database.ensureZone(existingBinding.zoneName)
                 setState(.idle, binding: existingBinding)
+                Diagnostics.logSync("bind: resumed zone=\(existingBinding.zoneName)")
             } catch {
                 Diagnostics.logError(context: "CloudKitSyncPort.bind(resume) ensureZone failed", error: error)
                 setState(.error("Couldn't resume iCloud sync."), binding: nil)
@@ -97,17 +99,27 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // storage intact (the original iCloud account may return later).
             setState(.paused(reason: reason), binding: nil)
         }
-        // After a successful bind, run one-time seeding (no-op if not bound or
-        // already seeded), then pull remote changes (two-way), then flush any
-        // changes that queued while we were unbound/paused (fix F) — by now
-        // `activeBinding` is set, so a previously-stranded edit finally pushes.
+        // After a successful bind: restore the durable outbox (A2 — changes queued
+        // by a prior process/port instance survive force-quit/eviction/rebind),
+        // run one-time seeding (no-op if not bound or already seeded), enqueue
+        // every locally-finalized version for an idempotent re-push (A3 — heals a
+        // stranded finalize; the server-side lock guard dedupes), then pull remote
+        // changes (two-way), then flush any changes that queued while we were
+        // unbound/paused (fix F) — by now `activeBinding` is set, so a
+        // previously-stranded edit finally pushes.
+        mergeOutboxIntoPending()
         await seedIfNeeded(firebaseUID: firebaseUID)
+        reconcileFinalizedLocalVersions()
         await pull()
         await flushPending()
     }
 
     func unbind() {
         lock.withLock {
+            // A2 (d): persist-then-clear. The outbox FILE is the durability across
+            // unbind/rebind/account-switch teardown — only the in-memory queue is
+            // cleared; the next bind of this UID restores it.
+            persistOutboxLocked()
             _status = .off
             activeBinding = nil
             pending.removeAll()
@@ -115,7 +127,12 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
     }
 
     func recordLocalChange(_ change: SyncChange) {
-        lock.withLock { pending.append(change) }
+        lock.withLock {
+            pending.append(change)
+            // A2 (b): mirror every queue mutation to the durable outbox, inside
+            // the same lock so the file can never interleave two mutations.
+            persistOutboxLocked()
+        }
         Task { await flushPending() }
     }
 
@@ -185,7 +202,10 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                                     binding: binding, tombstoned: [])
                 } catch {
                     assetsSucceeded = false
-                    Diagnostics.logError(context: "CloudKitSyncPort.seed asset push failed (queued for retry)", error: error)
+                    // Truthful text (A7): a failed seed-asset push is NOT re-queued in
+                    // `pending` — the whole asset phase re-runs on the next launch/bind
+                    // because assetsSeededAt stays unstamped below.
+                    Diagnostics.logError(context: "CloudKitSyncPort.seed asset push failed (will retry on next launch/bind)", error: error)
                 }
             }
         }
@@ -250,6 +270,130 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             }
         }
         return pairs
+    }
+
+    // MARK: - Durable outbox (A2)
+
+    /// On-disk location of the per-UID outbox: the pending queue, persisted so
+    /// queued-but-unpushed changes survive a force-quit / OS eviction / rebind
+    /// (the in-memory-only queue was the prime suspect for a stranded finalize).
+    /// Keyed by the BINDING's firebaseUID — never ambient session state — so an
+    /// account switch can't write one user's queue under another's root.
+    /// Internal (not private) so tests can address the file directly.
+    static func outboxURL(forUID uid: String) -> URL {
+        FilePaths.userRoot(uid: uid).appendingPathComponent("sync-outbox.json", isDirectory: false)
+    }
+
+    /// Persist the current `pending` queue under the active binding's UID.
+    /// MUST be called while holding `lock` (it reads `activeBinding` + `pending`,
+    /// and writing inside the port's synchronization keeps the file a consistent
+    /// snapshot of the queue — two mutations can never interleave their writes).
+    /// Not bound (no UID to key by) ⇒ skip: pre-bind changes are persisted by the
+    /// bind-time merge as soon as a binding exists.
+    private func persistOutboxLocked() {
+        guard let uid = activeBinding?.firebaseUID else { return }
+        Self.persistOutbox(pending, forUID: uid)
+    }
+
+    private static func persistOutbox(_ changes: [SyncChange], forUID uid: String) {
+        do {
+            let data = try JSONEncoder().encode(changes)
+            // Atomic + file-protected (the queue carries VersionMetadata —
+            // client name/address — so it gets the same protection class as
+            // every other per-UID file).
+            try FileSecurity.writeProtected(data, to: outboxURL(forUID: uid))
+        } catch {
+            // Best-effort durability: a failed outbox write degrades to the old
+            // in-memory-only behavior for this window; it must never block or
+            // fail the live push itself.
+            let ns = error as NSError
+            Diagnostics.logSync("outbox: persist failed count=\(changes.count) error=\(ns.domain)#\(ns.code)")
+        }
+    }
+
+    /// Loads the persisted outbox. Missing file ⇒ empty (nothing owed). A
+    /// corrupt/undecodable file is logged, DELETED, and treated as empty —
+    /// never crash or wedge sync on a bad file (A2).
+    private static func loadOutbox(forUID uid: String) -> [SyncChange] {
+        let url = outboxURL(forUID: uid)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode([SyncChange].self, from: data)
+        } catch {
+            let ns = error as NSError
+            Diagnostics.logSync("outbox: corrupt file discarded error=\(ns.domain)#\(ns.code)")
+            try? FileManager.default.removeItem(at: url)
+            return []
+        }
+    }
+
+    /// A2 (c): merge the durable outbox into the in-memory queue at bind.
+    /// Enqueue does NOT coalesce (plain append; pushes are idempotent), so the
+    /// merge dedupes by change identity keeping the LATEST occurrence — older
+    /// persisted entries first, the current in-memory queue (newer) after.
+    /// No-op when not bound.
+    private func mergeOutboxIntoPending() {
+        let binding: SyncBinding? = lock.withLock { activeBinding }
+        guard let binding else { return }
+        let loaded = Self.loadOutbox(forUID: binding.firebaseUID)   // file I/O outside the lock
+        lock.withLock {
+            guard activeBinding?.zoneName == binding.zoneName else { return }
+            guard !(loaded.isEmpty && pending.isEmpty) else { return }
+            pending = Self.dedupedKeepingLatest(loaded + pending)
+            persistOutboxLocked()
+        }
+        if !loaded.isEmpty {
+            Diagnostics.logSync("outbox: restored \(loaded.count) persisted change(s) at bind")
+        }
+    }
+
+    /// Dedupe by change identity, keeping each identity's LATEST occurrence in
+    /// its (later) position so replay order still reflects recording order.
+    private static func dedupedKeepingLatest(_ changes: [SyncChange]) -> [SyncChange] {
+        var lastIndex: [String: Int] = [:]
+        for (i, change) in changes.enumerated() { lastIndex[identity(of: change)] = i }
+        return changes.enumerated()
+            .filter { lastIndex[Self.identity(of: $0.element)] == $0.offset }
+            .map(\.element)
+    }
+
+    /// A change's dedupe identity: the change KIND plus its record key. The kind
+    /// is part of the identity on purpose — an upsert and a delete of the same id
+    /// are different intents and must never collapse into each other.
+    private static func identity(of change: SyncChange) -> String {
+        switch change {
+        case .versionUpserted(let meta): return "vu:\(meta.id.uuidString)"
+        case .versionDeleted(let versionId): return "vd:\(versionId.uuidString)"
+        case .mediaUpserted(let jobId, let relativePath): return "mu:\(jobId.uuidString)/\(relativePath)"
+        case .mediaDeleted(let jobId, let relativePath): return "md:\(jobId.uuidString)/\(relativePath)"
+        }
+    }
+
+    // MARK: - Bind-time locked-state reconciliation (A3)
+
+    /// Enqueues a `.versionUpserted` for EVERY locally-finalized (locked) version
+    /// on each bind — the recovery mechanism that heals a finalize stranded by any
+    /// past silent push loss. Deliberately NOT gated on `binding.seededAt`: that
+    /// one-shot flag is exactly what prevented recovery (seeding never re-runs, and
+    /// the live emit for the lost finalize is long gone). Idempotence is enforced
+    /// server-side, not here: `CKCloudDatabase.save` fetches the server record
+    /// first — already locked ⇒ guard-skip no-op; draft/absent ⇒ the finalized
+    /// record lands. Cost: once per bind, N = finalized inspections (the push path
+    /// fetch-checks each; only genuinely-stranded ones upload payloads).
+    private func reconcileFinalizedLocalVersions() {
+        let binding: SyncBinding? = lock.withLock { activeBinding }
+        guard let binding else { return }
+        let finalized = reader.allLocalVersions().compactMap { $0.meta.locked ? $0.meta : nil }
+        guard !finalized.isEmpty else { return }
+        lock.withLock {
+            guard activeBinding?.zoneName == binding.zoneName else { return }
+            // Keep-latest dedupe: a restored-outbox copy of the same versionId is
+            // superseded by this fresh-from-disk metadata.
+            pending = Self.dedupedKeepingLatest(pending + finalized.map { .versionUpserted($0) })
+            persistOutboxLocked()
+        }
+        Diagnostics.logSync("bind: reconcile enqueued \(finalized.count) finalized version(s) for idempotent re-push")
     }
 
     /// Pull remote changes for the bound zone and apply them locally, resolving
@@ -395,7 +539,10 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             guard stillBound else { return }
             // false ⇒ a transient write failure: hold the token (don't advance) so the
             // next pull re-fetches and retries this window. Applies are idempotent.
-            if await writer.applyRemoteAsset(record) == false { allApplied = false }
+            let applied = await writer.applyRemoteAsset(record)
+            // A7: apply/skip visibility for the asset pull. IDs/kinds only.
+            Diagnostics.logSync("pull.asset \(applied ? "applied" : "held") job=\(record.jobId.uuidString) kind=\(record.kind.rawValue)")
+            if !applied { allApplied = false }
         }
 
         for key in deadAssets where !changedAssetKeys.contains(key) {
@@ -490,6 +637,11 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 try await apply(change, binding: binding, tombstoned: tombstoned)
             } catch {
                 failed.append(change)   // keep it queued; do NOT drop on failure
+                // A7: surface WHICH change kind failed and the concrete error
+                // code/domain (previously invisible — logError only carried
+                // localizedDescription). IDs/kinds/codes only, never user content.
+                let ns = error as NSError
+                Diagnostics.logSync("flushPending: push failed change=\(Self.changeTag(change)) error=\(ns.domain)#\(ns.code)")
                 Diagnostics.logError(context: "CloudKitSyncPort push failed", error: error)
             }
         }
@@ -503,6 +655,10 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // ones that failed/were-skipped, plus anything appended during the flush.
             let appendedDuringFlush = pending.count > snapshot.count ? Array(pending[snapshot.count...]) : []
             pending = failed + appendedDuringFlush
+            // A2 (b): the dequeue/requeue is a queue mutation — mirror it to the
+            // durable outbox so a kill right after this flush replays exactly the
+            // still-owed changes (and nothing that already pushed).
+            persistOutboxLocked()
             // Surface .error only on a GENUINE push failure (something stayed in
             // `failed`); changes merely appended mid-flush are drained by the re-run,
             // so they shouldn't masquerade as an upload error.
@@ -524,7 +680,11 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                 _ = await writer.deleteLocalVersion(recordName: meta.id.uuidString)
                 return
             }
-            guard let data = reader.versionData(forVersionId: meta.id) else { return }
+            // A confirmed-ABSENT file (nil) settles the change — the version was
+            // deleted locally. An unreadable-but-present file THROWS out of here so
+            // flushPending re-queues the change (A5); the old `else return` treated
+            // both as "nothing to push" and silently dequeued real edits.
+            guard let data = try reader.versionData(forVersionId: meta.id) else { return }
             let record = InspectionRecordMapper.make(meta: meta, payload: data)
             // Push the version (fix A). `database.save` overwrites a draft (LWW is
             // arbitrated on the receiver) and PROMOTES a draft to finalized (finalize
@@ -551,8 +711,14 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             let root = FilePaths.userRoot(uid: binding.firebaseUID)
             let fileURL = root.appendingPathComponent(relativePath)
             let fm = FileManager.default
-            guard fm.fileExists(atPath: fileURL.path) else { return }  // already deleted → nothing to push
-            guard let data = try? Data(contentsOf: fileURL) else { return }
+            // Confirmed-ABSENT file → the asset was deleted before we pushed it;
+            // settle (dequeue) the change. An existing-but-unreadable file THROWS
+            // (A5) so flushPending re-queues instead of silently dropping the push.
+            guard fm.fileExists(atPath: fileURL.path) else {
+                Diagnostics.logSync("mediaUpserted: file confirmed absent; change dequeued job=\(jobId.uuidString) kind=\(kind.rawValue)")
+                return
+            }
+            let data = try Data(contentsOf: fileURL)
             let attrs = try? fm.attributesOfItem(atPath: fileURL.path)
             let mtime = (attrs?[.modificationDate] as? Date) ?? Date()
             let record = SyncAssetRecord(
@@ -563,6 +729,10 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             // asset tombstone first so a later pull doesn't re-delete this fresh copy.
             try await database.clearAssetTombstone(key: "\(jobId.uuidString)/\(relativePath)", inZone: binding.zoneName)
             try await database.saveAsset(record, inZone: binding.zoneName)
+            // A7: success marker (failure is logged with its error code by
+            // flushPending's catch). Job id + kind only — asset paths can embed
+            // client name/address in the report folder name, so never log them.
+            Diagnostics.logSync("saveAsset ok job=\(jobId.uuidString) kind=\(kind.rawValue)")
 
         case .mediaDeleted(let jobId, let relativePath):
             // Record-then-delete (mirrors versionDeleted): the tombstone is what stops a
@@ -570,6 +740,23 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
             let key = "\(jobId.uuidString)/\(relativePath)"
             try await database.recordAssetTombstone(key: key, inZone: binding.zoneName)
             try await database.delete(recordName: CloudKitSchema.assetRecordName(jobId: jobId, relativePath: relativePath), inZone: binding.zoneName)
+        }
+    }
+
+    /// PII-safe descriptor of a change for `Diagnostics.logSync` (A7): record
+    /// UUIDs, the change tag, and the asset KIND only. The relative path is
+    /// deliberately EXCLUDED — report paths embed the client name and property
+    /// address in the published folder name.
+    private static func changeTag(_ change: SyncChange) -> String {
+        switch change {
+        case .versionUpserted(let meta):
+            return "versionUpserted(\(meta.id.uuidString))"
+        case .versionDeleted(let versionId):
+            return "versionDeleted(\(versionId.uuidString))"
+        case .mediaUpserted(let jobId, let relativePath):
+            return "mediaUpserted(job=\(jobId.uuidString), kind=\(SyncAssetPaths.kind(forRelativePath: relativePath)?.rawValue ?? "excluded"))"
+        case .mediaDeleted(let jobId, let relativePath):
+            return "mediaDeleted(job=\(jobId.uuidString), kind=\(SyncAssetPaths.kind(forRelativePath: relativePath)?.rawValue ?? "excluded"))"
         }
     }
 

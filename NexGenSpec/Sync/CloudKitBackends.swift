@@ -95,7 +95,12 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
             Self.apply(record, to: ck, assetURL: assetURL)
 
             do {
-                _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                let (saveResults, _) = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                // A1: a per-record failure comes back in the RESULTS, not as a throw
+                // — discarding it silently dequeued a change that never landed. A
+                // per-record serverRecordChanged thrown here is caught by the SAME
+                // catch below, so it still routes into the fetch-retry loop.
+                try Self.verifySaveResults(saveResults, submitted: [ck.recordID])
                 return
             } catch let error where Self.isServerRecordChanged(error) {
                 // Concurrent cross-device write landed in the fetch→save window.
@@ -112,7 +117,11 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
     func delete(recordName: String, inZone zoneName: String) async throws {
         let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
-        _ = try await database.modifyRecords(saving: [], deleting: [recordID], savePolicy: .changedKeys, atomically: true)
+        let (_, deleteResults) = try await database.modifyRecords(saving: [], deleting: [recordID], savePolicy: .changedKeys, atomically: true)
+        // A1: surface a per-record delete failure instead of discarding it, so the
+        // port re-queues the change. (An already-absent record is idempotent success
+        // — see verifyDeleteResults.)
+        try Self.verifyDeleteResults(deleteResults, submitted: [recordID])
     }
 
     func deleteZone(_ zoneName: String) async throws {
@@ -150,7 +159,10 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
             ids.append(versionId)
             meta[CloudKitSchema.Field.deletedIds] = ids as CKRecordValue
             do {
-                _ = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                let (saveResults, _) = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                // A1: a per-record failure must throw (re-queue), and a per-record
+                // serverRecordChanged routes into the same retry catch below.
+                try Self.verifySaveResults(saveResults, submitted: [meta.recordID])
                 return
             } catch let error where Self.isServerRecordChanged(error) {
                 lastConflict = error
@@ -195,7 +207,11 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         ck[CloudKitSchema.Field.schemaVersion] = record.schemaVersion as CKRecordValue
         ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
 
-        _ = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .changedKeys, atomically: true)
+        let (saveResults, _) = try await database.modifyRecords(saving: [ck], deleting: [], savePolicy: .changedKeys, atomically: true)
+        // A1: a per-record failure returned in the results (e.g. quota, zone gone,
+        // Prod schema missing the asset record type) must THROW so flushPending
+        // re-queues the change — discarding it was the silent asset-loss hole.
+        try Self.verifySaveResults(saveResults, submitted: [ck.recordID])
     }
 
     func recordAssetTombstone(key: String, inZone zoneName: String) async throws {
@@ -248,7 +264,9 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
             guard mutate(&keys) else { return }   // no change → nothing to persist
             meta[CloudKitSchema.Field.deletedAssets] = keys as CKRecordValue
             do {
-                _ = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                let (saveResults, _) = try await database.modifyRecords(saving: [meta], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+                // A1: same per-record verification as recordTombstone.
+                try Self.verifySaveResults(saveResults, submitted: [meta.recordID])
                 return
             } catch let error where Self.isServerRecordChanged(error) {
                 lastConflict = error
@@ -277,6 +295,65 @@ struct CKCloudDatabase: CloudDatabase, @unchecked Sendable {
         // version that predates `updatedAt`.
         ck[CloudKitSchema.Field.modifiedAt] = (record.updatedAt ?? Date()) as CKRecordValue
         ck[CloudKitSchema.Field.payload] = CKAsset(fileURL: assetURL)
+    }
+
+    // MARK: - Per-record result verification (A1)
+
+    /// Unwraps the per-record save Results of a `modifyRecords` call for every
+    /// record we submitted. The iOS 17 async `modifyRecords` reports per-record
+    /// failures IN THE RESULTS DICTIONARY, not (only) as a thrown error — so the
+    /// old `_ = try await …` discarded genuine failures, the caller returned as if
+    /// the save landed, and `CloudKitSyncPort.flushPending` DEQUEUED the change:
+    /// the #1 silent-loss hole. Any `.failure` is re-thrown; a submitted record
+    /// with NO result entry throws a synthetic descriptive error (fail closed —
+    /// "no evidence it saved" must never count as success).
+    ///
+    /// Matching is by `recordName`, NOT `CKRecord.ID` equality: a re-fetched
+    /// server record's zone `ownerName` (the resolved owner) can differ from our
+    /// constructed ID (`CKCurrentUserDefaultName`), which would make a dictionary
+    /// lookup by ID miss and misreport a clean save as a missing result.
+    /// Internal (not private) so unit tests can exercise it with constructed
+    /// CloudKit value types — no server round-trip needed.
+    static func verifySaveResults(
+        _ results: [CKRecord.ID: Result<CKRecord, Error>],
+        submitted: [CKRecord.ID]
+    ) throws {
+        for id in submitted {
+            guard let entry = results.first(where: { $0.key.recordName == id.recordName }) else {
+                throw Self.missingResultError(recordName: id.recordName, operation: "save")
+            }
+            if case .failure(let error) = entry.value { throw error }
+        }
+    }
+
+    /// Delete-side twin of `verifySaveResults`. One deliberate carve-out: a
+    /// per-record `.unknownItem` on a DELETE is idempotent success — the record is
+    /// already absent, which IS the goal state. Deletes retry after transient
+    /// failures (and can target records that were never pushed), so throwing here
+    /// would wedge the queue permanently on a change that cannot ever succeed
+    /// "harder" than the record already being gone.
+    static func verifyDeleteResults(
+        _ results: [CKRecord.ID: Result<Void, Error>],
+        submitted: [CKRecord.ID]
+    ) throws {
+        for id in submitted {
+            guard let entry = results.first(where: { $0.key.recordName == id.recordName }) else {
+                throw Self.missingResultError(recordName: id.recordName, operation: "delete")
+            }
+            if case .failure(let error) = entry.value {
+                if let ckError = error as? CKError, ckError.code == .unknownItem { continue }
+                throw error
+            }
+        }
+    }
+
+    private static func missingResultError(recordName: String, operation: String) -> Error {
+        NSError(
+            domain: "NexGenSpec.CloudKitBackends",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey:
+                "modifyRecords returned no per-record \(operation) result for record \(recordName); treating as failed so the change is re-queued (A1)"]
+        )
     }
 
     /// True if `error` is (or, inside an atomic batch, wraps via `.partialFailure`) a
