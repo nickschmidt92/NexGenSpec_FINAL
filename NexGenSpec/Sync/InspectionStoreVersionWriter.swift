@@ -98,10 +98,35 @@ final class InspectionStoreVersionWriter: LocalVersionWriter, @unchecked Sendabl
         }
         do {
             try FileSecurity.writeProtected(record.payload, to: dest)
+            Self.notifyApplied(record)
             return true
         } catch {
             Diagnostics.logError(context: "applyRemoteAsset write failed \(record.relativePath)", error: error)
             return false   // transient → hold token, retry next pull
+        }
+    }
+
+    /// Kind-specific UI/store notification after a synced-in asset lands on disk
+    /// (sync data completeness pass). Most asset kinds are read lazily at render
+    /// time and need nothing; the two below back LIVE UI state:
+    /// - sideState: invalidate the side-state cache + re-derive badges/lists.
+    /// - coverPhoto: the dashboard thumbnail cache and the Overview cover view
+    ///   listen for `.coverPhotoDidUpdate` (same signal a local cover write posts),
+    ///   which also releases the receiver's cover placeholder.
+    private static func notifyApplied(_ record: SyncAssetRecord) {
+        switch record.kind {
+        case .sideState:
+            InspectionSideStateStore.shared.noteRemoteChange(inspectionId: record.jobId.uuidString)
+        case .coverPhoto:
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .coverPhotoDidUpdate,
+                    object: nil,
+                    userInfo: ["jobId": record.jobId]
+                )
+            }
+        default:
+            break
         }
     }
 

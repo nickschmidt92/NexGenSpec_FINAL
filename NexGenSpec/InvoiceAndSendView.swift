@@ -26,24 +26,17 @@ struct InvoiceAndSendView: View {
     @State private var showLargePDFWarning = false
     @State private var ccBuyersAgent: Bool = false
     @State private var ccListingAgent: Bool = false
-    // Persisted per-inspection via UserDefaults (keyed by inspectionId).
-    // Avoids touching the Inspection model mid-TestFlight, which would
-    // force a JSON migration for every existing draft on disk. These
-    // are soft metadata — safe to lose if reinstalled.
+    // Persisted per-inspection via the SYNCED InspectionSideStateStore
+    // (sync data completeness pass): sent/paid/amounts written on one device
+    // show on the user's other devices. The store lazily hoists any legacy
+    // UserDefaults soft flags on first read, so pre-existing invoice state
+    // carries over. Kept out of the Inspection model, which is sealed
+    // (integrity-hashed + server-locked) at finalize — invoice state is
+    // created AFTER finalize and cannot ride the sealed record.
     @State private var invoiceSentAt: Date?
     @State private var invoicePaidAt: Date?
 
-    // Keys are per-UID scoped via InspectionFlags.scopedKey so one account's
-    // invoice state is isolated from — and preserved separately from — another's
-    // on a shared device (matches the on-disk per-UID store).
-    private var sentAtKey: String { InspectionFlags.scopedKey("invoice.sentAt.\(version.inspection.inspectionId)") }
-    private var paidAtKey: String { InspectionFlags.scopedKey("invoice.paidAt.\(version.inspection.inspectionId)") }
-    // The dollar amounts + services text are persisted per-inspection too, so a
-    // pane switch doesn't lose them and a locked Resend re-sends the SAME invoice
-    // the client received rather than a blank one (T-01440).
-    private var priceKey: String { InspectionFlags.scopedKey("invoice.price.\(version.inspection.inspectionId)") }
-    private var servicesKey: String { InspectionFlags.scopedKey("invoice.services.\(version.inspection.inspectionId)") }
-    private var totalKey: String { InspectionFlags.scopedKey("invoice.total.\(version.inspection.inspectionId)") }
+    private var inspectionId: String { version.inspection.inspectionId }
 
     /// Once the invoice has been emailed to the client, the dollar amounts and
     /// services description are locked. Editing them after send would let the
@@ -189,6 +182,14 @@ struct InvoiceAndSendView: View {
         // One combined onChange (not three) so the large view body still
         // type-checks; persists all three amounts whenever any of them changes.
         .onChange(of: invoiceFieldsSnapshot) { _, _ in persistInvoiceFields() }
+        // A synced-in remote side-state change for THIS inspection (e.g. the
+        // invoice was marked paid on another device) refreshes the open form.
+        // Local edits are excluded: they were already applied to these fields.
+        .onReceive(NotificationCenter.default.publisher(for: .sideStateDidChange)) { note in
+            guard (note.userInfo?["inspectionId"] as? String) == inspectionId,
+                  (note.userInfo?["remote"] as? Bool) == true else { return }
+            loadPersistedState()
+        }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Invoice & Send")
         .onChange(of: exportService.isExporting) { _, isExporting in
@@ -283,7 +284,7 @@ struct InvoiceAndSendView: View {
                 if result == .sent {
                     let now = Date()
                     invoiceSentAt = now
-                    UserDefaults.standard.set(now, forKey: sentAtKey)
+                    InspectionSideStateStore.shared.setInvoiceSent(at: now, inspectionId: inspectionId)
                 }
             }
         )
@@ -329,19 +330,20 @@ struct InvoiceAndSendView: View {
         if invoicePaidAt == nil {
             let now = Date()
             invoicePaidAt = now
-            UserDefaults.standard.set(now, forKey: paidAtKey)
+            InspectionSideStateStore.shared.setInvoicePaid(at: now, inspectionId: inspectionId)
         } else {
             invoicePaidAt = nil
-            UserDefaults.standard.removeObject(forKey: paidAtKey)
+            InspectionSideStateStore.shared.setInvoicePaid(at: nil, inspectionId: inspectionId)
         }
     }
 
     private func loadPersistedState() {
-        invoiceSentAt = UserDefaults.standard.object(forKey: sentAtKey) as? Date
-        invoicePaidAt = UserDefaults.standard.object(forKey: paidAtKey) as? Date
-        if let price = UserDefaults.standard.string(forKey: priceKey) { invoicePrice = price }
-        if let services = UserDefaults.standard.string(forKey: servicesKey) { additionalServices = services }
-        if let total = UserDefaults.standard.string(forKey: totalKey) { invoiceTotal = total }
+        let state = InspectionSideStateStore.shared.state(for: inspectionId)
+        invoiceSentAt = state?.invoiceSentAt
+        invoicePaidAt = state?.invoicePaidAt
+        if let price = state?.invoicePrice, !price.isEmpty { invoicePrice = price }
+        if let services = state?.invoiceServices, !services.isEmpty { additionalServices = services }
+        if let total = state?.invoiceTotal, !total.isEmpty { invoiceTotal = total }
     }
 
     /// Lightweight combined value so a SINGLE `.onChange` can observe all three
@@ -351,9 +353,14 @@ struct InvoiceAndSendView: View {
     }
 
     private func persistInvoiceFields() {
-        UserDefaults.standard.set(invoicePrice, forKey: priceKey)
-        UserDefaults.standard.set(additionalServices, forKey: servicesKey)
-        UserDefaults.standard.set(invoiceTotal, forKey: totalKey)
+        // File write is immediate; the store debounces its CloudKit emit so
+        // per-keystroke edits don't spam sync.
+        InspectionSideStateStore.shared.setInvoiceFields(
+            price: invoicePrice,
+            services: additionalServices,
+            total: invoiceTotal,
+            inspectionId: inspectionId
+        )
     }
 
     /// Collect USDZ files from any LiDAR scans saved for this inspection so

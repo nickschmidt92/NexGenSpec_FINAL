@@ -256,6 +256,16 @@ enum FilePaths {
     /// `Inspection.coverPhotoFileName` so the model can detect "no cover" by nil.
     static let defaultCoverPhotoFileName = "cover.jpg"
 
+    /// Per-inspection side-state document (invoice amounts/sent/paid + archivedAt),
+    /// keyed by inspectionId at the inspection folder root so it syncs through the
+    /// MediaAsset machinery alongside the other per-inspection files. See
+    /// `InspectionSideStateStore`.
+    static let sideStateFileName = "sidestate.json"
+
+    static func sideStateFile(inspectionId: UUID) -> URL {
+        inspectionFolder(jobId: inspectionId).appendingPathComponent(sideStateFileName, isDirectory: false)
+    }
+
     static func ensureAppStructure(jobId: UUID) throws {
         try FileSecurity.ensureProtectedDirectory(appRoot)
         let folder = inspectionFolder(jobId: jobId)

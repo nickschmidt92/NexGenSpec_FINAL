@@ -257,6 +257,17 @@ final class CloudKitSyncPort: SyncPort, @unchecked Sendable {
                         relativeDir: "Inspections/\(jobStr)/thumbnails", jobId: jobId)
             appendFiles(inDir: inspectionDir.appendingPathComponent("lidar", isDirectory: true),
                         relativeDir: "Inspections/\(jobStr)/lidar", jobId: jobId)
+            // Sync data completeness pass: signature PNGs, plus the fixed-name
+            // cover photo and side-state document at the inspection folder root.
+            appendFiles(inDir: inspectionDir.appendingPathComponent("signatures", isDirectory: true),
+                        relativeDir: "Inspections/\(jobStr)/signatures", jobId: jobId)
+            for name in [FilePaths.defaultCoverPhotoFileName, FilePaths.sideStateFileName] {
+                let rel = "Inspections/\(jobStr)/\(name)"
+                if fm.fileExists(atPath: root.appendingPathComponent(rel).path),
+                   SyncAssetPaths.kind(forRelativePath: rel) != nil {
+                    pairs.append((jobId, rel))
+                }
+            }
             // Report PDF: derive the published folder name from the SAME metadata
             // FilesAppPublisher.publish uses, so the seeded key matches a later
             // re-export's key exactly (idempotent overwrite, not a duplicate record).

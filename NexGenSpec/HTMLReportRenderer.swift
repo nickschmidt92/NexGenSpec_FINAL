@@ -359,6 +359,13 @@ enum HTMLReportRenderer {
                 if let data = sig.loadImageData(jobId: jobId) {
                     let base64 = data.base64EncodedString()
                     html += "<p><strong>\((sig.name).htmlEscaped)</strong> — \(htmlDateFormatter.string(from: sig.date))<br/><img src=\"data:image/png;base64,\(base64)\" alt=\"Signature\"/></p>"
+                } else {
+                    // Graceful absent state (sync data completeness): the signature
+                    // RECORD travels in the synced model, but its PNG may not have
+                    // arrived on this device yet. Keep the signer's name + timestamp
+                    // (the legally meaningful facts) and say why the strokes image is
+                    // missing, instead of silently omitting the signature.
+                    html += "<p><strong>\((sig.name).htmlEscaped)</strong> — \(htmlDateFormatter.string(from: sig.date))<br/><em style=\"color:#666;\">Signature image not available on this device (captured on another device; it will appear once synced).</em></p>"
                 }
             }
             html += "</div>"

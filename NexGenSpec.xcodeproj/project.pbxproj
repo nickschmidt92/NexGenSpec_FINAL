@@ -22,6 +22,7 @@
 		T1B2C3D4E5F600000000010F /* WholeHomeMergeGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000110 /* WholeHomeMergeGateTests.swift */; };
 		T1B2C3D4E5F6000000000111 /* SyncRoundTripRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000112 /* SyncRoundTripRegressionTests.swift */; };
 		T1B2C3D4E5F6000000000113 /* SyncHardeningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000114 /* SyncHardeningTests.swift */; };
+		T1B2C3D4E5F6000000000115 /* SyncDataCompletenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T1B2C3D4E5F6000000000116 /* SyncDataCompletenessTests.swift */; };
 		U1B2C3D4E5F6000000000001 /* NexGenSpecUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +59,7 @@
 		T1B2C3D4E5F6000000000110 /* WholeHomeMergeGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WholeHomeMergeGateTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000112 /* SyncRoundTripRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncRoundTripRegressionTests.swift; sourceTree = "<group>"; };
 		T1B2C3D4E5F6000000000114 /* SyncHardeningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncHardeningTests.swift; sourceTree = "<group>"; };
+		T1B2C3D4E5F6000000000116 /* SyncDataCompletenessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDataCompletenessTests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000002 /* NexGenSpecUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NexGenSpecUITests.swift; sourceTree = "<group>"; };
 		U1B2C3D4E5F6000000000004 /* NexGenSpecUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NexGenSpecUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -149,6 +151,7 @@
 				T1B2C3D4E5F6000000000110 /* WholeHomeMergeGateTests.swift */,
 				T1B2C3D4E5F6000000000112 /* SyncRoundTripRegressionTests.swift */,
 				T1B2C3D4E5F6000000000114 /* SyncHardeningTests.swift */,
+				T1B2C3D4E5F6000000000116 /* SyncDataCompletenessTests.swift */,
 			);
 			path = NexGenSpecTests;
 			sourceTree = "<group>";
@@ -318,6 +321,7 @@
 				T1B2C3D4E5F600000000010F /* WholeHomeMergeGateTests.swift in Sources */,
 				T1B2C3D4E5F6000000000111 /* SyncRoundTripRegressionTests.swift in Sources */,
 				T1B2C3D4E5F6000000000113 /* SyncHardeningTests.swift in Sources */,
+				T1B2C3D4E5F6000000000115 /* SyncDataCompletenessTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

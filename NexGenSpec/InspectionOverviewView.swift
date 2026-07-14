@@ -1265,6 +1265,10 @@ struct InspectionOverviewView: View {
                         object: nil,
                         userInfo: ["jobId": jobId]
                     )
+                    // Mirror the cover to CloudKit (sync data completeness): the
+                    // synced model references this file, so without the bytes a
+                    // receiving device shows a permanent loading placeholder.
+                    CoverPhotoSync.noteCoverWritten(jobId: jobId, fileName: fileName)
                 }
             } catch {
                 Diagnostics.logError(context: "setCoverPhotoFromCapturedImage failed", error: error)
@@ -1281,6 +1285,9 @@ struct InspectionOverviewView: View {
             if let name = version.inspection.coverPhotoFileName {
                 let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: name)
                 try? FileManager.default.removeItem(at: url)
+                // Tombstone the mirrored copy so other devices remove it too
+                // (and a later pull can't resurrect the deleted cover).
+                CoverPhotoSync.noteCoverRemoved(jobId: jobId, fileName: name)
             }
             var insp = version.inspection
             insp.coverPhotoFileName = nil
@@ -2069,6 +2076,12 @@ private struct OverviewCoverPhoto: View {
     let fileName: String?
     let tick: Int
     @State private var image: UIImage?
+    /// True once a load attempt FINISHED without producing an image while the
+    /// model still references a cover file — i.e. the file is absent (most
+    /// likely captured on another device and not yet synced) or unreadable.
+    /// Distinguishes "still decoding" (spinner) from "not here" (labelled
+    /// placeholder), so a receiver never sees a perpetual spinner.
+    @State private var loadFailed = false
 
     var body: some View {
         Group {
@@ -2083,7 +2096,7 @@ private struct OverviewCoverPhoto: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .allowsHitTesting(false)   // the image itself is not interactive
                     .accessibilityLabel("Cover photo of the property")
-            } else if fileName != nil {
+            } else if fileName != nil && !loadFailed {
                 // A cover exists and is decoding off-main — reserve its final
                 // height so the layout doesn't jump when the image lands.
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -2092,6 +2105,32 @@ private struct OverviewCoverPhoto: View {
                     .frame(height: 180)
                     .overlay { ProgressView() }
                     .allowsHitTesting(false)
+            } else if fileName != nil {
+                // The model references a cover whose file isn't on this device
+                // (yet) — typically added on another device with the image still
+                // syncing in. `.coverPhotoDidUpdate` (posted when the synced
+                // bytes land) retries the load automatically.
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.systemGray6))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .overlay {
+                        VStack(spacing: 4) {
+                            Image(systemName: "icloud.and.arrow.down")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                            Text("Cover photo not on this device yet")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text("Added on another device — it will appear once synced.")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("Cover photo not available on this device yet")
             } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -2112,15 +2151,26 @@ private struct OverviewCoverPhoto: View {
         .task(id: "\(fileName ?? "∅")#\(tick)") {
             await load()
         }
+        // A synced-in cover just landed on disk for this inspection — retry the
+        // load so the "not on this device yet" placeholder resolves live.
+        .onReceive(NotificationCenter.default.publisher(for: .coverPhotoDidUpdate)) { note in
+            guard (note.userInfo?["jobId"] as? UUID) == jobId else { return }
+            Task { await load() }
+        }
     }
 
     private func load() async {
-        guard let fileName else { image = nil; return }
+        guard let fileName else {
+            image = nil
+            loadFailed = false
+            return
+        }
         let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
         let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
             guard let data = try? Data(contentsOf: url) else { return nil }
             return UIImage(data: data)
         }.value
         image = loaded
+        loadFailed = (loaded == nil)
     }
 }
