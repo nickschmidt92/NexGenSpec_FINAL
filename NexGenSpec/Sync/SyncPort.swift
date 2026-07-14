@@ -36,7 +36,15 @@ public enum SyncStatus: Equatable {
 /// only — the port loads payloads from the local store on demand, so a change is
 /// cheap to record on the existing write paths. Forward-looking; later slices add
 /// cases as media/seeding land.
-public enum SyncChange: Equatable {
+///
+/// Codable (A2): the port persists the pending queue to a per-UID outbox file
+/// (`sync-outbox.json`) so queued-but-unpushed changes survive a force-quit /
+/// OS eviction / rebind. Every payload is already a Codable value type
+/// (VersionMetadata, UUID, String); the synthesized conformance is the on-disk
+/// format — cases are additive-only, and an undecodable file is discarded (the
+/// loader fails soft), so evolving the enum can only cost a stale queue entry,
+/// never a crash.
+public enum SyncChange: Equatable, Codable {
     /// A version's `current.json` was written (draft edit or finalize). Carries
     /// the lightweight metadata so the mirror builds the record's queryable
     /// fields without re-decoding the payload; `meta.locked` distinguishes an

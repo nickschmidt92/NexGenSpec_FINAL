@@ -161,6 +161,18 @@ private final class FakeTeardownOwed: TeardownOwedStoring, @unchecked Sendable {
 
 final class CloudKitSyncPortTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        // The durable outbox (A2) persists the pending queue per-UID on disk —
+        // across port instances, tests, and (aborted) runs. This class binds the
+        // FIXED UIDs below repeatedly, so clear their outboxes up front: a stale
+        // queued change left by an interrupted earlier run would otherwise be
+        // restored at bind and skew this class's push counts.
+        for uid in ["uidA", "uidB"] {
+            try? FileManager.default.removeItem(at: CloudKitSyncPort.outboxURL(forUID: uid))
+        }
+    }
+
     private func meta(_ id: UUID = UUID()) -> VersionMetadata {
         VersionMetadata(
             id: id, inspectionId: UUID(), versionNumber: 1, status: .draft,

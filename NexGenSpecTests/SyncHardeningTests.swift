@@ -2,10 +2,15 @@
 //  SyncHardeningTests.swift
 //  NexGenSpecTests
 //
-//  Regression tests for the sync-push hardening set (items A1, A4, A5, A6, A8):
+//  Regression tests for the sync-push hardening set (items A1–A8):
 //   - A1: per-record modifyRecords Results are verified, never discarded — a
 //     per-record .failure (or a missing result entry) re-queues the change and
 //     never stamps a seed phase as done.
+//   - A2: the pending queue is a durable per-UID outbox (sync-outbox.json) —
+//     queued changes survive port teardown/force-quit; a corrupt file is
+//     discarded, never a crash/wedge.
+//   - A3: bind-time reconciliation re-enqueues every locally-finalized version
+//     (NOT gated on seededAt); the server-side lock guard is the dedupe.
 //   - A4: finalize() surfaces a version-file write failure instead of silently
 //     proceeding as if the finalize persisted.
 //   - A5: an existing-but-unreadable local file THROWS on the push read (change
@@ -92,6 +97,11 @@ private final class ResultFakeDatabase: CloudDatabase, @unchecked Sendable {
     private var savedAssets: [(record: SyncAssetRecord, zone: String)] = []
     private var tombstones: Set<String> = []
     private var assetTombstones: Set<String> = []
+    /// Models the live zone's record store (keyed by recordName) INCLUDING
+    /// CKCloudDatabase's server-side immutability guard (fix A): saving over an
+    /// already-locked stored record is a guard-skip SUCCESS — no throw, no
+    /// mutation, no `saved` append. Needed by the A3 reconciliation tests.
+    private var stored: [String: InspectionVersionRecord] = [:]
 
     var saveMode: ResultMode {
         get { lock.withLock { _saveMode } }
@@ -103,6 +113,11 @@ private final class ResultFakeDatabase: CloudDatabase, @unchecked Sendable {
     }
     var savedCount: Int { lock.withLock { saved.count } }
     var savedAssetCount: Int { lock.withLock { savedAssets.count } }
+    /// The record currently stored under a name (nil if never stored).
+    func record(named recordName: String) -> InspectionVersionRecord? { lock.withLock { stored[recordName] } }
+    /// Pre-seed the fake server's record store (e.g. a stale draft another
+    /// device pushed, or an already-finalized immutable record).
+    func seedStored(_ record: InspectionVersionRecord) { lock.withLock { stored[record.recordName] = record } }
 
     private func verifySimulatedSave(recordName: String, zone: String, mode: ResultMode) throws {
         let zoneID = CKRecordZone.ID(zoneName: zone, ownerName: CKCurrentUserDefaultName)
@@ -121,8 +136,15 @@ private final class ResultFakeDatabase: CloudDatabase, @unchecked Sendable {
 
     func ensureZone(_ zoneName: String) async throws {}
     func save(_ record: InspectionVersionRecord, inZone zoneName: String) async throws {
+        // Server-side immutability guard first (mirrors CKCloudDatabase.save's
+        // fetch-and-guard, which SKIPS before any modifyRecords happens).
+        let guarded: Bool = lock.withLock { stored[record.recordName]?.locked == true }
+        if guarded { return }
         try verifySimulatedSave(recordName: record.recordName, zone: zoneName, mode: saveMode)
-        lock.withLock { saved.append((record, zoneName)) }
+        lock.withLock {
+            stored[record.recordName] = record
+            saved.append((record, zoneName))
+        }
     }
     func delete(recordName: String, inZone zoneName: String) async throws {}
     func deleteZone(_ zoneName: String) async throws {}
@@ -265,9 +287,13 @@ final class SyncHardeningTests: XCTestCase {
     // MARK: - A1: per-record failure keeps the change queued (port level)
 
     func testPerRecordSaveFailureKeepsChangeQueuedThenRepushes() async {
+        // Unique UID: the durable outbox (A2) persists per-UID across tests/runs,
+        // so shared UIDs would leak queued changes between tests.
+        let uid = "hardening-a1-fail-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
         let db = ResultFakeDatabase()
         let port = makePort(db: db)
-        await port.bind(firebaseUID: "uidA")
+        await port.bind(firebaseUID: uid)
 
         db.saveMode = .perRecordFailure
         port.recordLocalChange(.versionUpserted(meta()))
@@ -288,9 +314,11 @@ final class SyncHardeningTests: XCTestCase {
     }
 
     func testMissingSaveResultEntryKeepsChangeQueuedThenRepushes() async {
+        let uid = "hardening-a1-missing-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
         let db = ResultFakeDatabase()
         let port = makePort(db: db)
-        await port.bind(firebaseUID: "uidA")
+        await port.bind(firebaseUID: uid)
 
         db.saveMode = .missingEntry
         port.recordLocalChange(.versionUpserted(meta()))
@@ -360,10 +388,12 @@ final class SyncHardeningTests: XCTestCase {
     }
 
     func testUnreadableVersionFileKeepsChangeQueuedButConfirmedAbsenceDequeues() async {
+        let uid = "hardening-a5-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
         let db = ResultFakeDatabase()
         let reader = MutableReader(mode: .unreadable)
         let port = makePort(db: db, reader: reader)
-        await port.bind(firebaseUID: "uidA")
+        await port.bind(firebaseUID: uid)
 
         // Unreadable read → the change must survive the flush (re-queued).
         port.recordLocalChange(.versionUpserted(meta()))
@@ -419,6 +449,194 @@ final class SyncHardeningTests: XCTestCase {
         try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: fileURL.path)
         await pumpFlush(port, until: { db.savedAssetCount == 1 }, attempts: 200)
         XCTAssertEqual(db.savedAssetCount, 1, "the media change was retained across the read failure and pushed on recovery (A5)")
+    }
+
+    // MARK: - A2: durable outbox
+
+    func testSyncChangeCodableRoundTrip() throws {
+        let changes: [SyncChange] = [
+            .versionUpserted(meta()),
+            .versionDeleted(versionId: UUID()),
+            .mediaUpserted(jobId: UUID(), relativePath: "Inspections/x/thumbnails/t.jpg"),
+            .mediaDeleted(jobId: UUID(), relativePath: "Reports/folder/Inspection_Report.pdf")
+        ]
+        let data = try JSONEncoder().encode(changes)
+        let decoded = try JSONDecoder().decode([SyncChange].self, from: data)
+        XCTAssertEqual(decoded, changes, "SyncChange must round-trip Codable losslessly — it is the outbox's on-disk format (A2)")
+    }
+
+    func testOutboxSurvivesPortTeardownAndPushesOnNextBind() async throws {
+        let uid = "hardening-a2-outbox-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
+        let binds = FakeBindings()
+
+        // Port 1: every push fails per-record, so the change stays queued — and,
+        // with A2, persisted to the outbox file.
+        let db1 = ResultFakeDatabase()
+        let port1 = makePort(db: db1, bindings: binds)
+        await port1.bind(firebaseUID: uid)
+        db1.saveMode = .perRecordFailure
+        let m = meta()
+        port1.recordLocalChange(.versionUpserted(m))
+        await pumpFlush(port1)
+        XCTAssertEqual(db1.savedCount, 0, "the push failed; nothing landed")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: CloudKitSyncPort.outboxURL(forUID: uid).path),
+                      "the queued change is persisted to the per-UID outbox (A2)")
+        // Tear the port down. unbind persists-then-clears MEMORY but leaves the
+        // FILE — the file is the durability.
+        port1.unbind()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: CloudKitSyncPort.outboxURL(forUID: uid).path),
+                      "unbind leaves the outbox file in place (A2 d)")
+
+        // Port 2 — a fresh instance (new-process analog): bind restores the outbox
+        // and the bind-tail flush pushes the change.
+        let db2 = ResultFakeDatabase()
+        let port2 = makePort(db: db2, bindings: binds)
+        await port2.bind(firebaseUID: uid)
+        await pumpFlush(port2, until: { db2.savedCount == 1 }, attempts: 200)
+        XCTAssertEqual(db2.savedCount, 1, "the change queued before teardown flushes from the restored outbox (A2)")
+        XCTAssertNotNil(db2.record(named: m.id.uuidString), "and it is the SAME change that was stranded")
+    }
+
+    func testCorruptOutboxIsDiscardedAndSyncContinues() async throws {
+        let uid = "hardening-a2-corrupt-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
+        let url = CloudKitSyncPort.outboxURL(forUID: uid)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("this is {{{ not json".utf8).write(to: url)
+
+        let db = ResultFakeDatabase()
+        let port = makePort(db: db)
+        await port.bind(firebaseUID: uid)   // must not crash or wedge
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path),
+                       "a corrupt outbox is deleted, not retried forever (A2)")
+        let idle = await waitUntil { port.status == .idle }
+        XCTAssertTrue(idle, "sync continues normally after discarding the corrupt outbox, got \(port.status)")
+
+        // And the port still works end to end afterwards.
+        port.recordLocalChange(.versionUpserted(meta()))
+        await pumpFlush(port, until: { db.savedCount == 1 }, attempts: 200)
+        XCTAssertEqual(db.savedCount, 1, "a fresh change enqueues, persists, and pushes normally")
+    }
+
+    // MARK: - A3: bind-time locked-state reconciliation
+
+    private func lockedMeta(_ id: UUID = UUID()) -> VersionMetadata {
+        VersionMetadata(
+            id: id, inspectionId: UUID(), versionNumber: 1, status: .final,
+            finalizedAt: Date(), locked: true, clientName: "C",
+            propertyAddress: "A", inspectionDate: Date()
+        )
+    }
+
+    private func serverRecord(id: UUID, locked: Bool, payload: Data) -> InspectionVersionRecord {
+        InspectionVersionRecord(
+            recordName: id.uuidString, inspectionId: UUID().uuidString, versionNumber: 1,
+            status: locked ? "Final" : "Draft", locked: locked,
+            finalizedAt: locked ? Date(timeIntervalSince1970: 1000) : nil,
+            schemaVersion: 1, updatedAt: nil, payload: payload
+        )
+    }
+
+    /// A binding whose seed phases are BOTH already stamped — proving A3's
+    /// reconciliation is not gated on seededAt (the flag that blocks recovery).
+    private func preSeededBinding(uid: String) -> SyncBinding {
+        var binding = SyncBinding(
+            firebaseUID: uid, cloudUserToken: "tok",
+            zoneName: CloudKitSchema.zoneName(forFirebaseUID: uid), boundAt: Date()
+        )
+        binding.seededAt = Date()
+        binding.assetsSeededAt = Date()
+        return binding
+    }
+
+    func testBindReconciliationPromotesStrandedFinalizeOverServerDraft() async throws {
+        let uid = "hardening-a3-promote-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
+        let vid = UUID()
+
+        // The field failure state: locally finalized, but the server still holds
+        // the stale DRAFT (the live finalize push was silently lost), and the
+        // binding is long-seeded so seeding will never re-push it.
+        let db = ResultFakeDatabase()
+        db.seedStored(serverRecord(id: vid, locked: false, payload: Data("stale-draft".utf8)))
+        let reader = MutableReader()
+        reader.snapshots = [LocalVersionSnapshot(meta: lockedMeta(vid), payload: Data("finalized-json".utf8))]
+        let binds = FakeBindings()
+        binds.save(preSeededBinding(uid: uid))
+        let port = makePort(db: db, reader: reader, bindings: binds)
+
+        await port.bind(firebaseUID: uid)
+        await pumpFlush(port, until: { db.record(named: vid.uuidString)?.locked == true }, attempts: 200)
+
+        let server = db.record(named: vid.uuidString)
+        XCTAssertEqual(server?.locked, true,
+                       "bind reconciliation pushes the locally-finalized version over the server draft — NOT gated on seededAt (A3)")
+        XCTAssertEqual(server?.status, "Final", "the server record is promoted to Final")
+    }
+
+    func testBindReconciliationGuardSkipsAlreadyLockedServerRecord() async throws {
+        let uid = "hardening-a3-skip-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
+        let vid = UUID()
+
+        let db = ResultFakeDatabase()
+        let original = serverRecord(id: vid, locked: true, payload: Data("original-finalize".utf8))
+        db.seedStored(original)
+        let reader = MutableReader()
+        reader.snapshots = [LocalVersionSnapshot(meta: lockedMeta(vid), payload: Data("divergent".utf8))]
+        let binds = FakeBindings()
+        binds.save(preSeededBinding(uid: uid))
+        let port = makePort(db: db, reader: reader, bindings: binds)
+
+        await port.bind(firebaseUID: uid)
+        let settled = await waitUntil { port.status == .idle }
+
+        XCTAssertTrue(settled, "the guard-skip is the save's SUCCESS path — the flush settles idle, got \(port.status)")
+        XCTAssertEqual(db.savedCount, 0, "an already-locked server record is never mutated (A3 idempotence lives server-side)")
+        XCTAssertEqual(db.record(named: vid.uuidString)?.payload, Data("original-finalize".utf8),
+                       "the immutable server record is untouched")
+        // The change DEQUEUED (guard-skip = success): the persisted outbox drained.
+        let outboxData = try Data(contentsOf: CloudKitSyncPort.outboxURL(forUID: uid))
+        let outbox = try JSONDecoder().decode([SyncChange].self, from: outboxData)
+        XCTAssertTrue(outbox.isEmpty, "the reconcile enqueue dequeues via the guard's success path — outbox drained")
+    }
+
+    func testReconcileEnqueueSurvivesKillViaDurableOutbox() async throws {
+        let uid = "hardening-a3-a2-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(at: FilePaths.userRoot(uid: uid)) }
+        let vid = UUID()
+        let binds = FakeBindings()
+        binds.save(preSeededBinding(uid: uid))
+
+        // Bind 1: reconciliation enqueues the finalized version, but every push
+        // fails per-record — the mid-flush-kill analog: the change made it to the
+        // outbox, not to the server.
+        let db1 = ResultFakeDatabase()
+        db1.saveMode = .perRecordFailure
+        db1.seedStored(serverRecord(id: vid, locked: false, payload: Data("stale-draft".utf8)))
+        let reader1 = MutableReader()
+        reader1.snapshots = [LocalVersionSnapshot(meta: lockedMeta(vid), payload: Data("finalized-json".utf8))]
+        let port1 = makePort(db: db1, reader: reader1, bindings: binds)
+        await port1.bind(firebaseUID: uid)
+        await pumpFlush(port1)
+        XCTAssertEqual(db1.savedCount, 0, "the reconcile push failed — nothing on the server yet")
+        // Force-quit analog: port1 is ABANDONED (no unbind). The outbox already
+        // holds the reconcile enqueue.
+
+        // Bind 2 in a fresh port whose reader has NO snapshots: reconciliation
+        // finds nothing, so the ONLY possible source of the push is the restored
+        // outbox (A2 x A3).
+        let db2 = ResultFakeDatabase()
+        db2.seedStored(serverRecord(id: vid, locked: false, payload: Data("stale-draft".utf8)))
+        let reader2 = MutableReader()   // snapshots deliberately empty
+        let port2 = makePort(db: db2, reader: reader2, bindings: binds)
+        await port2.bind(firebaseUID: uid)
+        await pumpFlush(port2, until: { db2.record(named: vid.uuidString)?.locked == true }, attempts: 200)
+
+        XCTAssertEqual(db2.record(named: vid.uuidString)?.locked, true,
+                       "the A3 reconcile enqueue survived the kill via the A2 outbox and healed the server draft")
     }
 
     // MARK: - A4: finalize() must not swallow the version-file write throw
