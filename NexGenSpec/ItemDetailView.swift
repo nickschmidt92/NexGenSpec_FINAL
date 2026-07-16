@@ -48,6 +48,22 @@ struct ItemDetailView: View {
         )
     }
 
+    /// Severity writes route through the model's one-shot transition helper
+    /// (`InspectionItem.setDefectSeverity`) so the FIRST severity assignment
+    /// also arms the report gates (includeInReport / status). A plain
+    /// `bind(\.defectSeverity)` would bypass that rule and rebuild the
+    /// "severity capsule shown, report silently excludes it" trap.
+    private var severityBinding: Binding<Severity?> {
+        Binding(
+            get: { item.defectSeverity },
+            set: { newValue in
+                var copy = item
+                copy.setDefectSeverity(newValue)
+                item = copy
+            }
+        )
+    }
+
     var body: some View {
         Form {
             // Editable title — required for custom items (which start as
@@ -80,7 +96,7 @@ struct ItemDetailView: View {
 
             if item.status == .inspected {
                 Section {
-                    Picker("Defect Severity", selection: bind(\.defectSeverity)) {
+                    Picker("Defect Severity", selection: severityBinding) {
                         Text("None").tag(Severity?.none)
                         ForEach(Severity.allCases, id: \.self) { s in
                             Text(s.displayName).tag(Severity?.some(s))

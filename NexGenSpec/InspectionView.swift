@@ -832,6 +832,19 @@ private struct InspectionItemRowLabel: View {
             }
             Spacer()
             if let sev = item.defectSeverity {
+                // A severity capsule alone reads as "this will be in the
+                // report" — but the report body gates on
+                // isDefect && includeInReport. When this item fails those
+                // gates, say so right next to the capsule instead of letting
+                // the report silently drop it.
+                if !item.isDefect || !item.includeInReport {
+                    Text("Not in report")
+                        .font(.caption2)
+                        .padding(4)
+                        .background(Color.secondary.opacity(0.12))
+                        .foregroundStyle(.secondary)
+                        .clipShape(Capsule())
+                }
                 Text(sev.displayName)
                     .font(.caption)
                     .padding(4)

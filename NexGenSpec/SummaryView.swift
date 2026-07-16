@@ -52,6 +52,17 @@ struct SummaryView: View {
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
+                        // filteredDefects() lists by isDefect only; the report
+                        // additionally gates on includeInReport. Flag excluded
+                        // items so Summary never overpromises the report.
+                        if !record.item.includeInReport {
+                            Text("Not in report")
+                                .font(.caption2)
+                                .padding(4)
+                                .background(Color.secondary.opacity(0.12))
+                                .foregroundColor(.secondary)
+                                .clipShape(Capsule())
+                        }
                         if let sev = record.item.defectSeverity {
                             Text(sev.displayName)
                                 .font(.caption)
