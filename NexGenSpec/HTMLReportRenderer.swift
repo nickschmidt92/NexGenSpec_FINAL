@@ -711,8 +711,24 @@ enum HTMLReportRenderer {
 private let htmlDateFormatter = DateFormatters.mediumDateTime
 
 /// Loads photo data downsampled to a max dimension of 1024px to prevent OOM on 48MP+ images.
+///
+/// Falls back to the photo's THUMBNAIL when the full-resolution original is
+/// missing or unreadable: on a receiving device only the synced thumbnail
+/// exists (MediaAsset kind=thumbnail — full-res `photos/` deliberately don't
+/// sync in 1.0), so without this the draft Report Preview rendered blank space
+/// where the item's photos belong. A thumbnail shares its original's exact
+/// `fileName` under `thumbnails/` instead of `photos/` (see
+/// `PhotoLoadService.generateThumbnailIfNeeded` for the editor-side write and
+/// `InspectionStoreVersionWriter.applyRemoteAsset` for the sync-side
+/// materialization — both land at `FilePaths.thumbnailsFolder(jobId:)/fileName`),
+/// so one canonical lookup covers both. The fallback rides the same
+/// `loadDownsampledJPEGData` budget as every other embedded raster. Nil when
+/// neither file is readable — callers treat that as "render without this image".
 private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
-    loadDownsampledJPEGData(at: FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName))
+    if let original = loadDownsampledJPEGData(at: FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)) {
+        return original
+    }
+    return loadDownsampledJPEGData(at: FilePaths.thumbnailsFolder(jobId: jobId).appendingPathComponent(fileName))
 }
 
 /// Shared image-encoding budget for every raster the report embeds from disk
