@@ -325,12 +325,9 @@ struct InspectionView: View {
             // pick up the latest client name, date, etc.
             autoSaveTask?.cancel()
             autoSaveTask = nil
-            // Only flush when the user actually changed something (B-0122);
-            // see lastPersistedDraft.
-            if draft != lastPersistedDraft {
-                updated(draft)
-                lastPersistedDraft = draft
-            }
+            // Flush gated on a REAL content change (B-0122 round 3);
+            // see flushDraftOnTeardown.
+            flushDraftOnTeardown()
             store.saveNow()
         }
         // ---- PRIMARY AUTO-SAVE PATH ----
@@ -378,12 +375,9 @@ struct InspectionView: View {
             // the UICollectionView diff risk is zero.
             autoSaveTask?.cancel()
             autoSaveTask = nil
-            // Only flush when the user actually changed something (B-0122);
-            // see lastPersistedDraft.
-            if draft != lastPersistedDraft {
-                updated(draft)
-                lastPersistedDraft = draft
-            }
+            // Flush gated on a REAL content change (B-0122 round 3);
+            // see flushDraftOnTeardown.
+            flushDraftOnTeardown()
             store.saveNow()
             localLastSavedAt = Date()
         }
@@ -443,6 +437,61 @@ struct InspectionView: View {
             }
         default:
             selectedPane = .section(sections[sections.count - 1].id)
+        }
+    }
+
+    // MARK: - Teardown flush (B-0122 round 3)
+
+    /// Authoritative flush shared by `onDisappear` and `willResignActive`.
+    ///
+    /// The build-38 dirty check (`draft != lastPersistedDraft`) alone could not
+    /// stop the phantom-edit echo: both teardown paths call `pauseTimer()` FIRST,
+    /// which folds the session into `timerElapsedSeconds`, so the check passed on
+    /// EVERY open→close of an editable draft — even with zero user edits. The
+    /// unconditional `updated(draft)` then re-stamped the LWW clock
+    /// (`InspectionStore.update` → fresh `updatedAt`) and pushed, so merely
+    /// viewing an inspection claimed authorship: on receivers holding a stale
+    /// copy, closing it echoed that stale content over the zone with a NEWER
+    /// clock, overwriting the real editor's work ("whoever closes last wins").
+    /// The weather auto-fetch on open was a second phantom-edit source.
+    ///
+    /// Rule: only a REAL content change (anything `syncContentEquals` compares)
+    /// re-stamps + publishes + pushes. Timer/weather-only diffs persist through
+    /// the FILE-ONLY autosave path — locally durable (reopening resumes the
+    /// timer; the report keeps the captured weather), but with NO `updatedAt`
+    /// stamp, NO metadata publish, and NO push: this device never claims
+    /// authorship of a document it merely displayed.
+    private func flushDraftOnTeardown() {
+        guard let last = lastPersistedDraft else {
+            // No baseline (draft never seeded — shouldn't happen after
+            // onAppear). Preserve the pre-round-3 behavior: full flush.
+            updated(draft)
+            lastPersistedDraft = draft
+            return
+        }
+        if draft.syncContentEquals(last) {
+            // Bookkeeping-only close (timer fold / weather seed).
+            if draft != last {
+                store.writeVersionFileOnlyForAutoSave(draft)
+            }
+            lastPersistedDraft = draft
+        } else {
+            // Genuine local edit: the LWW re-stamp is correct and the push is
+            // wanted — exactly the pre-round-3 behavior.
+            updated(draft)
+            // update() stamped a fresh `updatedAt` onto the row + disk, but this
+            // open draft still carries the pre-flush stamp. Re-sync it: this
+            // handler also runs with the view STILL ALIVE (willResignActive, and
+            // onDisappear fired by a full-screen picker/cover presentation), and
+            // the store's clock backstop refuses file-only writes whose clock is
+            // OLDER than the row's — without the re-sync it would silently
+            // refuse every subsequent per-keystroke autosave of this session,
+            // regressing B-0059 crash-durability (e.g. a cover photo added right
+            // after the picker dismisses).
+            if let rowClock = store.metadataList.first(where: { $0.id == draft.id })?.updatedAt {
+                draft.updatedAt = rowClock
+            }
+            lastPersistedDraft = draft
         }
     }
 
