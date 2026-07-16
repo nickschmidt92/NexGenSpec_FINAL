@@ -103,6 +103,20 @@ enum HTMLReportRenderer {
             return logoBase64
         }()
 
+        // Cover photo — the property photo the inspector set on the overview
+        // screen (canonical path via FilePaths.coverPhotoFile). Embedded as a
+        // base64 data URI like the other cover-page assets (the cover logo) and
+        // pushed through the same downsample-to-1024px JPEG budget as item
+        // photos, so a 48MP cover can't balloon the HTML or OOM the renderer.
+        // Missing/unreadable file ⇒ empty string ⇒ the cover page renders
+        // exactly as it did without a cover (no broken <img>), and PDF
+        // generation is never failed by a bad cover file.
+        let coverPhotoBase64: String = {
+            guard let fileName = inspection.coverPhotoFileName, !fileName.isEmpty else { return "" }
+            let url = FilePaths.coverPhotoFile(jobId: jobId, fileName: fileName)
+            return loadDownsampledJPEGData(at: url)?.base64EncodedString() ?? ""
+        }()
+
         // Build report ID for cover page
         let coverReportId: String? = {
             if let hash = reportHash {
@@ -200,6 +214,18 @@ enum HTMLReportRenderer {
         .cover-title { font-size: 2.2rem; font-weight: 800; color: #1a1a1a; margin: 0 0 8px; letter-spacing: -0.5px; }
         .cover-subtitle { font-size: 1.1rem; font-weight: 500; color: #1F6EF5; margin: 0 0 48px; text-transform: uppercase; letter-spacing: 2px; }
         .cover-address { font-size: 1.6rem; font-weight: 700; color: #1a1a1a; margin: 0 0 40px; line-height: 1.3; }
+        /* Property cover photo. Hard-capped height + object-fit:cover so an
+           arbitrary-aspect photo can never stretch the cover page past one
+           printed sheet; width is bounded so it reads as a framed hero image. */
+        .cover-photo { display: block; width: 100%; max-width: 440px; max-height: 170px; object-fit: cover; border-radius: 12px; margin: 0 auto 20px; box-shadow: var(--card-shadow); }
+        /* Compact the cover metrics ONLY when a property photo is present so
+           photo + details still fit a single printed page. Without a photo
+           the cover page keeps its original spacing, pixel for pixel. */
+        .cover-page.has-photo { padding: 32px 40px; }
+        .cover-page.has-photo .cover-logo { width: 72px; height: 72px; margin-bottom: 16px; }
+        .cover-page.has-photo .cover-subtitle { margin-bottom: 20px; }
+        .cover-page.has-photo .cover-address { margin-bottom: 20px; }
+        .cover-page.has-photo .cover-details { margin-bottom: 20px; }
         .cover-details { list-style: none; padding: 0; margin: 0 0 40px; }
         .cover-details li { font-size: 1.05rem; color: #444; padding: 6px 0; }
         .cover-details li strong { color: #1a1a1a; }
@@ -222,12 +248,13 @@ enum HTMLReportRenderer {
         <body class="\([watermark ? "wm" : "", isDraft ? "draft" : ""].filter { !$0.isEmpty }.joined(separator: " "))">
         \(isDraft ? "<div class=\"draft-watermark\">DRAFT — NOT FINAL</div>" : "")
         <div class="container">
-        <div class="cover-page">
+        <div class="cover-page\(coverPhotoBase64.isEmpty ? "" : " has-photo")">
         <div class="cover-border"></div>
         \(!coverLogoBase64.isEmpty ? "<img class=\"cover-logo\" src=\"data:image/png;base64,\(coverLogoBase64)\" alt=\"\(logoAlt)\"/>" : "")
         <h1 class="cover-title">Inspection Report</h1>
         <p class="cover-subtitle">Property Inspection</p>
         <p class="cover-address">\((inspection.propertyAddress).htmlEscaped)</p>
+        \(!coverPhotoBase64.isEmpty ? "<img class=\"cover-photo\" src=\"data:image/jpeg;base64,\(coverPhotoBase64)\" alt=\"Property photo\"/>" : "")
         <ul class="cover-details">
         <li><strong>Client:</strong> \((inspection.clientName).htmlEscaped)</li>
         <li><strong>Inspector:</strong> \((inspection.inspectorName).htmlEscaped)\(!brandCompanyName.isEmpty ? " — \(brandCompanyName.htmlEscaped)" : "")</li>
@@ -685,12 +712,18 @@ private let htmlDateFormatter = DateFormatters.mediumDateTime
 
 /// Loads photo data downsampled to a max dimension of 1024px to prevent OOM on 48MP+ images.
 private func loadPhotoData(jobId: UUID, fileName: String) -> Data? {
-    let url = FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName)
+    loadDownsampledJPEGData(at: FilePaths.photosFolder(jobId: jobId).appendingPathComponent(fileName))
+}
+
+/// Shared image-encoding budget for every raster the report embeds from disk
+/// (item photos and the cover photo): downsample to `maxPixelSize` on the long
+/// side via ImageIO and re-encode as JPEG 0.6. Returns nil for a missing or
+/// undecodable file — callers treat that as "render without this image".
+private func loadDownsampledJPEGData(at url: URL, maxPixelSize: CGFloat = 1024) -> Data? {
     guard FileManager.default.fileExists(atPath: url.path) else { return nil }
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
         return nil
     }
-    let maxPixelSize: CGFloat = 1024
     let options: [CFString: Any] = [
         kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
         kCGImageSourceCreateThumbnailFromImageAlways: true,

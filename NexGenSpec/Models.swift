@@ -138,6 +138,29 @@ public struct InspectionItem: Identifiable, Codable, Equatable {
 
     public var isDefect: Bool { status == .inspected && defectSeverity != nil }
 
+    /// Severity-change seam with the one-shot report-inclusion default.
+    ///
+    /// The report body only renders items passing `isDefect && includeInReport`,
+    /// but `includeInReport` defaults to false — so an inspector who just picked
+    /// a severity built a "defect" the report silently excluded. Rule: when
+    /// severity transitions nil → non-nil (the user just declared this item a
+    /// defect), arm the report gates it now visibly implies: set
+    /// `includeInReport = true`, and upgrade `status` to `.inspected` if it was
+    /// still `.notInspected`.
+    ///
+    /// Deliberately ONE-SHOT at that transition: changing between two non-nil
+    /// severities, clearing severity, re-saving, or re-rendering never re-forces
+    /// the flags, so a manual "Include in Report" opt-out afterwards sticks.
+    /// (Picking a severity again after clearing it to None is a new nil → value
+    /// transition and arms the gates again.)
+    public mutating func setDefectSeverity(_ newSeverity: Severity?) {
+        let isFirstAssignment = defectSeverity == nil && newSeverity != nil
+        defectSeverity = newSeverity
+        guard isFirstAssignment else { return }
+        includeInReport = true
+        if status == .notInspected { status = .inspected }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, templateItemId, title, includeInReport, status, defectSeverity
         case location, observed, implication, recommendation, inspectorComments
