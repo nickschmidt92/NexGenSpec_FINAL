@@ -705,8 +705,26 @@ public final class InspectionStore: ObservableObject {
         // race this one queued write (the check can't re-run on the ioQueue —
         // main-actor state), but that write can never publish a row or push:
         // update()'s row-state guard blocks the teardown flush.
-        if let row = metadataList.first(where: { $0.id == version.id }),
-           !InspectionStateMachine.allowsEdit(row.state) { return }
+        if let row = metadataList.first(where: { $0.id == version.id }) {
+            if !InspectionStateMachine.allowsEdit(row.state) { return }
+            // Clock backstop (B-0122 round 3): refuse when the authoritative
+            // row's LWW clock is strictly NEWER than the passed copy's. The
+            // locked-row guard above only catches a remote FINALIZE; a remote
+            // DRAFT EDIT applied while a stale copy sat open on-screen leaves
+            // the row editable, and this file-only path would then clobber the
+            // just-applied newer content in current.json — silently reverting
+            // the editor's real edits in the local truth that conflict
+            // resolution (DiskVersionReader.localState) and the next open read.
+            // A strictly-newer row clock is the fingerprint of exactly that:
+            // the row only jumps ahead of an open draft's own stamp via
+            // applyRemoteVersion (this path never re-stamps, and update()'s
+            // re-stamp is immediately re-synced onto the open draft — see
+            // InspectionView.flushDraftOnTeardown). Normal editing therefore
+            // passes with equal stamps; legacy nil clocks (either side) are
+            // never refused.
+            if let rowClock = row.updatedAt, let versionClock = version.updatedAt,
+               rowClock > versionClock { return }
+        }
         guard pendingFinalizedMetadata[version.id] == nil else { return }
         // Foreground per-edit autosave: encode + write OFF the main thread so
         // typing/editing never blocks on JSON encoding + disk I/O. Dispatched
