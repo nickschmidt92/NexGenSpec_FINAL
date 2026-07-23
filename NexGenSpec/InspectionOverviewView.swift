@@ -1744,10 +1744,15 @@ private struct SchedulingCard: View {
     private var permissionFootnote: some View {
         switch calendarService.authorizationState {
         case .notDetermined:
-            Button("Allow Calendar Access") {
-                Task { await calendarService.requestAccess() }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Calendar access is needed to add this inspection to your calendar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Continue") {
+                    Task { await calendarService.requestAccess() }
+                }
+                .font(.caption)
             }
-            .font(.caption)
         case .denied, .restricted:
             Text("Calendar access is disabled. Enable it in Settings → NexGenSpec → Calendar.")
                 .font(.caption)
