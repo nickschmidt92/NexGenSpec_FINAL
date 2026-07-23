@@ -150,7 +150,7 @@ struct CalendarView: View {
             bannerView(
                 icon: "calendar.badge.exclamationmark",
                 text: "Allow Calendar access to see conflicts and schedule inspections.",
-                buttonTitle: "Allow Access",
+                buttonTitle: "Continue",
                 action: { Task { await calendarService.requestAccess() } }
             )
         case .denied, .restricted:

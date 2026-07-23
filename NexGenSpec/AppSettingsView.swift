@@ -1266,7 +1266,7 @@ private struct CalendarSettingsSection: View {
 
             switch calendarService.authorizationState {
             case .notDetermined:
-                Button("Allow Calendar Access") {
+                Button("Continue") {
                     Task { await calendarService.requestAccess(); refreshCalendars() }
                 }
                 .buttonStyle(AppPrimaryButtonStyle())
