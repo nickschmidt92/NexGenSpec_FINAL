@@ -297,7 +297,7 @@ struct PaywallView: View {
                 .padding(.horizontal)
 
             HStack(spacing: 24) {
-                Link("Terms of Service", destination: URL(string: "https://nexgenspec.com/terms.html")!)
+                Link("Terms of Use", destination: URL(string: "https://nexgenspec.com/terms.html")!)
                     .font(.footnote)
                     .foregroundColor(.accentColor)
                     .underline()
