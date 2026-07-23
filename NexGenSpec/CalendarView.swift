@@ -149,7 +149,7 @@ struct CalendarView: View {
         case .notDetermined:
             bannerView(
                 icon: "calendar.badge.exclamationmark",
-                text: "Allow Calendar access to see conflicts and schedule inspections.",
+                text: "NexGenSpec needs Calendar access to show conflicts and schedule inspections.",
                 buttonTitle: "Continue",
                 action: { Task { await calendarService.requestAccess() } }
             )
